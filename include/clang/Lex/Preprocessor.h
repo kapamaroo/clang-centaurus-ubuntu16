@@ -159,6 +159,9 @@ class Preprocessor : public RefCountedBase<Preprocessor> {
   /// \brief True if pragmas are enabled.
   bool PragmasEnabled : 1;
 
+  /// \brief True if we are in extension pragmas e.g. pragma omp, pragma acc etc..
+  bool InPragmaExtension;
+  
   /// \brief True if the current build action is a preprocessing action.
   bool PreprocessedOutput : 1;
 
@@ -1464,6 +1467,8 @@ public:
   /// \brief A macro is used, update information about macros that need unused
   /// warnings.
   void markMacroAsUsed(MacroInfo *MI);
+
+  void setPragmaExtension(bool value) { InPragmaExtension = value; }
 };
 
 /// \brief Abstract base class that describes a handler that will receive

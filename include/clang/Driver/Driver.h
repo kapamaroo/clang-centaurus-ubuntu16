@@ -367,6 +367,11 @@ public:
   /// handle this action.
   bool ShouldUseClangCompiler(const JobAction &JA) const;
 
+  /// ShouldUseClangCompilar - Should the clang compiler be used to
+  /// handle this action.
+  bool ShouldUseClangCompiler(const Compilation &C, const JobAction &JA,
+                              const llvm::Triple &ArchName) const;
+
   bool IsUsingLTO(const ArgList &Args) const;
 
 private:

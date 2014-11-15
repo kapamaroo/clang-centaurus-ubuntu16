@@ -20,6 +20,7 @@
 #include "clang/AST/StmtObjC.h"
 #include "clang/AST/Type.h"
 #include "clang/Basic/CharInfo.h"
+#include "clang/Basic/OpenACC.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Lex/Token.h"
 #include "llvm/ADT/StringExtras.h"
@@ -1139,4 +1140,23 @@ bool CapturedStmt::capturesVariable(const VarDecl *Var) const {
   }
 
   return false;
+}
+
+AccStmt::AccStmt(openacc::DirectiveInfo *DI) :
+    Stmt(AccStmtClass), DI(DI), SubStmt(0) {}
+
+void
+AccStmt::setEndLocation(SourceLocation EndLoc) { DI->setEndLocation(EndLoc); }
+
+SourceLocation
+AccStmt::getLocStart() const { return DI->getStartLocation(); }
+
+SourceLocation
+AccStmt::getLocEnd() const {
+    return SubStmt ? SubStmt->getLocEnd() : DI->getEndLocation();
+}
+
+SourceRange
+AccStmt::getSourceRange() const {
+    return SourceRange(DI->getStartLocation(),DI->getEndLocation());
 }

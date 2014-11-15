@@ -98,6 +98,8 @@ Preprocessor::Preprocessor(IntrusiveRefCntPtr<PreprocessorOptions> PPOpts,
   ParsingIfOrElifDirective = false;
   PreprocessedOutput = false;
 
+  InPragmaExtension = false;
+
   CachedLexPos = 0;
 
   // We haven't read anything from the external source.

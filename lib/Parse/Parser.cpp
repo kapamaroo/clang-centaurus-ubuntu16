@@ -19,6 +19,7 @@
 #include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Sema/DeclSpec.h"
 #include "clang/Sema/ParsedTemplate.h"
+#include "clang/Sema/SemaOpenACC.h"
 #include "clang/Sema/Scope.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace clang;
@@ -89,6 +90,9 @@ Parser::Parser(Preprocessor &pp, Sema &actions, bool skipFunctionBodies)
 
   FPContractHandler.reset(new PragmaFPContractHandler());
   PP.AddPragmaHandler("STDC", FPContractHandler.get());
+
+  OpenACCHandler.reset(new PragmaOpenACCHandler(getLangOpts().OpenACC));
+  PP.AddPragmaHandler(OpenACCHandler.get());
 
   if (getLangOpts().OpenCL) {
     OpenCLExtensionHandler.reset(new PragmaOpenCLExtensionHandler());
@@ -432,6 +436,8 @@ Parser::~Parser() {
   WeakHandler.reset();
   PP.RemovePragmaHandler(RedefineExtnameHandler.get());
   RedefineExtnameHandler.reset();
+  PP.RemovePragmaHandler(OpenACCHandler.get());
+  OpenACCHandler.reset();
 
   if (getLangOpts().OpenCL) {
     PP.RemovePragmaHandler("OPENCL", OpenCLExtensionHandler.get());
@@ -519,11 +525,72 @@ void Parser::Initialize() {
     PP.SetPoisonReason(Ident_AbnormalTermination,diag::err_seh___finally_block);
   }
 
+  {
+      using namespace openacc;
+      ParseClause[CK_IF] = &Parser::ParseClauseIf;
+      ParseClause[CK_ASYNC] = &Parser::ParseClauseAsync;
+      ParseClause[CK_NUM_GANGS] = &Parser::ParseClauseNum_gangs;
+      ParseClause[CK_NUM_WORKERS] = &Parser::ParseClauseNum_workers;
+      ParseClause[CK_VECTOR_LENGTH] = &Parser::ParseClauseVector_length;
+      ParseClause[CK_REDUCTION] = &Parser::ParseClauseReduction;
+      ParseClause[CK_COPY] = &Parser::ParseClauseCopy;
+      ParseClause[CK_COPYIN] = &Parser::ParseClauseCopyin;
+      ParseClause[CK_COPYOUT] = &Parser::ParseClauseCopyout;
+      ParseClause[CK_CREATE] = &Parser::ParseClauseCreate;
+      ParseClause[CK_PRESENT] = &Parser::ParseClausePresent;
+      ParseClause[CK_PCOPY] = &Parser::ParseClausePcopy;
+      ParseClause[CK_PCOPYIN] = &Parser::ParseClausePcopyin;
+      ParseClause[CK_PCOPYOUT] = &Parser::ParseClausePcopyout;
+      ParseClause[CK_PCREATE] = &Parser::ParseClausePcreate;
+      ParseClause[CK_DEVICEPTR] = &Parser::ParseClauseDeviceptr;
+      ParseClause[CK_PRIVATE] = &Parser::ParseClausePrivate;
+      ParseClause[CK_FIRSTPRIVATE] = &Parser::ParseClauseFirstprivate;
+      ParseClause[CK_USE_DEVICE] = &Parser::ParseClauseUse_device;
+      ParseClause[CK_COLLAPSE] = &Parser::ParseClauseCollapse;
+      ParseClause[CK_GANG] = &Parser::ParseClauseGang;
+      ParseClause[CK_WORKER] = &Parser::ParseClauseWorker;
+      ParseClause[CK_VECTOR] = &Parser::ParseClauseVector;
+      ParseClause[CK_SEQ] = &Parser::ParseClauseSeq;
+      ParseClause[CK_INDEPENDENT] = &Parser::ParseClauseIndependent;
+      ParseClause[CK_DEVICE_RESIDENT] = &Parser::ParseClauseDevice_resident;
+      ParseClause[CK_HOST] = &Parser::ParseClauseHost;
+      ParseClause[CK_DEVICE] = &Parser::ParseClauseDevice;
+
+      ParseDirective[DK_PARALLEL] = &Parser::ParseDirectiveParallel;
+      ParseDirective[DK_PARALLEL_LOOP] = &Parser::ParseDirectiveParallelLoop;
+      ParseDirective[DK_KERNELS] = &Parser::ParseDirectiveKernels;
+      ParseDirective[DK_KERNELS_LOOP] = &Parser::ParseDirectiveKernelsLoop;
+      ParseDirective[DK_DATA] = &Parser::ParseDirectiveData;
+      ParseDirective[DK_HOST_DATA] = &Parser::ParseDirectiveHostData;
+      ParseDirective[DK_LOOP] = &Parser::ParseDirectiveLoop;
+      ParseDirective[DK_CACHE] = &Parser::ParseDirectiveCache;
+      ParseDirective[DK_DECLARE] = &Parser::ParseDirectiveDeclare;
+      ParseDirective[DK_UPDATE] = &Parser::ParseDirectiveUpdate;
+      ParseDirective[DK_WAIT] = &Parser::ParseDirectiveWait;
+  }
+
   Actions.Initialize();
 
   // Prime the lexer look-ahead.
   ConsumeToken();
 }
+
+bool
+Parser::ProhibitExtensionPragmas() {
+    PragmaExtensionHandler *Handler =
+        reinterpret_cast<PragmaExtensionHandler*>
+        (OpenACCHandler.get());
+    return Handler->Prohibit();
+}
+
+void
+Parser::AllowExtensionPragmas(bool OldValue) {
+    PragmaExtensionHandler *Handler =
+        reinterpret_cast<PragmaExtensionHandler*>
+        (OpenACCHandler.get());
+    Handler->Allow(OldValue);
+}
+
 
 namespace {
   /// \brief RAIIObject to destroy the contents of a SmallVector of
@@ -644,6 +711,9 @@ Parser::ParseExternalDeclaration(ParsedAttributesWithRange &attrs,
   case tok::annot_pragma_openmp:
     ParseOpenMPDeclarativeDirective();
     return DeclGroupPtrTy();
+  case tok::annot_pragma_acc:
+      HandlePragmaOpenACC();
+      return DeclGroupPtrTy();
   case tok::semi:
     // Either a C++11 empty-declaration or attribute-declaration.
     SingleDecl = Actions.ActOnEmptyDeclaration(getCurScope(),
@@ -847,6 +917,10 @@ Parser::ParseDeclOrFunctionDefInternal(ParsedAttributesWithRange &attrs,
     ConsumeToken();
     Decl *TheDecl = Actions.ParsedFreeStandingDeclSpec(getCurScope(), AS, DS);
     DS.complete(TheDecl);
+
+    //Discard any pending OpenACC Directive
+    Actions.getACCInfo()->DiscardAndWarn();
+
     return Actions.ConvertDeclToDeclGroup(TheDecl);
   }
 
@@ -856,6 +930,9 @@ Parser::ParseDeclOrFunctionDefInternal(ParsedAttributesWithRange &attrs,
   // FIXME: This still needs better diagnostics. We should only accept
   // attributes here, no types, etc.
   if (getLangOpts().ObjC2 && Tok.is(tok::at)) {
+    //Discard any pending OpenACC Directive
+    Actions.getACCInfo()->DiscardAndWarn();
+
     SourceLocation AtLoc = ConsumeToken(); // the "@"
     if (!Tok.isObjCAtKeyword(tok::objc_interface) &&
         !Tok.isObjCAtKeyword(tok::objc_protocol)) {
@@ -884,6 +961,8 @@ Parser::ParseDeclOrFunctionDefInternal(ParsedAttributesWithRange &attrs,
   if (Tok.is(tok::string_literal) && getLangOpts().CPlusPlus &&
       DS.getStorageClassSpec() == DeclSpec::SCS_extern &&
       DS.getParsedSpecifiers() == DeclSpec::PQ_StorageClassSpecifier) {
+    //Discard any pending OpenACC Directive
+    Actions.getACCInfo()->DiscardAndWarn();
     Decl *TheDecl = ParseLinkage(DS, Declarator::FileContext);
     return Actions.ConvertDeclToDeclGroup(TheDecl);
   }
@@ -928,6 +1007,9 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
   // Poison the SEH identifiers so they are flagged as illegal in function bodies
   PoisonSEHIdentifiersRAIIObject PoisonSEHIdentifiers(*this, true);
   const DeclaratorChunk::FunctionTypeInfo &FTI = D.getFunctionTypeInfo();
+
+  //Discard any pending OpenACC Directive
+  Actions.getACCInfo()->DiscardAndWarn();
 
   // If this is C90 and the declspecs were completely missing, fudge in an
   // implicit int.  We do this here because this is the only place where

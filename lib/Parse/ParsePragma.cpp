@@ -155,6 +155,7 @@ namespace {
   typedef llvm::PointerIntPair<IdentifierInfo *, 1, bool> OpenCLExtData;
 }
 
+
 void Parser::HandlePragmaOpenCLExtension() {
   assert(Tok.is(tok::annot_pragma_opencl_extension));
   OpenCLExtData data =
@@ -747,6 +748,37 @@ PragmaOpenCLExtensionHandler::HandlePragma(Preprocessor &PP,
   Toks[0].setAnnotationValue(data.getOpaqueValue());
   PP.EnterTokenStream(Toks, 1, /*DisableMacroExpansion=*/true,
                       /*OwnsTokens=*/false);
+}
+
+void
+PragmaOpenACCHandler::HandlePragma(Preprocessor &PP,
+                                   PragmaIntroducerKind Introducer,
+                                   Token &FirstTok) {
+    static bool FirstWarning(true);
+
+    //emit warning once
+    if (isNotEnabled()) {
+        if (FirstWarning) {
+            PP.Diag(FirstTok,diag::warn_pragma_acc_ignored);
+            FirstWarning = false;
+        }
+        return;
+    }
+
+    if (isNotAtLegalLocation()) {
+        PP.Diag(FirstTok,diag::err_pragma_acc_unexpected);
+        PP.DiscardUntilEndOfDirective();
+        return;
+    }
+
+    Token *Toks = (Token*) PP.getPreprocessorAllocator()
+        .Allocate(sizeof(Token) * 1, llvm::alignOf<Token>());
+    new (Toks) Token();
+    Toks[0].startToken();
+    Toks[0].setKind(tok::annot_pragma_acc);
+    Toks[0].setLocation(FirstTok.getLocation());
+    PP.EnterTokenStream(Toks, 1, /*DisableMacroExpansion=*/true,
+                        /*OwnsTokens=*/false);
 }
 
 /// \brief Handle '#pragma omp ...' when OpenMP is disabled.

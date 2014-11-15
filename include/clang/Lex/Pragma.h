@@ -58,9 +58,15 @@ namespace clang {
 /// pragmas.
 class PragmaHandler {
   std::string Name;
+
+  /// Set to true if the Handler handles Pragma Extensions
+  /// like OpenMP, OpenACC, etc.. Default value is false.
+  const bool Extension;
+
 public:
-  explicit PragmaHandler(StringRef name) : Name(name) {}
-  PragmaHandler() {}
+  explicit PragmaHandler(StringRef name, bool extension = false) :
+        Name(name), Extension(extension) {}
+  PragmaHandler() : Extension(false) {}
   virtual ~PragmaHandler();
 
   StringRef getName() const { return Name; }
@@ -70,6 +76,47 @@ public:
   /// getIfNamespace - If this is a namespace, return it.  This is equivalent to
   /// using a dynamic_cast, but doesn't require RTTI.
   virtual PragmaNamespace *getIfNamespace() { return 0; }
+
+  bool isExtension() const { return Extension; }
+
+};
+
+/// PragmaExtensionHandler - Extend the PragmaHandler interface to manage more
+/// complicated directives which need more semantic information. This interface
+/// should just create a annotation token, insert it into the token stream and
+/// let the Parser for further parsing until End of Directive (eod token). It
+/// actually skips the Preprocessor's DiscardUntilEndOfDirective() method.
+//FIXME: make the Parser::SkipUntil method (and possibly others) aware of the eod token
+class PragmaExtensionHandler : public PragmaHandler {
+private:
+  /// Common pragma directives are always enabled by default.
+  /// false for Extension pragma directives
+  const bool Enabled;
+
+  /// Temporarilly Allow/Prohibit Extension Pragmas
+  bool LegalLocation;
+
+public:
+  explicit PragmaExtensionHandler(StringRef name, bool enabled) :
+      PragmaHandler(name,/*Extension=*/true), Enabled(enabled),
+      LegalLocation(enabled) {}
+
+  /// isEnabled - tells if this type of pragma directive is enabled for this
+  /// instantiantion (eg. for OpenACC pragmas, return true if the '-fopenacc'
+  /// has been passed to command line, else return false).
+  bool isNotEnabled() const { return !Enabled; }
+
+  bool Prohibit() {
+      bool OldValue = LegalLocation;
+      LegalLocation = false;
+      return OldValue;
+  }
+  void Allow(bool OldValue) {
+      LegalLocation = OldValue;
+  }
+
+  bool isNotAtLegalLocation() const { return !LegalLocation; }
+
 };
 
 /// EmptyPragmaHandler - A pragma handler which takes no action, which can be

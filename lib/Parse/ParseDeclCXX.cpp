@@ -21,6 +21,7 @@
 #include "clang/Sema/PrettyDeclStackTrace.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/SemaDiagnostic.h"
+#include "clang/Sema/SemaOpenACC.h"
 #include "llvm/ADT/SmallString.h"
 using namespace clang;
 
@@ -2348,6 +2349,9 @@ void Parser::ParseCXXClassMemberDeclaration(AccessSpecifier AS,
     if (Tok.is(tok::semi)) ConsumeToken();
     return;
   }
+
+  //Discard any pending OpenACC Directive
+  Actions.getACCInfo()->DiscardAndWarn();
 
   Actions.FinalizeDeclaratorGroup(getCurScope(), DS, DeclsInGroup.data(),
                                   DeclsInGroup.size());

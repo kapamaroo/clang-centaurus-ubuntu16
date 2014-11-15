@@ -1111,6 +1111,8 @@ namespace clang {
       STMT_GCCASM,
       /// \brief A MS-style AsmStmt record.
       STMT_MSASM,
+      /// \brief A OpenACC Directive records.
+      STMT_ACC,
       /// \brief A PredefinedExpr record.
       EXPR_PREDEFINED,
       /// \brief A DeclRefExpr record.

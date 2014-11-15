@@ -91,8 +91,14 @@ void PragmaNamespace::HandlePragma(Preprocessor &PP,
     return;
   }
 
+  //Every pragma handler informs the Preprocessor,
+  //overwriting any previous value.
+  PP.setPragmaExtension(Handler->isExtension());
+
   // Otherwise, pass it down.
   Handler->HandlePragma(PP, Introducer, Tok);
+
+  PP.setPragmaExtension(false);
 }
 
 //===----------------------------------------------------------------------===//
@@ -110,6 +116,12 @@ void Preprocessor::HandlePragmaDirective(unsigned Introducer) {
   // Invoke the first level of pragma handlers which reads the namespace id.
   Token Tok;
   PragmaHandlers->HandlePragma(*this, PragmaIntroducerKind(Introducer), Tok);
+
+  //If we are in a pragma extension, don't discard the rest directive.
+  //In this case the handler has just created a annotated token in the
+  //token stream. Let the parser handle it further.
+  if (InPragmaExtension)
+      return;
 
   // If the pragma handler didn't read the rest of the line, consume it now.
   if ((CurTokenLexer && CurTokenLexer->isParsingPreprocessorDirective()) 

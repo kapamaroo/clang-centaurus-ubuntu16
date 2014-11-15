@@ -155,6 +155,10 @@ CXCursor cxcursor::MakeCXCursor(const Stmt *S, const Decl *Parent,
     K = CXCursor_MSAsmStmt;
     break;
   
+  case Stmt::AccStmtClass:
+      //FIXME: add a CXCursor kind here
+      break;
+
   case Stmt::ObjCAtTryStmtClass:
     K = CXCursor_ObjCAtTryStmt;
     break;

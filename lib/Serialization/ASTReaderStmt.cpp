@@ -407,6 +407,11 @@ void ASTStmtReader::VisitCapturedStmt(CapturedStmt *S) {
   }
 }
 
+// OpenACC Reader
+
+void ASTStmtReader::VisitAccStmt(AccStmt *S) {
+  VisitStmt(S);
+}
 void ASTStmtReader::VisitExpr(Expr *E) {
   VisitStmt(E);
   E->setType(Reader.readType(F, Record, Idx));
@@ -1811,6 +1816,10 @@ Stmt *ASTReader::ReadStmtFromStream(ModuleFile &F) {
 
     case STMT_MSASM:
       S = new (Context) MSAsmStmt(Empty);
+      break;
+
+  case STMT_ACC:
+      S = new (Context) AccStmt(Empty);
       break;
 
     case STMT_CAPTURED:

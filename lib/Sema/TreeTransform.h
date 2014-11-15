@@ -6160,6 +6160,16 @@ TreeTransform<Derived>::TransformSEHHandler(Stmt *Handler) {
 }
 
 //===----------------------------------------------------------------------===//
+// OpenACC transformation
+//===----------------------------------------------------------------------===//
+template<typename Derived>
+StmtResult
+TreeTransform<Derived>::TransformAccStmt(AccStmt *S) {
+    //FIXME: do something here
+    return TransformStmt(S->getSubStmt());
+}
+
+//===----------------------------------------------------------------------===//
 // Expression transformation
 //===----------------------------------------------------------------------===//
 template<typename Derived>

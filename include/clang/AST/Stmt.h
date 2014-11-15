@@ -49,6 +49,11 @@ namespace clang {
   class Token;
   class VarDecl;
 
+namespace openacc {
+class DirectiveInfo;
+class ClauseInfo;
+}
+
   //===--------------------------------------------------------------------===//
   // ExprIterator - Iterators for iterating over Stmt* arrays that contain
   //  only Expr*.  This is needed because AST nodes use Stmt* arrays to store
@@ -276,12 +281,12 @@ protected:
     friend class TypeTraitExpr;
     friend class ASTStmtReader;
     friend class ASTStmtWriter;
-    
+
     unsigned : NumExprBits;
-    
+
     /// \brief The kind of type trait, which is a value of a TypeTrait enumerator.
     unsigned Kind : 8;
-    
+
     /// \brief If this expression is not value-dependent, this indicates whether
     /// the trait evaluated true or false.
     unsigned Value : 1;
@@ -289,7 +294,7 @@ protected:
     /// \brief The number of arguments to this type trait.
     unsigned NumArgs : 32 - 8 - 1 - NumExprBits;
   };
-  
+
   union {
     // FIXME: this is wasteful on 64-bit platforms.
     void *Aligner;
@@ -1127,7 +1132,6 @@ class ForStmt : public Stmt {
   Stmt* SubExprs[END_EXPR]; // SubExprs[INIT] is an expression or declstmt.
   SourceLocation ForLoc;
   SourceLocation LParenLoc, RParenLoc;
-
 public:
   ForStmt(ASTContext &C, Stmt *Init, Expr *Cond, VarDecl *condVar, Expr *Inc,
           Stmt *Body, SourceLocation FL, SourceLocation LP, SourceLocation RP);
@@ -1448,7 +1452,7 @@ public:
   /// getInputConstraint - Return the specified input constraint.  Unlike output
   /// constraints, these can be empty.
   StringRef getInputConstraint(unsigned i) const;
-  
+
   const Expr *getInputExpr(unsigned i) const;
 
   //===--- Other ---===//
@@ -1983,7 +1987,7 @@ private:
   /// \brief The number of variable captured, including 'this'.
   unsigned NumCaptures;
 
-  /// \brief The pointer part is the implicit the outlined function and the 
+  /// \brief The pointer part is the implicit the outlined function and the
   /// int part is the captured region kind, 'CR_Default' etc.
   llvm::PointerIntPair<CapturedDecl *, 1, CapturedRegionKind> CapDeclAndKind;
 
@@ -2103,6 +2107,42 @@ public:
   child_range children();
 
   friend class ASTStmtReader;
+};
+
+class AccStmt : public Stmt {
+    openacc::DirectiveInfo *DI;
+    Stmt *SubStmt;
+
+public:
+  AccStmt(openacc::DirectiveInfo *DI);
+
+  /// \brief Build an empty Acc statement.
+  explicit AccStmt(EmptyShell Empty) :
+  Stmt(AccStmtClass, Empty), DI(0), SubStmt(0) {}
+
+  openacc::DirectiveInfo *getDirective() const {
+      return const_cast<openacc::DirectiveInfo*>(DI);
+  }
+
+  Stmt *getSubStmt() const { return SubStmt; }
+  void setSubStmt(Stmt *s) { SubStmt = s; }
+  void printPrettyAccWithIfClause(openacc::ClauseInfo *IfClause,
+                                  raw_ostream &OS, PrinterHelper *Helper,
+                                  const PrintingPolicy &Policy,
+                                  unsigned Indentation = 0) const;
+
+  void setEndLocation(SourceLocation EndLoc);
+
+  SourceLocation getLocStart() const LLVM_READONLY;
+  SourceLocation getLocEnd() const LLVM_READONLY;
+  SourceRange getSourceRange() const LLVM_READONLY;
+
+  static bool classof(const Stmt *T) {
+      return T->getStmtClass() == AccStmtClass;
+  }
+
+  // Iterators
+  child_range children() { return child_range(&SubStmt, &SubStmt+1); }
 };
 
 }  // end namespace clang

@@ -14,6 +14,7 @@
 #ifndef LLVM_CLANG_PARSE_PARSER_H
 #define LLVM_CLANG_PARSE_PARSER_H
 
+#include "clang/Basic/OpenACC.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/OperatorPrecedence.h"
 #include "clang/Basic/Specifiers.h"
@@ -30,6 +31,7 @@
 
 namespace clang {
   class PragmaHandler;
+  class PragmaExtensionHandler;
   class Scope;
   class BalancedDelimiterTracker;
   class CorrectionCandidateCallback;
@@ -72,7 +74,7 @@ class Parser : public CodeCompletionHandler {
   SourceLocation PrevTokLocation;
 
   unsigned short ParenCount, BracketCount, BraceCount;
-  
+
   /// Actions - These are the callbacks we invoke as we parse various constructs
   /// in the file.
   Sema &Actions;
@@ -125,7 +127,7 @@ class Parser : public CodeCompletionHandler {
 
   /// \brief Identifier for "unavailable".
   IdentifierInfo *Ident_unavailable;
-  
+
   /// \brief Identifier for "message".
   IdentifierInfo *Ident_message;
 
@@ -149,6 +151,7 @@ class Parser : public CodeCompletionHandler {
   OwningPtr<PragmaHandler> OpenCLExtensionHandler;
   OwningPtr<CommentHandler> CommentSemaHandler;
   OwningPtr<PragmaHandler> OpenMPHandler;
+  OwningPtr<PragmaExtensionHandler> OpenACCHandler;
   OwningPtr<PragmaHandler> MSCommentHandler;
 
   /// Whether the '>' token acts as an operator or not. This will be
@@ -445,6 +448,76 @@ private:
   /// \brief Handle the annotation token produced for
   /// #pragma clang __debug captured
   StmtResult HandlePragmaCaptured();
+  
+  /// #pragma acc...
+  void HandlePragmaOpenACC();
+
+    bool ProhibitExtensionPragmas();
+    void AllowExtensionPragmas(bool OldValue);
+
+    void MaybeParseCombinedDirective(openacc::DirectiveKind &Kind);
+    bool ParseClauseWrapper(openacc::DirectiveInfo *DI);
+    bool ParseClauses(openacc::DirectiveInfo *DI);
+
+    bool ParseArgScalarIntExpr(openacc::DirectiveKind DK, openacc::CommonInfo *Common);
+    bool ParseArgList(openacc::DirectiveKind DK, openacc::CommonInfo *Common);
+
+    typedef bool (ParseClauseFn) (openacc::DirectiveKind DK, openacc::ClauseInfo *CI);
+    //pointer to member function
+    typedef bool (Parser::*ParseClauseFnPtr) (openacc::DirectiveKind DK, openacc::ClauseInfo *CI);
+
+    typedef bool (ParseDirectiveFn) (openacc::DirectiveInfo *DI);
+    //pointer to member function
+    typedef bool (Parser::*ParseDirectiveFnPtr) (openacc::DirectiveInfo *DI);
+
+    //array of clause handlers
+    ParseClauseFnPtr ParseClause[openacc::CK_END];
+    ParseDirectiveFnPtr ParseDirective[openacc::DK_END];
+
+    ParseClauseFn ParseClauseIf;
+    ParseClauseFn ParseClauseAsync;
+    ParseClauseFn ParseClauseNum_gangs;
+    ParseClauseFn ParseClauseNum_workers;
+    ParseClauseFn ParseClauseVector_length;
+    ParseClauseFn ParseClauseReduction;
+    ParseClauseFn ParseClauseCopy;
+    ParseClauseFn ParseClauseCopyin;
+    ParseClauseFn ParseClauseCopyout;
+    ParseClauseFn ParseClauseCreate;
+    ParseClauseFn ParseClausePresent;
+    ParseClauseFn ParseClausePcopy;
+    ParseClauseFn ParseClausePcopyin;
+    ParseClauseFn ParseClausePcopyout;
+    ParseClauseFn ParseClausePcreate;
+    ParseClauseFn ParseClauseDeviceptr;
+    ParseClauseFn ParseClausePrivate;
+    ParseClauseFn ParseClauseFirstprivate;
+    ParseClauseFn ParseClauseUse_device;
+    ParseClauseFn ParseClauseCollapse;
+    ParseClauseFn ParseClauseGang;
+    ParseClauseFn ParseClauseWorker;
+    ParseClauseFn ParseClauseVector;
+    ParseClauseFn ParseClauseSeq;
+    ParseClauseFn ParseClauseIndependent;
+    ParseClauseFn ParseClauseDevice_resident;
+    ParseClauseFn ParseClauseHost;
+    ParseClauseFn ParseClauseDevice;
+
+    //Parse Directives
+
+    ParseDirectiveFn ParseDirectiveParallel;
+    ParseDirectiveFn ParseDirectiveParallelLoop;
+    ParseDirectiveFn ParseDirectiveKernels;
+    ParseDirectiveFn ParseDirectiveKernelsLoop;
+    ParseDirectiveFn ParseDirectiveData;
+    ParseDirectiveFn ParseDirectiveHostData;
+    ParseDirectiveFn ParseDirectiveLoop;
+    ParseDirectiveFn ParseDirectiveCache;
+    ParseDirectiveFn ParseDirectiveDeclare;
+    ParseDirectiveFn ParseDirectiveUpdate;
+    ParseDirectiveFn ParseDirectiveWait;
+
+    ////////////////////////////////////////////////////////////////////////////////
 
   /// GetLookAheadToken - This peeks ahead N tokens and returns that token
   /// without consuming any tokens.  LookAhead(0) returns 'Tok', LookAhead(1)
@@ -894,7 +967,7 @@ private:
     /// method will be stored so that they can be reintroduced into
     /// scope at the appropriate times.
     SmallVector<LateParsedDefaultArgument, 8> DefaultArgs;
-  
+
     /// \brief The set of tokens that make up an exception-specification that
     /// has not yet been parsed.
     CachedTokens *ExceptionSpecTokens;
@@ -923,7 +996,7 @@ private:
   /// C++ class, its method declarations that contain parts that won't be
   /// parsed until after the definition is completed (C++ [class.mem]p2),
   /// the method declarations and possibly attached inline definitions
-  /// will be stored here with the tokens that will be parsed to create those 
+  /// will be stored here with the tokens that will be parsed to create those
   /// entities.
   typedef SmallVector<LateParsedDeclaration*,2> LateParsedDeclarationsContainer;
 
@@ -1297,7 +1370,7 @@ private:
   ExprResult ParseStringLiteralExpression(bool AllowUserDefinedLiteral = false);
 
   ExprResult ParseGenericSelectionExpression();
-  
+
   ExprResult ParseObjCBoolLiteral();
 
   //===--------------------------------------------------------------------===//
@@ -1449,7 +1522,7 @@ private:
       SourceLocation LBracloc, SourceLocation SuperLoc,
       ParsedType ReceiverType, ExprArg ReceiverExpr);
   bool ParseObjCXXMessageReceiver(bool &IsExpr, void *&TypeOrExpr);
-    
+
   //===--------------------------------------------------------------------===//
   // C99 6.8: Statements and Blocks.
 
@@ -1736,7 +1809,7 @@ private:
   /// isCXXFunctionDeclarator - Disambiguates between a function declarator or
   /// a constructor-style initializer, when parsing declaration statements.
   /// Returns true for function declarator and false for constructor-style
-  /// initializer. Sets 'IsAmbiguous' to true to indicate that this declaration 
+  /// initializer. Sets 'IsAmbiguous' to true to indicate that this declaration
   /// might be a constructor-style initializer.
   /// If during the disambiguation process a parsing error is encountered,
   /// the function returns true to let the declaration parsing code handle it.
@@ -1861,8 +1934,8 @@ private:
   }
   void DiagnoseProhibitedAttributes(ParsedAttributesWithRange &attrs);
 
-  // Forbid C++11 attributes that appear on certain syntactic 
-  // locations which standard permits but we don't supported yet, 
+  // Forbid C++11 attributes that appear on certain syntactic
+  // locations which standard permits but we don't supported yet,
   // for example, attributes appertain to decl specifiers.
   void ProhibitCXX11Attributes(ParsedAttributesWithRange &attrs);
 
@@ -1932,11 +2005,11 @@ private:
                                 SourceLocation *endLoc = 0);
   void ParseMicrosoftDeclSpec(ParsedAttributes &Attrs);
   bool IsSimpleMicrosoftDeclSpec(IdentifierInfo *Ident);
-  void ParseComplexMicrosoftDeclSpec(IdentifierInfo *Ident, 
+  void ParseComplexMicrosoftDeclSpec(IdentifierInfo *Ident,
                                      SourceLocation Loc,
                                      ParsedAttributes &Attrs);
-  void ParseMicrosoftDeclSpecWithSingleArg(IdentifierInfo *AttrName, 
-                                           SourceLocation AttrNameLoc, 
+  void ParseMicrosoftDeclSpecWithSingleArg(IdentifierInfo *AttrName,
+                                           SourceLocation AttrNameLoc,
                                            ParsedAttributes &Attrs);
   void ParseMicrosoftTypeAttributes(ParsedAttributes &attrs);
   void ParseMicrosoftInheritanceClassAttributes(ParsedAttributes &attrs);
@@ -2214,7 +2287,7 @@ private:
   ExprResult ParseUnaryTypeTrait();
   ExprResult ParseBinaryTypeTrait();
   ExprResult ParseTypeTrait();
-  
+
   //===--------------------------------------------------------------------===//
   // Embarcadero: Arary and Expression Traits
   ExprResult ParseArrayTypeTrait();

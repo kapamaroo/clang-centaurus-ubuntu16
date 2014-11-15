@@ -652,6 +652,16 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
     //   version of the OpenMP API that the implementation support.
     Builder.defineMacro("_OPENMP", "201107");
   }
+  
+  if (LangOpts.OpenACC) {
+      //The _OPENACC macro name is defined to have a value yyyymm where yyyy is
+      //the year and mm is the month designation of the version of the OpenACC
+      //directives supported by the implementation. This macro must be defined
+      //by a compiler only when OpenACC directives are enabled.
+      //The version described here is 201111.
+      Builder.defineMacro("_OPENACC","201111");
+  }
+
 
   // Get other target #defines.
   TI.getTargetDefines(LangOpts, Builder);

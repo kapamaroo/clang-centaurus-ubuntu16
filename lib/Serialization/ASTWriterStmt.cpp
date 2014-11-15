@@ -320,6 +320,15 @@ void ASTStmtWriter::VisitCapturedStmt(CapturedStmt *S) {
   Code = serialization::STMT_CAPTURED;
 }
 
+// OpenACC Writer
+
+void ASTStmtWriter::VisitAccStmt(AccStmt *S) {
+    VisitStmt(S);
+    //if (Stmt *SubStmt = S->getSubStmt())
+    //    VisitStmt(SubStmt);
+    Code = serialization::STMT_ACC;
+}
+
 void ASTStmtWriter::VisitExpr(Expr *E) {
   VisitStmt(E);
   Writer.AddTypeRef(E->getType(), Record);

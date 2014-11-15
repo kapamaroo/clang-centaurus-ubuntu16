@@ -2574,7 +2574,7 @@ void Linux::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
   StringRef Version = GCCInstallation.getVersion().Text;
   StringRef TripleStr = GCCInstallation.getTriple().str();
 
-  if (addLibStdCXXIncludePaths(LibDir.str() + "/../include", 
+  if (addLibStdCXXIncludePaths(LibDir.str() + "/../include",
                                "/c++/" + Version.str(),
                                TripleStr,
                                GCCInstallation.getMultiarchSuffix(),

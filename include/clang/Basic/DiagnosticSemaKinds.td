@@ -6303,6 +6303,91 @@ def err_unknown_any_function : Error<
 def err_filter_expression_integral : Error<
   "filter expression type should be an integral value not %0">;
 
+//OpenACC
+def warn_pragma_acc_implicit_region : Warning<
+  "introduce implicit region">;
+
+def warn_pragma_acc_typo_loop : Warning<
+  "ignore compute directive, maybe a combined directive typo? (possible missing 'loop')">;
+
+def err_pragma_acc_illegal_directive_location : Error<
+  "Illegal location of directive '%0'">;
+
+def err_pragma_acc_illegal_clause_location : Error<
+  "Illegal location of clause '%0'">;
+
+def err_pragma_acc_illegal_arg_location : Error<
+  "this clause does not take an argument for this directive">;
+
+def err_pragma_acc_invalid_nesting : Error<
+  "invalid nesting of directive">;
+
+def err_pragma_acc_invalid_clause_if_condition : Error<
+  "invalid condition in clause 'if'">;
+
+def err_pragma_acc_expected_integer_variable : Error<
+  "expected reference to integer variable as argument">;
+
+def err_pragma_acc_reduction_invalid_datatype : Error<
+  "invalid reduction datatype: valid datatypes are: { int, float, double, complex } ">;
+
+def err_pragma_acc_reduction_datatype_mismatch : Error<
+  "expected argument of datatype '%0' instead of '%1' ">;
+
+def err_pragma_acc_expected_ice : Error<
+  "expected non-negative integer-constant-expression">;
+
+def err_pragma_acc_duplicate_vardecl : Error<
+  "second appearance of variable in this directive">;
+
+def err_pragma_acc_redeclared_vardecl : Error<
+  "variable in declare directive already has a visible device copy">;
+
+def err_pragma_acc_has_visible_copy : Error<
+  "variable or array cannot appear in a data clause because it already has a visible device copy">;
+
+def err_pragma_acc_missing_visible_copy : Error<
+  "variable or array without a visible device copy">;
+
+def err_pragma_acc_expected_local_or_filestatic : Error<
+  "variable or array in 'device_resident' clause must be file static or local to a function">;
+
+def err_pragma_acc_expected_pointer : Error<
+  "variable or array in 'deviceptr' clause must be a pointer">;
+
+def err_pragma_acc_illegal_cache : Error<
+  "cache directive may appear at the top of (inside of) a loop construct">;
+
+def err_pragma_acc_incomplete_update : Error<
+  "at least one 'host' or 'device' clause must appear in 'update' directive">;
+
+def err_pragma_acc_illegal_update : Error<
+  "update directive must not follow an if, while, do, switch, or label statement">;
+
+def err_pragma_acc_trivial_cache : Error<
+  "trivial, loop with just a cache directive">;
+
+def err_pragma_acc_illegal_arg_kind : Error<
+  "illegal position of %0 argument in %1">;
+
+def err_pragma_acc_missing_subarray_length : Error<
+  "cannot determine the length of this array, please enter a length">;
+
+def note_pragma_acc_reduction_datatype_mismatch : Note<
+  "the first argument has set the reduction datatype to '%0'">;
+
+def note_pragma_acc_implicit_region : Note<
+  "to silence this warning put this statement in brackets">;
+
+def note_pragma_acc_visible_copy_location : Note<
+  "created from this location">;
+
+def note_pragma_acc_invalid_nesting : Note<
+  "parent compute region starts here">;
+
+def note_pragma_acc_test : Note<
+  "%0">;
+
 // OpenCL warnings and errors.
 def err_invalid_astype_of_different_size : Error<
   "invalid reinterpretation: sizes of %0 and %1 must match">;

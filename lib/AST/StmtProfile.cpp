@@ -247,6 +247,15 @@ void StmtProfiler::VisitObjCAtThrowStmt(const ObjCAtThrowStmt *S) {
   VisitStmt(S);
 }
 
+//===----------------------------------------------------------------------===//
+//  OpenACC profile methods.
+//===----------------------------------------------------------------------===//
+
+void StmtProfiler::VisitAccStmt(const AccStmt *S) {
+    if (Stmt *SubStmt = S->getSubStmt())
+        VisitStmt(SubStmt);
+}
+
 void
 StmtProfiler::VisitObjCAutoreleasePoolStmt(const ObjCAutoreleasePoolStmt *S) {
   VisitStmt(S);
