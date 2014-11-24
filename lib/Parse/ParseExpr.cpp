@@ -1351,6 +1351,13 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
               return LHS;
           }
       }
+      else if (isSubArrayWithMissingLowBound) {
+          Diag(Tok,diag::err_pragma_acc_invalid_subarray)
+              << "subarray list";
+          // Match the ']'.
+          T.consumeClose();
+          break;
+      }
 
       //decide later whether this expression is actually an index or length
       ExprResult Tmp;
@@ -1382,9 +1389,11 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
           //do not return
           break;
       }
+      else if (!SubArraysAreAllowed) {
+          //early failure in case of a colon or other token
+          Diag(Tok,diag::err_pragma_acc_invalid_subarray)
+              << "subarray list";
 
-      //early failure in case of a colon or other token
-      if (!SubArraysAreAllowed) {
           // Match the ']'.
           T.consumeClose();
           break;

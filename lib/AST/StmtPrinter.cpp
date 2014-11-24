@@ -33,7 +33,6 @@ using namespace clang;
 
 namespace  {
   bool PrintAccStmts = true;
-  openacc::ClauseInfo *ParentIfClause = 0;
 
   class StmtPrinter : public StmtVisitor<StmtPrinter> {
     raw_ostream &OS;
@@ -588,32 +587,13 @@ void StmtPrinter::VisitSEHFinallyStmt(SEHFinallyStmt *Node) {
 //===----------------------------------------------------------------------===//
 
 void StmtPrinter::VisitAccStmt(AccStmt *Node) {
-    if (openacc::ClauseInfo *IfClause = Node->getDirective()->getIfClause())
-        if (ParentIfClause && ParentIfClause != IfClause) {
-            Node->printPrettyAccWithIfClause(IfClause,OS,0,Policy);
-            return;
-        }
-
     openacc::DirectiveInfo *DI = Node->getDirective();
 
     if (PrintAccStmts)
         OS << DI->getPrettyDirective(Policy);
 
-    if (DI->isDataDirective() || DI->isComputeDirective()) {
-        if (isa<CompoundStmt>(Node->getSubStmt()))
-            PrintStmt(Node->getSubStmt());
-        else {
-            //add the implicit compound statement
-            OS << "{\n";
-            PrintStmt(Node->getSubStmt());
-            Indent() << "}";
-        }
-    }
-    else if (DI->isStartOfLoopRegion()) {
-        PrintStmt(Node->getSubStmt());
-    }
-    else
-        assert(DI->isExecutableOrCacheOrDeclareDirective());
+    assert(isa<CompoundStmt>(Node->getSubStmt()));
+    PrintStmt(Node->getSubStmt());
 }
 
 //===----------------------------------------------------------------------===//
@@ -1938,49 +1918,6 @@ void Stmt::printPretty(raw_ostream &OS,
 
   StmtPrinter P(OS, Helper, Policy, Indentation);
   P.Visit(const_cast<Stmt*>(this));
-}
-
-void AccStmt::printPrettyAccWithIfClause(openacc::ClauseInfo *IfClause,
-                                         raw_ostream &OS, PrinterHelper *Helper,
-                                         const PrintingPolicy &Policy,
-                                         unsigned Indentation) const {
-  assert(IfClause);
-
-  if (this == 0) {
-    OS << "<NULL>";
-    return;
-  }
-
-  StmtPrinter P(OS, Helper, Policy, Indentation);
-
-  std::string IfCond = IfClause->getPrettyClause(Policy);
-
-  OS << IfCond << " {\n";
-
-  if (getDirective()->getKind() == openacc::DK_UPDATE)
-      OS << "__accll_unreachable();\n";
-
-  openacc::ClauseInfo *PrevIfClause = ParentIfClause;
-  ParentIfClause = IfClause;
-  P.Visit(const_cast<Stmt*>(cast<Stmt>(this)));
-  OS << "}";
-
-  Stmt *SubStmt = this->getSubStmt();
-  if (SubStmt) {
-      OS << " else ";
-      if (!isa<CompoundStmt>(SubStmt))
-          OS << "{\n";
-
-      ParentIfClause = 0;
-      PrintAccStmts = false;
-      P.Visit(const_cast<Stmt*>(cast<Stmt>(SubStmt)));
-      PrintAccStmts = true;
-
-      if (!isa<CompoundStmt>(SubStmt))
-          OS << "}\n";
-  }
-
-  ParentIfClause = PrevIfClause;
 }
 
 //===----------------------------------------------------------------------===//

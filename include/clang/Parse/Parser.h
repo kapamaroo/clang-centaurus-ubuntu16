@@ -448,19 +448,19 @@ private:
   /// \brief Handle the annotation token produced for
   /// #pragma clang __debug captured
   StmtResult HandlePragmaCaptured();
-  
+
   /// #pragma acc...
   void HandlePragmaOpenACC();
 
     bool ProhibitExtensionPragmas();
     void AllowExtensionPragmas(bool OldValue);
 
-    void MaybeParseCombinedDirective(openacc::DirectiveKind &Kind);
     bool ParseClauseWrapper(openacc::DirectiveInfo *DI);
     bool ParseClauses(openacc::DirectiveInfo *DI);
 
     bool ParseArgScalarIntExpr(openacc::DirectiveKind DK, openacc::CommonInfo *Common);
-    bool ParseArgList(openacc::DirectiveKind DK, openacc::CommonInfo *Common);
+    bool ParseArgDoubleExpr(openacc::DirectiveKind DK, openacc::CommonInfo *Common);
+    bool ParseArgList(openacc::DirectiveKind DK, openacc::CommonInfo *Common, bool AllowSubArrays = true);
 
     typedef bool (ParseClauseFn) (openacc::DirectiveKind DK, openacc::ClauseInfo *CI);
     //pointer to member function
@@ -474,48 +474,21 @@ private:
     ParseClauseFnPtr ParseClause[openacc::CK_END];
     ParseDirectiveFnPtr ParseDirective[openacc::DK_END];
 
-    ParseClauseFn ParseClauseIf;
-    ParseClauseFn ParseClauseAsync;
-    ParseClauseFn ParseClauseNum_gangs;
-    ParseClauseFn ParseClauseNum_workers;
-    ParseClauseFn ParseClauseVector_length;
-    ParseClauseFn ParseClauseReduction;
-    ParseClauseFn ParseClauseCopy;
-    ParseClauseFn ParseClauseCopyin;
-    ParseClauseFn ParseClauseCopyout;
-    ParseClauseFn ParseClauseCreate;
-    ParseClauseFn ParseClausePresent;
-    ParseClauseFn ParseClausePcopy;
-    ParseClauseFn ParseClausePcopyin;
-    ParseClauseFn ParseClausePcopyout;
-    ParseClauseFn ParseClausePcreate;
-    ParseClauseFn ParseClauseDeviceptr;
-    ParseClauseFn ParseClausePrivate;
-    ParseClauseFn ParseClauseFirstprivate;
-    ParseClauseFn ParseClauseUse_device;
-    ParseClauseFn ParseClauseCollapse;
-    ParseClauseFn ParseClauseGang;
-    ParseClauseFn ParseClauseWorker;
-    ParseClauseFn ParseClauseVector;
-    ParseClauseFn ParseClauseSeq;
-    ParseClauseFn ParseClauseIndependent;
-    ParseClauseFn ParseClauseDevice_resident;
-    ParseClauseFn ParseClauseHost;
-    ParseClauseFn ParseClauseDevice;
+    ParseClauseFn ParseClauseLabel;
+    ParseClauseFn ParseClauseSignificant;
+    ParseClauseFn ParseClauseApproxfun;
+    ParseClauseFn ParseClauseIn;
+    ParseClauseFn ParseClauseOut;
+    ParseClauseFn ParseClauseOn;
+    ParseClauseFn ParseClauseWorkers;
+    ParseClauseFn ParseClauseGroups;
+    ParseClauseFn ParseClauseEnergy_joule;
+    ParseClauseFn ParseClauseRatio;
 
     //Parse Directives
 
-    ParseDirectiveFn ParseDirectiveParallel;
-    ParseDirectiveFn ParseDirectiveParallelLoop;
-    ParseDirectiveFn ParseDirectiveKernels;
-    ParseDirectiveFn ParseDirectiveKernelsLoop;
-    ParseDirectiveFn ParseDirectiveData;
-    ParseDirectiveFn ParseDirectiveHostData;
-    ParseDirectiveFn ParseDirectiveLoop;
-    ParseDirectiveFn ParseDirectiveCache;
-    ParseDirectiveFn ParseDirectiveDeclare;
-    ParseDirectiveFn ParseDirectiveUpdate;
-    ParseDirectiveFn ParseDirectiveWait;
+    ParseDirectiveFn ParseDirectiveTask;
+    ParseDirectiveFn ParseDirectiveTaskwait;
 
     ////////////////////////////////////////////////////////////////////////////////
 
@@ -1693,7 +1666,7 @@ private:
 
   bool ParseImplicitInt(DeclSpec &DS, CXXScopeSpec *SS,
                         const ParsedTemplateInfo &TemplateInfo,
-                        AccessSpecifier AS, DeclSpecContext DSC, 
+                        AccessSpecifier AS, DeclSpecContext DSC,
                         ParsedAttributesWithRange &Attrs);
   DeclSpecContext getDeclSpecContextFromDeclaratorContext(unsigned Context);
   void ParseDeclarationSpecifiers(DeclSpec &DS,
@@ -2168,7 +2141,7 @@ private:
   void ParseClassSpecifier(tok::TokenKind TagTokKind, SourceLocation TagLoc,
                            DeclSpec &DS, const ParsedTemplateInfo &TemplateInfo,
                            AccessSpecifier AS, bool EnteringContext,
-                           DeclSpecContext DSC, 
+                           DeclSpecContext DSC,
                            ParsedAttributesWithRange &Attributes);
   void ParseCXXMemberSpecification(SourceLocation StartLoc,
                                    SourceLocation AttrFixitLoc,

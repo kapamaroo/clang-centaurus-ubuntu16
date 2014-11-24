@@ -281,7 +281,9 @@ Retry:
   case tok::annot_pragma_acc:
     ProhibitAttributes(Attrs);
     HandlePragmaOpenACC();
-    return Actions.getACCInfo()->MayCreateStatementFromPendingExecutableOrCacheOrDeclareDirective();
+    if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->ConsumeDirective(openacc::DK_TASKWAIT))
+        return Actions.getACCInfo()->CreateRegion(DI);
+    return StmtEmpty();
 
   case tok::annot_pragma_weak:
     ProhibitAttributes(Attrs);
@@ -514,8 +516,6 @@ StmtResult Parser::ParseLabeledStatement(ParsedAttributesWithRange &attrs) {
     attrs.clear();
   }
 
-  Actions.getACCInfo()->WarnOnInvalidUpdateDirective(SubStmt.get());
-
   return Actions.ActOnLabelStmt(IdentTok.getLocation(), LD, ColonLoc,
                                 SubStmt.get());
 }
@@ -640,7 +640,6 @@ StmtResult Parser::ParseCaseStatement(bool MissingCase, ExprResult Expr) {
   if (Tok.isNot(tok::r_brace)) {
     SubStmt = ParseStatement();
     Actions.getACCInfo()->DiscardAndWarn();
-    Actions.getACCInfo()->WarnOnInvalidUpdateDirective(SubStmt.get());
   } else {
     // Nicely diagnose the common error "switch (X) { case 4: }", which is
     // not valid.
@@ -692,7 +691,6 @@ StmtResult Parser::ParseDefaultStatement() {
   if (Tok.isNot(tok::r_brace)) {
     SubStmt = ParseStatement();
     Actions.getACCInfo()->DiscardAndWarn();
-    Actions.getACCInfo()->WarnOnInvalidUpdateDirective(SubStmt.get());
   } else {
     // Diagnose the common error "switch (X) {... default: }", which is
     // not valid.
@@ -817,10 +815,6 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
   if (T.consumeOpen())
     return StmtError();
 
-  //check if there is any pending invalid directive, e.g. loop directive
-  if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->MayConsumeLoopDirective())
-      Actions.getACCInfo()->WarnOnDirective(DI);
-
   Sema::CompoundScopeRAII CompoundScope(Actions);
 
   StmtVector Stmts;
@@ -829,12 +823,13 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
       // Parse any pragmas at the beginning of the compound statement.
       ParseCompoundStatementLeadingPragmas();
 
-      //get any pending exec directive
-      StmtResult LeadingExecDI = Actions.getACCInfo()->
-      MayCreateStatementFromPendingExecutableOrCacheOrDeclareDirective();
-      if (!LeadingExecDI.isUsable())
+      StmtResult LeadingWaitDI = StmtEmpty();
+      //get any pending wait directive
+      if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->ConsumeDirective(openacc::DK_TASKWAIT))
+          LeadingWaitDI = Actions.getACCInfo()->CreateRegion(DI);
+      if (!LeadingWaitDI.isUsable())
           break;
-      Stmts.push_back(LeadingExecDI.release());
+      Stmts.push_back(LeadingWaitDI.release());
   }
 
   // "__label__ X, Y, Z;" is the GNU "Local Label" extension.  These are
@@ -889,16 +884,15 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
 
     StmtResult R;
     if (Tok.isNot(tok::kw___extension__)) {
-        if (openacc::DirectiveInfo *DI =
-            Actions.getACCInfo()->MayConsumeDataOrComputeDirective()) {
-            assert((DI->isDataDirective() || DI->isComputeDirective()) && "Bad Call");
-
+        if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->ConsumeDirective(openacc::DK_TASK)) {
             Actions.getACCInfo()->getRegionStack().EnterRegion(DI);
             R = ParseStatementOrDeclaration(Stmts, false);
             Actions.getACCInfo()->getRegionStack().ExitRegion(DI);
             if (R.isUsable())
-                R = Actions.getACCInfo()->CreateDataOrComputeRegion(R.get(),DI);
+                R = Actions.getACCInfo()->CreateRegion(DI,R.get());
         }
+        if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->ConsumeDirective(openacc::DK_TASKWAIT))
+            R = Actions.getACCInfo()->CreateRegion(DI);
         else
             R = ParseStatementOrDeclaration(Stmts, false);
     } else {
@@ -964,15 +958,6 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
 
   StmtResult Res = Actions.ActOnCompoundStmt(T.getOpenLocation(), CloseLoc,
                                              Stmts, isStmtExpr);
-  //avoid duplicate diagnostics
-  //if we are in a loop region, the loop region does the check
-  if (!Actions.getACCInfo()->getRegionStack().InLoopRegion() &&
-      //FIXME: not a proper fix!
-      //allow cache directives only inside a forStmt
-      //add chech for kernels directive substmt
-      !Actions.getACCInfo()->getRegionStack().InRegion(openacc::DK_KERNELS))
-      Actions.getACCInfo()->WarnOnInvalidCacheDirective(Res.get());
-
   return Res;
 }
 
@@ -1167,9 +1152,6 @@ StmtResult Parser::ParseIfStatement(SourceLocation *TrailingElseLoc) {
   if (ElseStmt.isInvalid())
     ElseStmt = Actions.ActOnNullStmt(ElseStmtLoc);
 
-  Actions.getACCInfo()->WarnOnInvalidUpdateDirective(ThenStmt.get());
-  Actions.getACCInfo()->WarnOnInvalidUpdateDirective(ElseStmt.get());
-
   return Actions.ActOnIfStmt(IfLoc, FullCondExp, CondVar, ThenStmt.get(),
                              ElseLoc, ElseStmt.get());
 }
@@ -1259,8 +1241,6 @@ StmtResult Parser::ParseSwitchStatement(SourceLocation *TrailingElseLoc) {
     Body = Actions.ActOnNullStmt(SynthesizedNullStmtLocation);
   }
 
-  Actions.getACCInfo()->WarnOnInvalidUpdateDirective(Body.get());
-
   return Actions.ActOnFinishSwitchStmt(SwitchLoc, Switch.get(), Body.get());
 }
 
@@ -1333,8 +1313,6 @@ StmtResult Parser::ParseWhileStatement(SourceLocation *TrailingElseLoc) {
   if ((Cond.isInvalid() && !CondVar) || Body.isInvalid())
     return StmtError();
 
-  Actions.getACCInfo()->WarnOnInvalidUpdateDirective(Body.get());
-
   return Actions.ActOnWhileStmt(WhileLoc, FullCond, CondVar, Body.get());
 }
 
@@ -1406,8 +1384,6 @@ StmtResult Parser::ParseDoStatement() {
   if (Cond.isInvalid() || Body.isInvalid())
     return StmtError();
 
-  Actions.getACCInfo()->WarnOnInvalidUpdateDirective(Body.get());
-
   return Actions.ActOnDoStmt(DoLoc, Body.get(), WhileLoc, T.getOpenLocation(),
                              Cond.get(), T.getCloseLocation());
 }
@@ -1433,10 +1409,6 @@ StmtResult Parser::ParseDoStatement() {
 /// [C++0x]   braced-init-list            [TODO]
 StmtResult Parser::ParseForStatement(SourceLocation *TrailingElseLoc) {
   assert(Tok.is(tok::kw_for) && "Not a for stmt!");
-
-  //consume any pending directive before any return point
-  //get any pending directive outside the for statement
-  openacc::DirectiveInfo *DI = Actions.getACCInfo()->MayConsumeLoopDirective();
 
   SourceLocation ForLoc = ConsumeToken();  // eat the 'for'.
 
@@ -1665,20 +1637,8 @@ StmtResult Parser::ParseForStatement(SourceLocation *TrailingElseLoc) {
   ParseScope InnerScope(this, Scope::DeclScope,
                         C99orCXXorObjC && Tok.isNot(tok::l_brace));
 
-  if ((ForEach || ForRange) && DI) {
-      PP.Diag(DI->getStartLocation(),diag::err_pragma_acc_invalid_loop);
-      DI = 0;
-  }
-
-  //now it is time to Enter Region
-  if (DI)
-      Actions.getACCInfo()->getRegionStack().EnterRegion(DI);
-
   // Read the body statement.
   StmtResult Body(ParseStatement(TrailingElseLoc));
-
-  if (DI)
-      Actions.getACCInfo()->getRegionStack().ExitRegion(DI);
 
   // Pop the body scope if needed.
   InnerScope.Exit();
@@ -1706,11 +1666,6 @@ StmtResult Parser::ParseForStatement(SourceLocation *TrailingElseLoc) {
   StmtResult Res = Actions.ActOnForStmt(ForLoc, T.getOpenLocation(), FirstPart.take(),
                               SecondPart, SecondVar, ThirdPart,
                               T.getCloseLocation(), Body.take());
-
-  if (DI) {
-      ForStmt *FS = dyn_cast<ForStmt>(Res.get());
-      Res = Actions.getACCInfo()->CreateLoopRegion(FS, DI);
-  }
 
   return Res;
 }

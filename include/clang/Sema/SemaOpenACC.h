@@ -42,8 +42,6 @@ public:
     //pointer to member function
     typedef bool (OpenACC::*isValidDirectiveFnPtr) (DirectiveInfo *DI);
 
-    StmtResult BuildPragmaOpenACC();
-
     //array of clause handlers
     isValidClauseFnPtr isValidClause[CK_END];
     isValidDirectiveFnPtr isValidDirective[DK_END];
@@ -51,53 +49,27 @@ public:
     //wrapper
     isValidClauseFn isValidClauseWrapper;
 
-    isValidClauseFn isValidClauseIf;
-    isValidClauseFn isValidClauseAsync;
-    isValidClauseFn isValidClauseNum_gangs;
-    isValidClauseFn isValidClauseNum_workers;
-    isValidClauseFn isValidClauseVector_length;
-    isValidClauseFn isValidClauseReduction;
-    isValidClauseFn isValidClauseCopy;
-    isValidClauseFn isValidClauseCopyin;
-    isValidClauseFn isValidClauseCopyout;
-    isValidClauseFn isValidClauseCreate;
-    isValidClauseFn isValidClausePresent;
-    isValidClauseFn isValidClausePcopy;
-    isValidClauseFn isValidClausePcopyin;
-    isValidClauseFn isValidClausePcopyout;
-    isValidClauseFn isValidClausePcreate;
-    isValidClauseFn isValidClauseDeviceptr;
-    isValidClauseFn isValidClausePrivate;
-    isValidClauseFn isValidClauseFirstprivate;
-    isValidClauseFn isValidClauseUse_device;
-    isValidClauseFn isValidClauseCollapse;
-    isValidClauseFn isValidClauseGang;
-    isValidClauseFn isValidClauseWorker;
-    isValidClauseFn isValidClauseVector;
-    isValidClauseFn isValidClauseSeq;
-    isValidClauseFn isValidClauseIndependent;
-    isValidClauseFn isValidClauseDevice_resident;
-    isValidClauseFn isValidClauseHost;
-    isValidClauseFn isValidClauseDevice;
+    isValidClauseFn isValidClauseLabel;
+    isValidClauseFn isValidClauseSignificant;
+    isValidClauseFn isValidClauseApproxfun;
+    isValidClauseFn isValidClauseIn;
+    isValidClauseFn isValidClauseOut;
+    isValidClauseFn isValidClauseOn;
+    isValidClauseFn isValidClauseWorkers;
+    isValidClauseFn isValidClauseGroups;
+    isValidClauseFn isValidClauseEnergy_joule;
+    isValidClauseFn isValidClauseRatio;
 
     //wrapper
     isValidDirectiveFn isValidDirectiveWrapper;
 
-    isValidDirectiveFn isValidDirectiveParallel;
-    isValidDirectiveFn isValidDirectiveParallelLoop;
-    isValidDirectiveFn isValidDirectiveKernels;
-    isValidDirectiveFn isValidDirectiveKernelsLoop;
-    isValidDirectiveFn isValidDirectiveData;
-    isValidDirectiveFn isValidDirectiveHostData;
-    isValidDirectiveFn isValidDirectiveLoop;
-    isValidDirectiveFn isValidDirectiveCache;
-    isValidDirectiveFn isValidDirectiveDeclare;
-    isValidDirectiveFn isValidDirectiveUpdate;
-    isValidDirectiveFn isValidDirectiveWait;
+    isValidDirectiveFn isValidDirectiveTask;
+    isValidDirectiveFn isValidDirectiveTaskwait;
 
-    StmtResult CreateDataOrComputeRegion(Stmt *SubStmt, DirectiveInfo *DI);
-    StmtResult CreateLoopRegion(ForStmt *SubStmt, DirectiveInfo *DI);
-    StmtResult MayCreateStatementFromPendingExecutableOrCacheOrDeclareDirective();
+    DirectiveInfo *ConsumeDirective(enum DirectiveKind);
+    StmtResult CreateRegion(DirectiveInfo *DI, Stmt *SubStmt = 0);
+
+    void DiscardAndWarn();
 
     ///////////////////////////////////////////////
 
@@ -116,15 +88,6 @@ public:
     Arg *CreateArg(Expr *E, CommonInfo *Common);
     void FindAndKeepSubArrayLength(SourceLocation ColonLoc, Expr *ase, Expr *Length);
 
-    DirectiveInfo *MayConsumeDataOrComputeDirective();
-    DirectiveInfo *MayConsumeLoopDirective();
-    DirectiveInfo *MayConsumeExecutableOrCacheOrDeclareDirective();
-
-    void DiscardAndWarn();
-
-    void WarnOnInvalidUpdateDirective(Stmt *Body);
-    bool WarnOnInvalidCacheDirective(Stmt *Body, bool InsideLoop = false);
-
     void WarnOnDirective(DirectiveInfo *DI);  //deprecated
 
     bool FindValidICE(Arg *A);
@@ -138,8 +101,7 @@ public:
     bool WarnOnInvalidLists(DirectiveInfo *DI);
     bool WarnOnDuplicatesInList(ArgVector &Tmp, ArgVector &Args);
     bool WarnOnVisibleCopyFromDeclareDirective(ArgVector &Args);
-    bool WarnOnMissingVisibleCopy(ArgVector &Args,bool IgnoreDeviceResident,
-                                  DirectiveInfo *ExtraDI = 0);
+    bool WarnOnMissingVisibleCopy(ArgVector &Args, DirectiveInfo *ExtraDI = 0);
     bool WarnOnInvalidReductionList(ArgVector &Args);
 
     bool WarnOnArgKind(ArgVector &Args, ArgKind AK);
@@ -147,7 +109,6 @@ public:
     bool WarnOnArrayArg(ArgVector &Args) { return WarnOnArgKind(Args,A_Array); }
     bool WarnOnArrayElementArg(ArgVector &Args) { return WarnOnArgKind(Args,A_ArrayElement); }
     bool WarnOnSubArrayArg(ArgVector &Args) { return WarnOnArgKind(Args,A_SubArray); }
-    bool WarnOnConstArg(ArgVector &Args) { return WarnOnArgKind(Args,A_Const); }
 
     bool SetVisibleCopy(ArgVector &Args, ClauseInfo *CI);
     bool MarkArgsWithVisibleCopy(ClauseList &CList);

@@ -6,201 +6,46 @@
 #include "clang/Parse/ParseDiagnostic.h"
 #include "ParsePragma.h"
 #include "clang/Sema/SemaOpenACC.h"
+#include "clang/Sema/Lookup.h"
 
 using namespace clang;
 using namespace openacc;
 
 #define BITMASK(x) ((unsigned int)1 << x)
 const unsigned DirectiveInfo::ValidDirective[DK_END] = {
-    //parallel
-    BITMASK(CK_IF) |
-        BITMASK(CK_ASYNC) |
-        BITMASK(CK_NUM_GANGS) |
-        BITMASK(CK_NUM_WORKERS) |
-        BITMASK(CK_VECTOR_LENGTH) |
-        BITMASK(CK_REDUCTION) |
-        BITMASK(CK_COPY) |
-        BITMASK(CK_COPYIN) |
-        BITMASK(CK_COPYOUT) |
-        BITMASK(CK_CREATE) |
-        BITMASK(CK_PRESENT) |
-        BITMASK(CK_PCOPY) |
-        BITMASK(CK_PCOPYIN) |
-        BITMASK(CK_PCOPYOUT) |
-        BITMASK(CK_PCREATE) |
-        BITMASK(CK_DEVICEPTR) |
-        BITMASK(CK_PRIVATE) |
-        BITMASK(CK_FIRSTPRIVATE),
+    //task
+    BITMASK(CK_LABEL) |
+        BITMASK(CK_SIGNIFICANT) |
+        BITMASK(CK_APPROXFUN) |
+        BITMASK(CK_IN) |
+        BITMASK(CK_OUT) |
+        BITMASK(CK_WORKERS) |
+        BITMASK(CK_GROUPS),
 
-        //parallel loop
-
-        //from parallel
-        BITMASK(CK_IF) |
-        BITMASK(CK_ASYNC) |
-        BITMASK(CK_NUM_GANGS) |
-        BITMASK(CK_NUM_WORKERS) |
-        BITMASK(CK_VECTOR_LENGTH) |
-        BITMASK(CK_REDUCTION) |
-        BITMASK(CK_COPY) |
-        BITMASK(CK_COPYIN) |
-        BITMASK(CK_COPYOUT) |
-        BITMASK(CK_CREATE) |
-        BITMASK(CK_PRESENT) |
-        BITMASK(CK_PCOPY) |
-        BITMASK(CK_PCOPYIN) |
-        BITMASK(CK_PCOPYOUT) |
-        BITMASK(CK_PCREATE) |
-        BITMASK(CK_DEVICEPTR) |
-        BITMASK(CK_PRIVATE) |
-        BITMASK(CK_FIRSTPRIVATE) |
-
-        //from loop
-        BITMASK(CK_COLLAPSE) |
-        BITMASK(CK_GANG) |
-        BITMASK(CK_WORKER) |
-        BITMASK(CK_VECTOR) |
-        BITMASK(CK_SEQ) |
-        BITMASK(CK_INDEPENDENT) |
-        BITMASK(CK_PRIVATE) |
-        BITMASK(CK_REDUCTION),
-
-        //kernels
-        BITMASK(CK_IF) |
-        BITMASK(CK_ASYNC) |
-        BITMASK(CK_COPY) |
-        BITMASK(CK_COPYIN) |
-        BITMASK(CK_COPYOUT) |
-        BITMASK(CK_CREATE) |
-        BITMASK(CK_PRESENT) |
-        BITMASK(CK_PCOPY) |
-        BITMASK(CK_PCOPYIN) |
-        BITMASK(CK_PCOPYOUT) |
-        BITMASK(CK_PCREATE) |
-        BITMASK(CK_DEVICEPTR),
-
-        //kernels loop
-
-        //from kernels
-        BITMASK(CK_IF) |
-        BITMASK(CK_ASYNC) |
-        BITMASK(CK_COPY) |
-        BITMASK(CK_COPYIN) |
-        BITMASK(CK_COPYOUT) |
-        BITMASK(CK_CREATE) |
-        BITMASK(CK_PRESENT) |
-        BITMASK(CK_PCOPY) |
-        BITMASK(CK_PCOPYIN) |
-        BITMASK(CK_PCOPYOUT) |
-        BITMASK(CK_PCREATE) |
-        BITMASK(CK_DEVICEPTR) |
-
-        //from loop
-        BITMASK(CK_COLLAPSE) |
-        BITMASK(CK_GANG) |
-        BITMASK(CK_WORKER) |
-        BITMASK(CK_VECTOR) |
-        BITMASK(CK_SEQ) |
-        BITMASK(CK_INDEPENDENT) |
-        BITMASK(CK_PRIVATE) |
-        BITMASK(CK_REDUCTION),
-
-        //data
-        BITMASK(CK_IF) |
-        BITMASK(CK_COPY) |
-        BITMASK(CK_COPYIN) |
-        BITMASK(CK_COPYOUT) |
-        BITMASK(CK_CREATE) |
-        BITMASK(CK_PRESENT) |
-        BITMASK(CK_PCOPY) |
-        BITMASK(CK_PCOPYIN) |
-        BITMASK(CK_PCOPYOUT) |
-        BITMASK(CK_PCREATE) |
-        BITMASK(CK_DEVICEPTR),
-
-        //host data
-        BITMASK(CK_USE_DEVICE),
-
-        //loop
-        BITMASK(CK_COLLAPSE) |
-        BITMASK(CK_GANG) |
-        BITMASK(CK_WORKER) |
-        BITMASK(CK_VECTOR) |
-        BITMASK(CK_SEQ) |
-        BITMASK(CK_INDEPENDENT) |
-        BITMASK(CK_PRIVATE) |
-        BITMASK(CK_REDUCTION),
-
-        //cache
-        // no clauses allowed
-        0,
-
-        //declare
-        BITMASK(CK_COPY) |
-        BITMASK(CK_COPYIN) |
-        BITMASK(CK_COPYOUT) |
-        BITMASK(CK_CREATE) |
-        BITMASK(CK_PRESENT) |
-        BITMASK(CK_PCOPY) |
-        BITMASK(CK_PCOPYIN) |
-        BITMASK(CK_PCOPYOUT) |
-        BITMASK(CK_PCREATE) |
-        BITMASK(CK_DEVICEPTR) |
-        BITMASK(CK_DEVICE_RESIDENT),
-
-        //update
-        BITMASK(CK_HOST) |
-        BITMASK(CK_DEVICE) |
-        BITMASK(CK_IF) |
-        BITMASK(CK_ASYNC),
-
-        //wait
-        // no clauses allowed
-        0
+        //taskwait
+        BITMASK(CK_ON) |
+        BITMASK(CK_ENERGY_JOULE) |
+        BITMASK(CK_RATIO),
         };
 
+const std::string ExtensionName = "acc";
+
 const std::string DirectiveInfo::Name[DK_END] = {
-    "parallel",
-    "parallel loop",
-    "kernels",
-    "kernels loop",
-    "data",
-    "host_data",
-    "loop",
-    "cache",
-    "declare",
-    "update",
-    "wait"
+    "task",
+    "taskwait",
 };
 
 const std::string ClauseInfo::Name[CK_END] = {
-    "if",
-    "async",
-    "num_gangs",
-    "num_workers",
-    "vector_length",
-    "reduction",
-    "copy",
-    "copyin",
-    "copyout",
-    "create",
-    "present",
-    "pcopy",
-    "pcopyin",
-    "pcopyout",
-    "pcreate",
-    "deviceptr",
-    "private",
-    "firstprivate",
-    "use_device",
-    "collapse",
-    "gang",
-    "worker",
-    "vector",
-    "seq",
-    "independent",
-    "device_resident",
-    "host",
-    "device"
+    "label",
+    "significant",
+    "approxfun",
+    "in",
+    "out",
+    "on",
+    "workers",
+    "groups",
+    "energy_joule",
+    "ratio",
 };
 
 static DirectiveInfo*
@@ -254,9 +99,9 @@ std::string Arg::getPrettyArg(const PrintingPolicy &Policy) const {
     }
 
     //special case: implementation default values do not have an expression
-    if (const ConstArg *CA = dyn_cast<ConstArg>(this)) {
-        if (CA->IsImplDefault()) {
-            assert(!E && "unexpected expression in ImplDefault ConstArg ICE");
+    if (const RawExprArg *RE = dyn_cast<RawExprArg>(this)) {
+        assert(!E && "unexpected expression in ImplDefault ConstArg ICE");
+        if (RE->IsImplDefault()) {
             ICE.print(OS,ICE.isSigned());
             return OS.str();  //flush
         }
@@ -280,45 +125,24 @@ static std::string printArgList(const ArgVector &Args, const PrintingPolicy &Pol
 }
 
 std::string ClauseInfo::getPrettyClause(const PrintingPolicy &Policy) const {
-    std::string StrCI(getAsString());
     if (!hasArgs())
-        return StrCI;
-
-    if (CK == CK_VECTOR) {
-        const CommonInfo *CC = reinterpret_cast<const CommonInfo*>(this);
-        if (ConstArg *CA = dyn_cast<ConstArg>(CC->getArg()))
-            if (CA->IsImplDefault())
-                return getAsString();
-    }
-
-    StrCI += "(";
-    if (CK == CK_REDUCTION)
-        StrCI += printReductionOperator() + ":";
-    StrCI += printArgList(getArgs(),Policy) + ")";
+        return getAsString();
+    std::string StrCI(getAsString() + "(" + printArgList(getArgs(),Policy) + ")");
     return StrCI;
 }
 
 std::string DirectiveInfo::getPrettyDirective(const PrintingPolicy &Policy, const bool IgnoreImplDefaults) const {
-    std::string StrDI("\n#pragma acc ");
-    StrDI += getAsString();
-    StrDI += " ";
-
-    if (DK == DK_CACHE || DK == DK_WAIT) {
-        const CommonInfo *CC = reinterpret_cast<const CommonInfo*>(this);
-        StrDI += "(" + printArgList(CC->getArgs(),Policy) + ")\n";
-        return StrDI;
-    }
-
+    std::string StrCI;
     for (ClauseList::const_iterator II(CList.begin()), EE(CList.end());
          II != EE; ++II) {
         ClauseInfo *CI = *II;
         if (CI->isImplDefault() && IgnoreImplDefaults)
             continue;
         if (II != CList.begin())
-            StrDI += ", ";
-        StrDI += CI->getPrettyClause(Policy);
+            StrCI += ", ";
+        StrCI += CI->getPrettyClause(Policy);
     }
-    StrDI += "\n";
+    std::string StrDI("\n#pragma " + ExtensionName + " " + getAsString() + " " + StrCI + "\n");
     return StrDI;
 }
 
@@ -326,90 +150,22 @@ std::string DirectiveInfo::getPrettyDirective(const PrintingPolicy &Policy, cons
 #define ACC_ELSE_IF(Tok, Kind, PREFIX, str, STR) else ACC_IF(Tok, Kind, PREFIX, str, STR)
 
 static bool isACCDirective(const Token &Tok, DirectiveKind &Kind) {
-    ACC_IF(Tok,Kind,DK,parallel,PARALLEL)
-    ACC_ELSE_IF(Tok,Kind,DK,kernels,KERNELS)
-    ACC_ELSE_IF(Tok,Kind,DK,data,DATA)
-    ACC_ELSE_IF(Tok,Kind,DK,host_data,HOST_DATA)
-    ACC_ELSE_IF(Tok,Kind,DK,loop,LOOP)
-    ACC_ELSE_IF(Tok,Kind,DK,cache,CACHE)
-    ACC_ELSE_IF(Tok,Kind,DK,declare,DECLARE)
-    ACC_ELSE_IF(Tok,Kind,DK,update,UPDATE)
-    ACC_ELSE_IF(Tok,Kind,DK,wait,WAIT)
+    ACC_IF(Tok,Kind,DK,task,TASK)
+    ACC_ELSE_IF(Tok,Kind,DK,taskwait,TASKWAIT)
     return false;
 }
 
 static bool isACCClause(const Token &Tok, ClauseKind &Kind) {
-    if (Tok.is(tok::kw_if)) {
-        Kind = CK_IF;
-        return true;
-    }
-
-    //if we are in C++ mode, 'private' is a keyword
-    if (Tok.is(tok::kw_private)) {
-        Kind = CK_PRIVATE;
-        return true;
-    }
-
-    ACC_IF(Tok,Kind,CK,async,ASYNC)
-
-    ACC_ELSE_IF(Tok,Kind,CK,num_gangs,NUM_GANGS)
-    ACC_ELSE_IF(Tok,Kind,CK,num_workers,NUM_WORKERS)
-    ACC_ELSE_IF(Tok,Kind,CK,vector_length,VECTOR_LENGTH)
-    ACC_ELSE_IF(Tok,Kind,CK,reduction,REDUCTION)
-
-    //recheck 'private' as identifier this time
-    ACC_ELSE_IF(Tok,Kind,CK,private,PRIVATE)
-
-    ACC_ELSE_IF(Tok,Kind,CK,copy,COPY)
-    ACC_ELSE_IF(Tok,Kind,CK,copyin,COPYIN)
-    ACC_ELSE_IF(Tok,Kind,CK,copyout,COPYOUT)
-    ACC_ELSE_IF(Tok,Kind,CK,create,CREATE)
-    ACC_ELSE_IF(Tok,Kind,CK,present,PRESENT)
-
-    ACC_ELSE_IF(Tok,Kind,CK,pcopy,PCOPY)
-    ACC_ELSE_IF(Tok,Kind,CK,pcopyin,PCOPYIN)
-    ACC_ELSE_IF(Tok,Kind,CK,pcopyout,PCOPYOUT)
-    ACC_ELSE_IF(Tok,Kind,CK,pcreate,PCREATE)
-
-    ACC_ELSE_IF(Tok,Kind,CK,present_or_copy,PCOPY)
-    ACC_ELSE_IF(Tok,Kind,CK,present_or_copyin,PCOPYIN)
-    ACC_ELSE_IF(Tok,Kind,CK,present_or_copyout,PCOPYOUT)
-    ACC_ELSE_IF(Tok,Kind,CK,present_or_create,PCREATE)
-
-    ACC_ELSE_IF(Tok,Kind,CK,deviceptr,DEVICEPTR)
-    ACC_ELSE_IF(Tok,Kind,CK,firstprivate,FIRSTPRIVATE)
-    ACC_ELSE_IF(Tok,Kind,CK,use_device,USE_DEVICE)
-    ACC_ELSE_IF(Tok,Kind,CK,collapse,COLLAPSE)
-
-    ACC_ELSE_IF(Tok,Kind,CK,gang,GANG)
-    ACC_ELSE_IF(Tok,Kind,CK,worker,WORKER)
-    ACC_ELSE_IF(Tok,Kind,CK,vector,VECTOR)
-
-    ACC_ELSE_IF(Tok,Kind,CK,seq,SEQ)
-    ACC_ELSE_IF(Tok,Kind,CK,independent,INDEPENDENT)
-
-    ACC_ELSE_IF(Tok,Kind,CK,device_resident,DEVICE_RESIDENT)
-    ACC_ELSE_IF(Tok,Kind,CK,host,HOST)
-    ACC_ELSE_IF(Tok,Kind,CK,device,DEVICE)
-
-    return false;
-}
-
-static bool isReductionOperator(const Token &Tok, enum ReductionOperator &Kind) {
-    if (Tok.is(tok::plus))          { Kind = ROP_PLUS;        return true;  }
-    else if (Tok.is(tok::star))     { Kind = ROP_MULT;        return true;  }
-    else if (Tok.is(tok::amp))      { Kind = ROP_BITWISE_AND; return true;  }
-    else if (Tok.is(tok::pipe))     { Kind = ROP_BITWISE_OR;  return true;  }
-    else if (Tok.is(tok::caret))    { Kind = ROP_BITWISE_XOR; return true;  }
-    else if (Tok.is(tok::ampamp))   { Kind = ROP_LOGICAL_AND; return true;  }
-    else if (Tok.is(tok::pipepipe)) { Kind = ROP_LOGICAL_OR;  return true;  }
-
-    if (Tok.isNot(tok::identifier))
-        return false;
-
-    ACC_IF(Tok,Kind,ROP,max,MAX)
-    ACC_ELSE_IF(Tok,Kind,ROP,min,MIN)
-
+    ACC_IF(Tok,Kind,CK,label,LABEL)
+    ACC_ELSE_IF(Tok,Kind,CK,significant,SIGNIFICANT)
+    ACC_ELSE_IF(Tok,Kind,CK,approxfun,APPROXFUN)
+    ACC_ELSE_IF(Tok,Kind,CK,in,IN)
+    ACC_ELSE_IF(Tok,Kind,CK,out,OUT)
+    ACC_ELSE_IF(Tok,Kind,CK,on,ON)
+    ACC_ELSE_IF(Tok,Kind,CK,workers,WORKERS)
+    ACC_ELSE_IF(Tok,Kind,CK,groups,GROUPS)
+    ACC_ELSE_IF(Tok,Kind,CK,energy_joule,ENERGY_JOULE)
+    ACC_ELSE_IF(Tok,Kind,CK,ratio,RATIO)
     return false;
 }
 
@@ -427,17 +183,13 @@ static bool isDuplicate(ClauseList &CList, ClauseKind CK, SourceLocation &Loc) {
 
 static bool mustBeUnique(ClauseKind CK) {
     switch (CK) {
-    case CK_IF:
-    case CK_ASYNC:
-    case CK_NUM_GANGS:
-    case CK_NUM_WORKERS:
-    case CK_VECTOR_LENGTH:
-    case CK_COLLAPSE:
-    case CK_GANG:
-    case CK_WORKER:
-    case CK_VECTOR:
-    case CK_SEQ:
-    case CK_INDEPENDENT:
+    case CK_LABEL:
+    case CK_SIGNIFICANT:
+    case CK_APPROXFUN:
+    case CK_WORKERS:
+    case CK_GROUPS:
+    case CK_ENERGY_JOULE:
+    case CK_RATIO:
         return true;
     default:
         return false;
@@ -446,25 +198,31 @@ static bool mustBeUnique(ClauseKind CK) {
 
 bool Parser::ParseArgScalarIntExpr(DirectiveKind DK, CommonInfo *Common) {
     ExprResult E = ParseExpression();
-
-    if (!E.isUsable())
-        return false;
-
-    if (ClauseInfo *CI = Common->getAsClause()) {
-        if (CI->getKind() == CK_IF)
-            E = Actions.ActOnBooleanCondition(getCurScope(), E.get()->getExprLoc(), E.get());
-    }
-
     if (!E.isUsable())
         return false;
 
     Arg *A = Actions.getACCInfo()->CreateArg(E.get(),Common);
     Common->setArg(A);
-
     return !Actions.getACCInfo()->WarnOnSubArrayArg(Common->getArgs());
 }
 
-bool Parser::ParseArgList(DirectiveKind DK, CommonInfo *Common) {
+bool Parser::ParseArgDoubleExpr(DirectiveKind DK, CommonInfo *Common) {
+    ExprResult E = ParseExpression();
+    if (!E.isUsable())
+        return false;
+
+    const Type *ETy = E.get()->getType().getTypePtr();
+    if (!ETy->isFloatingType()) {
+        //FIXME: we probably need a diagnostic here
+        return false;
+    }
+
+    Arg *A = new RawExprArg(Common,E.get(),&Actions.getASTContext());
+    Common->setArg(A);
+    return !Actions.getACCInfo()->WarnOnSubArrayArg(Common->getArgs());
+}
+
+bool Parser::ParseArgList(DirectiveKind DK, CommonInfo *Common, bool AllowSubArrays) {
     // a list is a comma-separated list of
     //variable names,
     //array names,
@@ -479,8 +237,10 @@ bool Parser::ParseArgList(DirectiveKind DK, CommonInfo *Common) {
     while (1) {
         ExprResult Expr = ParseCastExpression(false,false,NotTypeCast);
 
-        if (!Expr.isUsable())
+        if (!Expr.isUsable()) {
+            Actions.getACCInfo()->ProhibitSubArrays();
             return false;
+        }
 
         Arg *A = Actions.getACCInfo()->CreateArg(Expr.get(),Common);
         Args.push_back(A);
@@ -503,325 +263,119 @@ bool Parser::ParseArgList(DirectiveKind DK, CommonInfo *Common) {
     if (Args.empty())
         return false;
 
-    bool status = true;
-    if (Actions.getACCInfo()->WarnOnConstArg(Args))
-        status = false;
-    if (Actions.getACCInfo()->WarnOnArgKind(Args,A_RawExpr))
-        status = false;
-    return status;
+    return true;
 }
 
 //Parse Clauses
 
 bool
-Parser::ParseClauseIf(DirectiveKind DK, ClauseInfo *CI) {
-    //create two versions of the construct, one for the host
-    //and one for the device
-
-    //at most one if for each directive
-
-    //nonzero means true, zero means false
-    //if true, execute the device version, else the host version
-
-    CI->getParentDirective()->setIfClause(CI);
-    return ParseArgScalarIntExpr(DK,CI);
-}
-
-bool
-Parser::ParseClauseAsync(DirectiveKind DK, ClauseInfo *CI) {
-    //optional arguments
-
-    /// The update directive is executable. It must not appear in place of the statement
-    /// following an if, while, do, switch, or label in C or C++, or in place of the statement
-    /// following a logical if in Fortran.
-
-    return ParseArgScalarIntExpr(DK,CI);
-}
-
-bool
-Parser::ParseClauseNum_gangs(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgScalarIntExpr(DK,CI);
-}
-
-bool
-Parser::ParseClauseNum_workers(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgScalarIntExpr(DK,CI);
-}
-
-bool
-Parser::ParseClauseVector_length(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgScalarIntExpr(DK,CI);
-}
-
-bool
-Parser::ParseClauseReduction(DirectiveKind DK, ClauseInfo *CI) {
-    //reduction ( operator : list )
-
-    enum ReductionOperator Kind;
-
-    if (!isReductionOperator(Tok,Kind)) {
-        PP.Diag(Tok,diag::err_pragma_acc_expected_reduction_operator);
-        //consume the bad token to avoid false errors afterwards
+Parser::ParseClauseLabel(DirectiveKind DK, ClauseInfo *CI) {
+    if (NextToken().isNot(tok::identifier))
         return false;
-    }
 
-    CI->setReductionOperator(Kind);
+    std::string Label(NextToken().getIdentifierInfo()->getNameStart());
+    Arg *A = new LabelArg(CI,Label);
+    CI->setArg(A);
 
     ConsumeAnyToken();
+    return true;
+}
 
-    if (Tok.isNot(tok::colon)) {
-        PP.Diag(Tok,diag::err_pragma_acc_expected_colon);
+bool
+Parser::ParseClauseSignificant(DirectiveKind DK, ClauseInfo *CI) {
+    return ParseArgScalarIntExpr(DK,CI);
+}
+
+bool
+Parser::ParseClauseApproxfun(DirectiveKind DK, ClauseInfo *CI) {
+    if (NextToken().isNot(tok::identifier))
+        return false;
+
+    StringRef FunctionName = NextToken().getIdentifierInfo()->getNameStart();
+
+    //parse function name see SemaDeclCXX.cpp:8401
+    LookupResult R(Actions,&Actions.Context.Idents.get(FunctionName),
+                   NextToken().getLocation(),Sema::LookupOrdinaryName);
+    Actions.LookupName(R,Actions.TUScope,/*AllowBuiltinCreation=*/false);
+    FunctionDecl *ApproxFun = R.getAsSingle<FunctionDecl>();
+    if (!ApproxFun) {
+        //warning
+        PP.Diag(Tok,diag::err_pragma_acc_function_not_found);
         return false;
     }
-    ConsumeToken();
 
-    return ParseArgList(DK,CI);
-}
+    Arg *A = new FunctionArg(CI,ApproxFun);
+    CI->setArg(A);
 
-bool
-Parser::ParseClauseCopy(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
-}
-
-bool
-Parser::ParseClauseCopyin(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
-}
-
-bool
-Parser::ParseClauseCopyout(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
-}
-
-bool
-Parser::ParseClauseCreate(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
-}
-
-bool
-Parser::ParseClausePresent(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
-}
-
-bool
-Parser::ParseClausePcopy(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
-}
-
-bool
-Parser::ParseClausePcopyin(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
-}
-
-bool
-Parser::ParseClausePcopyout(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
-}
-
-bool
-Parser::ParseClausePcreate(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
-}
-
-bool
-Parser::ParseClauseDeviceptr(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
-}
-
-bool
-Parser::ParseClausePrivate(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
-}
-
-bool
-Parser::ParseClauseFirstprivate(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
-}
-
-bool
-Parser::ParseClauseUse_device(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
-}
-
-bool
-Parser::ParseClauseCollapse(DirectiveKind DK, ClauseInfo *CI) {
-    //collapse( n )
-    // constant positive integer expression
-
-    return ParseArgScalarIntExpr(DK,CI);
-}
-
-bool
-Parser::ParseClauseGang(DirectiveKind DK, ClauseInfo *CI) {
-    //if DK == parallel then no argument is allowed
-    //arguments allowed only if DK == kernels
-
-    return ParseArgScalarIntExpr(DK,CI);
-}
-
-bool
-Parser::ParseClauseWorker(DirectiveKind DK, ClauseInfo *CI) {
-    //if DK == parallel then no argument is allowed
-    //arguments allowed only if DK == kernels
-    return ParseArgScalarIntExpr(DK,CI);
-}
-
-bool
-Parser::ParseClauseVector(DirectiveKind DK, ClauseInfo *CI) {
-    //SIMD mode
-    //optional argument
-
-    return ParseArgScalarIntExpr(DK,CI);
-}
-
-bool
-Parser::ParseClauseSeq(DirectiveKind DK, ClauseInfo *CI) {
-    //no arguments
+    ConsumeAnyToken();
     return true;
 }
 
 bool
-Parser::ParseClauseIndependent(DirectiveKind DK, ClauseInfo *CI) {
-    //no arguments
+Parser::ParseClauseIn(DirectiveKind DK, ClauseInfo *CI) {
+    if (!ParseArgList(DK,CI))
+        return false;
+    bool status = true;
+    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
+        status = false;
+    return status;
+}
+
+bool
+Parser::ParseClauseOut(DirectiveKind DK, ClauseInfo *CI) {
+    if (!ParseArgList(DK,CI))
+        return false;
+    bool status = true;
+    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
+        status = false;
+    return status;
+}
+
+bool
+Parser::ParseClauseOn(DirectiveKind DK, ClauseInfo *CI) {
+    if (!ParseArgList(DK,CI))
+        return false;
+    bool status = true;
+    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
+        status = false;
+    return status;
+}
+
+bool
+Parser::ParseClauseWorkers(DirectiveKind DK, ClauseInfo *CI) {
+    if (!ParseArgScalarIntExpr(DK,CI))
+        return false;
+    //check
     return true;
 }
 
 bool
-Parser::ParseClauseDevice_resident(DirectiveKind DK, ClauseInfo *CI) {
-    //variables in list must be file static or local to a function
-    return ParseArgList(DK,CI);
+Parser::ParseClauseGroups(DirectiveKind DK, ClauseInfo *CI) {
+    if (!ParseArgList(DK,CI,/*AllowSubArrays=*/false))
+        return false;
+    return true;
 }
 
 bool
-Parser::ParseClauseHost(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
+Parser::ParseClauseEnergy_joule(DirectiveKind DK, ClauseInfo *CI) {
+    return ParseArgScalarIntExpr(DK,CI);
 }
 
 bool
-Parser::ParseClauseDevice(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgList(DK,CI);
+Parser::ParseClauseRatio(DirectiveKind DK, ClauseInfo *CI) {
+    return ParseArgDoubleExpr(DK,CI);
 }
 
 //Parse Directives
 
 bool
-Parser::ParseDirectiveParallel(DirectiveInfo *DI) {
+Parser::ParseDirectiveTask(DirectiveInfo *DI) {
     return ParseClauses(DI);
 }
 
 bool
-Parser::ParseDirectiveParallelLoop(DirectiveInfo *DI) {
+Parser::ParseDirectiveTaskwait(DirectiveInfo *DI) {
     return ParseClauses(DI);
-}
-
-bool
-Parser::ParseDirectiveKernels(DirectiveInfo *DI) {
-    return ParseClauses(DI);
-}
-
-bool
-Parser::ParseDirectiveKernelsLoop(DirectiveInfo *DI) {
-    return ParseClauses(DI);
-}
-
-bool
-Parser::ParseDirectiveData(DirectiveInfo *DI) {
-    return ParseClauses(DI);
-}
-
-bool
-Parser::ParseDirectiveHostData(DirectiveInfo *DI) {
-    return ParseClauses(DI);
-}
-
-bool
-Parser::ParseDirectiveLoop(DirectiveInfo *DI) {
-    return ParseClauses(DI);
-}
-
-bool
-Parser::ParseDirectiveCache(DirectiveInfo *DI) {
-    //entries in list must be single array elements or simple subarray
-    //
-    //e.g. arr[lower:length]
-    //
-    //lower bound is constant, loop invariant or the
-    //for loop index plus/minus a constant or loop invariant
-    //
-    //length is constant
-
-    //we expect a left paren '(' here
-    if (Tok.isNot(tok::l_paren)) {
-        PP.Diag(Tok,diag::warn_pragma_expected_lparen) << "acc";
-        return false;
-    }
-    ConsumeParen();
-
-    if (!ParseArgList(DI->getKind(),DI))
-        return false;
-
-    //expect right ')'
-    if (Tok.isNot(tok::r_paren)) {
-        PP.Diag(Tok,diag::warn_pragma_expected_rparen) << "acc";
-        return false;
-    }
-    ConsumeParen();
-
-    return true;
-}
-
-bool
-Parser::ParseDirectiveDeclare(DirectiveInfo *DI) {
-    //following an variable declaration
-    return ParseClauses(DI);
-}
-
-bool
-Parser::ParseDirectiveUpdate(DirectiveInfo *DI) {
-    return ParseClauses(DI);
-}
-
-bool
-Parser::ParseDirectiveWait(DirectiveInfo *DI) {
-    //optional arguments
-    //wait for all async
-
-    //we expect a left paren '(' here
-    if (Tok.isNot(tok::l_paren)) {
-        PP.Diag(Tok,diag::warn_pragma_expected_lparen) << "acc";
-        return false;
-    }
-    ConsumeParen();
-
-    if (!ParseArgScalarIntExpr(DI->getKind(),DI))
-        return false;
-
-    //expect right ')'
-    if (Tok.isNot(tok::r_paren)) {
-        PP.Diag(Tok,diag::warn_pragma_expected_rparen) << "acc";
-        return false;
-    }
-    ConsumeParen();
-
-    return true;
-}
-
-void
-Parser::MaybeParseCombinedDirective(DirectiveKind &Kind) {
-    if (NextToken().isNot(tok::identifier))
-        return;
-
-    if (!NextToken().getIdentifierInfo()->isStr("loop"))
-        return;
-
-    if (Kind == DK_PARALLEL) {
-        Kind = DK_PARALLEL_LOOP;
-        ConsumeAnyToken();
-    }
-    else if (Kind == DK_KERNELS) {
-        Kind = DK_KERNELS_LOOP;
-        ConsumeAnyToken();
-    }
 }
 
 void Parser::HandlePragmaOpenACC() {
@@ -862,9 +416,6 @@ void Parser::HandlePragmaOpenACC() {
         ConsumeAnyToken();  //consume eod
         return;
     }
-
-    //check for combined directives
-    MaybeParseCombinedDirective(DK);
 
     //Parse the rest directive
     //keep any bad directive to avoid false errors afterwards
@@ -964,7 +515,7 @@ Parser::ParseClauseWrapper(DirectiveInfo *DI) {
             return true;
         }
 
-        PP.Diag(Tok,diag::warn_pragma_expected_lparen) << "acc";
+        PP.Diag(Tok,diag::warn_pragma_expected_lparen) << ExtensionName;
         return false;
     }
 
@@ -974,7 +525,7 @@ Parser::ParseClauseWrapper(DirectiveInfo *DI) {
         return false;
 
     if (Tok.isNot(tok::r_paren)) {
-        PP.Diag(Tok,diag::warn_pragma_expected_rparen) << "acc";
+        PP.Diag(Tok,diag::warn_pragma_expected_rparen) << ExtensionName;
         return false;
     }
     ClauseEndLoc = ConsumeParen();
@@ -996,56 +547,24 @@ Parser::ParseClauses(DirectiveInfo *DI) {
     while (1) {
         if (Tok.is(tok::eod))
             break;
-
-        if (!ParseClauseWrapper(DI))
+        found_clause = ParseClauseWrapper(DI);
+        if (!found_clause)
             return false;
-
         if (!Actions.getACCInfo()->isValidClauseWrapper(DK,CList.back()))
             return false;
 
-        pending_comma = false;
-        if (Tok.is(tok::comma)) {
+        pending_comma = Tok.is(tok::comma);
+        if (pending_comma)
             ConsumeToken();
-            pending_comma = true;
-        }
-
-        found_clause = true;
     }
 
     if (pending_comma)
         PP.Diag(Tok,diag::warn_pragma_acc_pending_comma);
 
-#if 0
     if (!DI->hasOptionalClauses() && !found_clause) {
         PP.Diag(Tok,diag::err_pragma_acc_incomplete);
         return false;
     }
-#else
-    if (found_clause)
-        return true;
-
-    if (DI->hasOptionalClauses())
-        return true;
-
-    switch (DI->getKind()) {
-    case DK_PARALLEL:
-    case DK_PARALLEL_LOOP:
-    case DK_KERNELS:
-    case DK_KERNELS_LOOP:
-        return true;
-    case DK_DATA:
-    case DK_HOST_DATA:
-        return false;
-    case DK_LOOP:
-        return true;
-    case DK_CACHE:
-    case DK_DECLARE:
-    case DK_UPDATE:
-        return false;
-    case DK_WAIT:
-        return true;
-    }
-#endif
 
     return true;
 }

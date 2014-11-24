@@ -835,6 +835,12 @@ def warn_pragma_acc_unique_clause : Warning<
 def err_pragma_acc_invalid_loop : Error<
   "loop directive cannot apply in this for statement">;
 
+def err_pragma_acc_function_not_found : Error<
+  "function '%0' not found">;
+
+def err_pragma_acc_invalid_subarray : Error<
+  "invalid location of subarray">;
+
 def err_pragma_acc_expected_reduction_operator : Error<
   "expected reduction operator: valid operators are: { +, *, max, min, &, |, ^, &&, || }">;
 

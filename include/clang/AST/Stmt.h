@@ -2126,10 +2126,6 @@ public:
 
   Stmt *getSubStmt() const { return SubStmt; }
   void setSubStmt(Stmt *s) { SubStmt = s; }
-  void printPrettyAccWithIfClause(openacc::ClauseInfo *IfClause,
-                                  raw_ostream &OS, PrinterHelper *Helper,
-                                  const PrintingPolicy &Policy,
-                                  unsigned Indentation = 0) const;
 
   void setEndLocation(SourceLocation EndLoc);
 
