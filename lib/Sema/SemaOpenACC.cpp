@@ -558,13 +558,14 @@ OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
             hasEnergy_jouleClause = true;
     }
 
-    if (((hasOnClause || hasEnergy_jouleClause) && (hasRatioClause || hasLabelClause)) ||
-        (hasOnClause && hasEnergy_jouleClause)) {
+    if ((hasOnClause && (hasLabelClause || hasRatioClause || hasEnergy_jouleClause)) ||
+        (hasRatioClause && hasEnergy_jouleClause)) {
         //suggest spliting this wait directive into two distinct wait directives
         //one that has all the on() clauses, and another that has all the label()
         //and ratio clauses(). ratio() clause is unique.
 
-        S.Diag(DI->getStartLocation(),diag::err_pragma_acc_taskwait_clauses);
+        S.Diag(DI->getStartLocation(),diag::err_pragma_acc_taskwait_clauses)
+            << "invalit combination of clauses";
         return false;
     }
 

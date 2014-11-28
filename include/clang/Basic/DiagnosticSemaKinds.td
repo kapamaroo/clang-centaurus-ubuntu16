@@ -6389,7 +6389,7 @@ def note_pragma_acc_test : Note<
   "%0">;
 
 def err_pragma_acc_taskwait_clauses : Error<
-  "[on()], [energy_joule()] and [ratio() | label()] clauses cannot be combined with each other">;
+  "%0">;
 
 // OpenCL warnings and errors.
 def err_invalid_astype_of_different_size : Error<
