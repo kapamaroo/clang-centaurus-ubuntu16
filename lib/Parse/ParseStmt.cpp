@@ -281,8 +281,6 @@ Retry:
   case tok::annot_pragma_acc:
     ProhibitAttributes(Attrs);
     HandlePragmaOpenACC();
-    if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->ConsumeDirective(openacc::DK_TASKWAIT))
-        return Actions.getACCInfo()->CreateRegion(DI);
     return StmtEmpty();
 
   case tok::annot_pragma_weak:
@@ -369,9 +367,6 @@ StmtResult Parser::ParseExprStatement() {
 
 StmtResult Parser::ParseSEHTryBlock() {
   assert(Tok.is(tok::kw___try) && "Expected '__try'");
-
-  //Discard any pending OpenACC Directive
-  Actions.getACCInfo()->DiscardAndWarn();
 
   SourceLocation Loc = ConsumeToken();
 
@@ -489,8 +484,6 @@ StmtResult Parser::ParseLabeledStatement(ParsedAttributesWithRange &attrs) {
   assert(Tok.is(tok::identifier) && Tok.getIdentifierInfo() &&
          "Not an identifier!");
 
-  Actions.getACCInfo()->DiscardAndWarn();
-
   Token IdentTok = Tok;  // Save the whole token.
   ConsumeToken();  // eat the identifier.
 
@@ -527,8 +520,6 @@ StmtResult Parser::ParseLabeledStatement(ParsedAttributesWithRange &attrs) {
 ///
 StmtResult Parser::ParseCaseStatement(bool MissingCase, ExprResult Expr) {
   assert((MissingCase || Tok.is(tok::kw_case)) && "Not a case stmt!");
-
-  Actions.getACCInfo()->DiscardAndWarn();
 
   // It is very very common for code to contain many case statements recursively
   // nested, as in (but usually without indentation):
@@ -639,7 +630,6 @@ StmtResult Parser::ParseCaseStatement(bool MissingCase, ExprResult Expr) {
 
   if (Tok.isNot(tok::r_brace)) {
     SubStmt = ParseStatement();
-    Actions.getACCInfo()->DiscardAndWarn();
   } else {
     // Nicely diagnose the common error "switch (X) { case 4: }", which is
     // not valid.
@@ -667,7 +657,6 @@ StmtResult Parser::ParseCaseStatement(bool MissingCase, ExprResult Expr) {
 ///
 StmtResult Parser::ParseDefaultStatement() {
   assert(Tok.is(tok::kw_default) && "Not a default stmt!");
-  Actions.getACCInfo()->DiscardAndWarn();
   SourceLocation DefaultLoc = ConsumeToken();  // eat the 'default'.
 
   SourceLocation ColonLoc;
@@ -690,7 +679,6 @@ StmtResult Parser::ParseDefaultStatement() {
 
   if (Tok.isNot(tok::r_brace)) {
     SubStmt = ParseStatement();
-    Actions.getACCInfo()->DiscardAndWarn();
   } else {
     // Diagnose the common error "switch (X) {... default: }", which is
     // not valid.
@@ -825,7 +813,9 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
 
       StmtResult LeadingWaitDI = StmtEmpty();
       //get any pending wait directive
-      if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->ConsumeDirective(openacc::DK_TASKWAIT))
+      if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASK))
+          Actions.getACCInfo()->WarnOnDirective(DI);
+      else if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASKWAIT))
           LeadingWaitDI = Actions.getACCInfo()->CreateRegion(DI);
       if (!LeadingWaitDI.isUsable())
           break;
@@ -835,9 +825,7 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
   // "__label__ X, Y, Z;" is the GNU "Local Label" extension.  These are
   // only allowed at the start of a compound stmt regardless of the language.
   while (Tok.is(tok::kw___label__)) {
-    //Discard any pending OpenACC Directive
     //do not allow directives inside the GNU "Local Label" extension
-    Actions.getACCInfo()->DiscardAndWarn();
 
     SourceLocation LabelLoc = ConsumeToken();
     Diag(LabelLoc, diag::ext_gnu_local_label);
@@ -877,22 +865,20 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
     if (getLangOpts().MicrosoftExt && (Tok.is(tok::kw___if_exists) ||
         Tok.is(tok::kw___if_not_exists))) {
       ParseMicrosoftIfExistsStatement(Stmts);
-      //Discard any pending OpenACC Directive
-      Actions.getACCInfo()->DiscardAndWarn();
       continue;
     }
 
     StmtResult R;
     if (Tok.isNot(tok::kw___extension__)) {
-        if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->ConsumeDirective(openacc::DK_TASK)) {
+        if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASK)) {
             Actions.getACCInfo()->getRegionStack().EnterRegion(DI);
             R = ParseStatementOrDeclaration(Stmts, false);
             Actions.getACCInfo()->getRegionStack().ExitRegion(DI);
-            if (R.isUsable())
-                R = Actions.getACCInfo()->CreateRegion(DI,R.get());
+            R = Actions.getACCInfo()->CreateRegion(DI,R.get());
         }
-        if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->ConsumeDirective(openacc::DK_TASKWAIT))
+        else if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASKWAIT)) {
             R = Actions.getACCInfo()->CreateRegion(DI);
+        }
         else
             R = ParseStatementOrDeclaration(Stmts, false);
     } else {
@@ -1225,6 +1211,9 @@ StmtResult Parser::ParseSwitchStatement(SourceLocation *TrailingElseLoc) {
   ParseScope InnerScope(this, Scope::DeclScope,
                         C99orCXX && Tok.isNot(tok::l_brace));
 
+  //Discard any pending OpenACC Directive
+  Actions.getACCInfo()->DiscardAndWarn();
+
   // Read the body statement.
   StmtResult Body(ParseStatement(TrailingElseLoc));
 
@@ -1303,6 +1292,9 @@ StmtResult Parser::ParseWhileStatement(SourceLocation *TrailingElseLoc) {
   ParseScope InnerScope(this, Scope::DeclScope,
                         C99orCXX && Tok.isNot(tok::l_brace));
 
+  //Discard any pending OpenACC Directive
+  Actions.getACCInfo()->DiscardAndWarn();
+
   // Read the body statement.
   StmtResult Body(ParseStatement(TrailingElseLoc));
 
@@ -1345,6 +1337,9 @@ StmtResult Parser::ParseDoStatement() {
   ParseScope InnerScope(this, Scope::DeclScope,
                         (getLangOpts().C99 || getLangOpts().CPlusPlus) &&
                         Tok.isNot(tok::l_brace));
+
+  //Discard any pending OpenACC Directive
+  Actions.getACCInfo()->DiscardAndWarn();
 
   // Read the body statement.
   StmtResult Body(ParseStatement());
@@ -1637,6 +1632,9 @@ StmtResult Parser::ParseForStatement(SourceLocation *TrailingElseLoc) {
   ParseScope InnerScope(this, Scope::DeclScope,
                         C99orCXXorObjC && Tok.isNot(tok::l_brace));
 
+  //Discard any pending OpenACC Directive
+  Actions.getACCInfo()->DiscardAndWarn();
+
   // Read the body statement.
   StmtResult Body(ParseStatement(TrailingElseLoc));
 
@@ -1647,12 +1645,10 @@ StmtResult Parser::ParseForStatement(SourceLocation *TrailingElseLoc) {
   ForScope.Exit();
 
   if (Body.isInvalid()) {
-      Actions.getACCInfo()->DiscardAndWarn();
       return StmtError();
   }
 
   if (!Body.isUsable()) {
-      Actions.getACCInfo()->DiscardAndWarn();
       return StmtError();
   }
 
@@ -1680,8 +1676,6 @@ StmtResult Parser::ParseForStatement(SourceLocation *TrailingElseLoc) {
 StmtResult Parser::ParseGotoStatement() {
   assert(Tok.is(tok::kw_goto) && "Not a goto stmt!");
   SourceLocation GotoLoc = ConsumeToken();  // eat the 'goto'.
-
-  Actions.getACCInfo()->DiscardAndWarn();
 
   StmtResult Res;
   if (Tok.is(tok::identifier)) {
@@ -1715,7 +1709,6 @@ StmtResult Parser::ParseGotoStatement() {
 ///
 StmtResult Parser::ParseContinueStatement() {
   SourceLocation ContinueLoc = ConsumeToken();  // eat the 'continue'.
-  Actions.getACCInfo()->DiscardAndWarn();
   return Actions.ActOnContinueStmt(ContinueLoc, getCurScope());
 }
 
@@ -1727,7 +1720,6 @@ StmtResult Parser::ParseContinueStatement() {
 ///
 StmtResult Parser::ParseBreakStatement() {
   SourceLocation BreakLoc = ConsumeToken();  // eat the 'break'.
-  Actions.getACCInfo()->DiscardAndWarn();
   return Actions.ActOnBreakStmt(BreakLoc, getCurScope());
 }
 
@@ -1736,7 +1728,6 @@ StmtResult Parser::ParseBreakStatement() {
 ///         'return' expression[opt] ';'
 StmtResult Parser::ParseReturnStatement() {
   assert(Tok.is(tok::kw_return) && "Not a return stmt!");
-  Actions.getACCInfo()->DiscardAndWarn();
   SourceLocation ReturnLoc = ConsumeToken();  // eat the 'return'.
 
   ExprResult R;
@@ -2055,8 +2046,6 @@ static bool buildMSAsmString(Preprocessor &PP,
 ///         ms-asm-line '\n' ms-asm-instruction-block
 ///
 StmtResult Parser::ParseMicrosoftAsmStatement(SourceLocation AsmLoc) {
-  Actions.getACCInfo()->DiscardAndWarn();
-
   SourceManager &SrcMgr = PP.getSourceManager();
   SourceLocation EndLoc = AsmLoc;
   SmallVector<Token, 4> AsmToks;
@@ -2280,7 +2269,6 @@ StmtResult Parser::ParseMicrosoftAsmStatement(SourceLocation AsmLoc) {
 ///
 StmtResult Parser::ParseAsmStatement(bool &msAsm) {
   assert(Tok.is(tok::kw_asm) && "Not an asm stmt");
-  Actions.getACCInfo()->DiscardAndWarn();
   SourceLocation AsmLoc = ConsumeToken();
 
   if (getLangOpts().AsmBlocks && Tok.isNot(tok::l_paren) &&
@@ -2465,6 +2453,7 @@ bool Parser::ParseAsmOperandsOpt(SmallVectorImpl<IdentifierInfo *> &Names,
   }
 }
 
+
 Decl *Parser::ParseFunctionStatementBody(Decl *Decl, ParseScope &BodyScope) {
   assert(Tok.is(tok::l_brace));
   SourceLocation LBraceLoc = Tok.getLocation();
@@ -2501,9 +2490,6 @@ Decl *Parser::ParseFunctionStatementBody(Decl *Decl, ParseScope &BodyScope) {
 ///
 Decl *Parser::ParseFunctionTryBlock(Decl *Decl, ParseScope &BodyScope) {
   assert(Tok.is(tok::kw_try) && "Expected 'try'");
-
-  //Discard any pending OpenACC Directive
-  Actions.getACCInfo()->DiscardAndWarn();
 
   SourceLocation TryLoc = ConsumeToken();
 
@@ -2570,9 +2556,6 @@ bool Parser::trySkippingFunctionBody() {
 ///
 StmtResult Parser::ParseCXXTryBlock() {
   assert(Tok.is(tok::kw_try) && "Expected 'try'");
-
-  //Discard any pending OpenACC Directive
-  Actions.getACCInfo()->DiscardAndWarn();
 
   SourceLocation TryLoc = ConsumeToken();
   bool OldValue = ProhibitExtensionPragmas();
@@ -2714,7 +2697,6 @@ StmtResult Parser::ParseCXXCatchBlock(bool FnCatch) {
 }
 
 void Parser::ParseMicrosoftIfExistsStatement(StmtVector &Stmts) {
-  Actions.getACCInfo()->DiscardAndWarn();
   IfExistsCondition Result;
   if (ParseMicrosoftIfExistsCondition(Result))
     return;

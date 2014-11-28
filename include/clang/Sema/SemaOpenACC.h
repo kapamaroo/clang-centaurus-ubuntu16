@@ -66,7 +66,7 @@ public:
     isValidDirectiveFn isValidDirectiveTask;
     isValidDirectiveFn isValidDirectiveTaskwait;
 
-    DirectiveInfo *ConsumeDirective(enum DirectiveKind);
+    DirectiveInfo *getPendingDirectiveOrNull(enum DirectiveKind DK);
     StmtResult CreateRegion(DirectiveInfo *DI, Stmt *SubStmt = 0);
 
     void DiscardAndWarn();

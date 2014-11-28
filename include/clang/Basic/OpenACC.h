@@ -18,6 +18,8 @@ class ASTContext;
 
 namespace openacc {
 
+extern const std::string ExtensionName;
+
 enum DirectiveKind {
     DK_TASK = 0,  // #pragma acc task...
     DK_TASKWAIT   // #pragma acc taskwait...
@@ -77,7 +79,7 @@ public:
     Arg(ArgKind K, CommonInfo *p, Expr *expr, clang::ASTContext *Context);
     Arg(ArgKind K, CommonInfo *p, unsigned Value);
     Arg(ArgKind K, CommonInfo *p, llvm::APSInt Value);
-    Arg(ArgKind K, CommonInfo *p);
+    Arg(ArgKind K, CommonInfo *p, Expr *expr = 0);
 
     ArgKind getKind() const { return Kind; }
     Expr *getExpr() const { return E; }
@@ -182,16 +184,14 @@ public:
 };
 
 class LabelArg : public Arg {
-private:
-    const std::string Label;
 public:
-	LabelArg(CommonInfo *Parent, const std::string name);
+    LabelArg(CommonInfo *Parent, Expr *E);
 
-	const std::string getLabel() const { return Label; }
+    StringRef getLabel() const;
 
-	static bool classof(const Arg *A) {
-		return A->getKind() == A_Label;
-	}
+    static bool classof(const Arg *A) {
+        return A->getKind() == A_Label;
+    }
 };
 
 class FunctionArg : public Arg {

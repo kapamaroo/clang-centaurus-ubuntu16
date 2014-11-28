@@ -891,9 +891,6 @@ Parser::ParseDeclOrFunctionDefInternal(ParsedAttributesWithRange &attrs,
     Decl *TheDecl = Actions.ParsedFreeStandingDeclSpec(getCurScope(), AS, DS);
     DS.complete(TheDecl);
 
-    //Discard any pending OpenACC Directive
-    Actions.getACCInfo()->DiscardAndWarn();
-
     return Actions.ConvertDeclToDeclGroup(TheDecl);
   }
 
@@ -903,9 +900,6 @@ Parser::ParseDeclOrFunctionDefInternal(ParsedAttributesWithRange &attrs,
   // FIXME: This still needs better diagnostics. We should only accept
   // attributes here, no types, etc.
   if (getLangOpts().ObjC2 && Tok.is(tok::at)) {
-    //Discard any pending OpenACC Directive
-    Actions.getACCInfo()->DiscardAndWarn();
-
     SourceLocation AtLoc = ConsumeToken(); // the "@"
     if (!Tok.isObjCAtKeyword(tok::objc_interface) &&
         !Tok.isObjCAtKeyword(tok::objc_protocol)) {
@@ -934,8 +928,6 @@ Parser::ParseDeclOrFunctionDefInternal(ParsedAttributesWithRange &attrs,
   if (Tok.is(tok::string_literal) && getLangOpts().CPlusPlus &&
       DS.getStorageClassSpec() == DeclSpec::SCS_extern &&
       DS.getParsedSpecifiers() == DeclSpec::PQ_StorageClassSpecifier) {
-    //Discard any pending OpenACC Directive
-    Actions.getACCInfo()->DiscardAndWarn();
     Decl *TheDecl = ParseLinkage(DS, Declarator::FileContext);
     return Actions.ConvertDeclToDeclGroup(TheDecl);
   }
@@ -980,9 +972,6 @@ Decl *Parser::ParseFunctionDefinition(ParsingDeclarator &D,
   // Poison the SEH identifiers so they are flagged as illegal in function bodies
   PoisonSEHIdentifiersRAIIObject PoisonSEHIdentifiers(*this, true);
   const DeclaratorChunk::FunctionTypeInfo &FTI = D.getFunctionTypeInfo();
-
-  //Discard any pending OpenACC Directive
-  Actions.getACCInfo()->DiscardAndWarn();
 
   // If this is C90 and the declspecs were completely missing, fudge in an
   // implicit int.  We do this here because this is the only place where

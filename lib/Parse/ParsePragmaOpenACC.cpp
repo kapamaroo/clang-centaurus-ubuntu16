@@ -23,12 +23,13 @@ const unsigned DirectiveInfo::ValidDirective[DK_END] = {
         BITMASK(CK_GROUPS),
 
         //taskwait
+        BITMASK(CK_LABEL) |
         BITMASK(CK_ON) |
         BITMASK(CK_ENERGY_JOULE) |
         BITMASK(CK_RATIO),
         };
 
-const std::string ExtensionName = "acc";
+const std::string clang::openacc::ExtensionName = "acc";
 
 const std::string DirectiveInfo::Name[DK_END] = {
     "task",
@@ -197,27 +198,37 @@ static bool mustBeUnique(ClauseKind CK) {
 }
 
 bool Parser::ParseArgScalarIntExpr(DirectiveKind DK, CommonInfo *Common) {
-    ExprResult E = ParseExpression();
+    ExprResult E = ParseCastExpression(false,false,NotTypeCast);
+    // ExprResult E = ParseExpression();
     if (!E.isUsable())
         return false;
 
-    Arg *A = Actions.getACCInfo()->CreateArg(E.get(),Common);
+    const Type *ETy = E.get()->getType().getTypePtr();
+    if (!ETy->isIntegerType()) {
+        PP.Diag(Common->getStartLocation(),diag::note_pragma_acc_parser_test)
+            << "expected expression of integer type";
+        return false;
+    }
+
+    Arg *A = new (Actions.getASTContext()) RawExprArg(Common,E.get(),&Actions.getASTContext());
     Common->setArg(A);
     return !Actions.getACCInfo()->WarnOnSubArrayArg(Common->getArgs());
 }
 
 bool Parser::ParseArgDoubleExpr(DirectiveKind DK, CommonInfo *Common) {
-    ExprResult E = ParseExpression();
+    ExprResult E = ParseCastExpression(false,false,NotTypeCast);
+    // ExprResult E = ParseExpression();
     if (!E.isUsable())
         return false;
 
     const Type *ETy = E.get()->getType().getTypePtr();
     if (!ETy->isFloatingType()) {
-        //FIXME: we probably need a diagnostic here
+        PP.Diag(Common->getStartLocation(),diag::note_pragma_acc_parser_test)
+            << "expected expression of floating type";
         return false;
     }
 
-    Arg *A = new RawExprArg(Common,E.get(),&Actions.getASTContext());
+    Arg *A = new (Actions.getASTContext()) RawExprArg(Common,E.get(),&Actions.getASTContext());
     Common->setArg(A);
     return !Actions.getACCInfo()->WarnOnSubArrayArg(Common->getArgs());
 }
@@ -270,44 +281,55 @@ bool Parser::ParseArgList(DirectiveKind DK, CommonInfo *Common, bool AllowSubArr
 
 bool
 Parser::ParseClauseLabel(DirectiveKind DK, ClauseInfo *CI) {
-    if (NextToken().isNot(tok::identifier))
+    ExprResult E = ParseExpression();
+    if (!E.isUsable())
         return false;
 
-    std::string Label(NextToken().getIdentifierInfo()->getNameStart());
-    Arg *A = new LabelArg(CI,Label);
-    CI->setArg(A);
+    if (StringLiteral *SL = dyn_cast<StringLiteral>(E.get())) {
+        //PP.Diag(Tok,diag::note_pragma_acc_parser_test) << SL->getString();
+        Arg *A = new (Actions.getASTContext()) LabelArg(CI,SL);
+        CI->setArg(A);
+        return true;
+    }
 
-    ConsumeAnyToken();
-    return true;
+    PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "expected string-literal";
+    return false;
 }
 
 bool
 Parser::ParseClauseSignificant(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgScalarIntExpr(DK,CI);
+    if (!ParseArgScalarIntExpr(DK,CI))
+        return false;
+    return true;
 }
 
 bool
 Parser::ParseClauseApproxfun(DirectiveKind DK, ClauseInfo *CI) {
-    if (NextToken().isNot(tok::identifier))
-        return false;
-
-    StringRef FunctionName = NextToken().getIdentifierInfo()->getNameStart();
-
-    //parse function name see SemaDeclCXX.cpp:8401
-    LookupResult R(Actions,&Actions.Context.Idents.get(FunctionName),
-                   NextToken().getLocation(),Sema::LookupOrdinaryName);
-    Actions.LookupName(R,Actions.TUScope,/*AllowBuiltinCreation=*/false);
-    FunctionDecl *ApproxFun = R.getAsSingle<FunctionDecl>();
-    if (!ApproxFun) {
-        //warning
-        PP.Diag(Tok,diag::err_pragma_acc_function_not_found);
+    if (Tok.isNot(tok::identifier)) {
+        PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "not an identifier";
         return false;
     }
 
-    Arg *A = new FunctionArg(CI,ApproxFun);
+    StringRef FunctionName = Tok.getIdentifierInfo()->getNameStart();
+
+    LookupResult R(Actions,&Actions.Context.Idents.get(FunctionName),
+                   Tok.getLocation(),Sema::LookupOrdinaryName);
+    if (!Actions.LookupName(R,Actions.TUScope,/*AllowBuiltinCreation=*/false)) {
+        PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "lookup failed";
+        return false;
+    }
+
+    FunctionDecl *ApproxFun = R.getAsSingle<FunctionDecl>();
+    if (!ApproxFun) {
+        PP.Diag(Tok,diag::err_pragma_acc_function_not_found) << FunctionName;
+        return false;
+    }
+
+    PP.Diag(Tok,diag::note_pragma_acc_parser_test) << ApproxFun->getNameInfo().getName().getAsString();
+    Arg *A = new (Actions.getASTContext()) FunctionArg(CI,ApproxFun);
     CI->setArg(A);
 
-    ConsumeAnyToken();
+    ConsumeToken();
     return true;
 }
 
@@ -345,25 +367,61 @@ bool
 Parser::ParseClauseWorkers(DirectiveKind DK, ClauseInfo *CI) {
     if (!ParseArgScalarIntExpr(DK,CI))
         return false;
-    //check
     return true;
 }
 
 bool
 Parser::ParseClauseGroups(DirectiveKind DK, ClauseInfo *CI) {
-    if (!ParseArgList(DK,CI,/*AllowSubArrays=*/false))
+    ArgVector &Args = CI->getArgs();
+
+    bool pending_comma(false);
+    while (1) {
+        ExprResult Expr = ParseCastExpression(false,false,NotTypeCast);
+        if (!Expr.isUsable())
+            return false;
+
+        const Type *ETy = Expr.get()->getType().getTypePtr();
+        if (!ETy->isIntegerType()) {
+            PP.Diag(CI->getStartLocation(),diag::note_pragma_acc_parser_test)
+                << "expected expression of integer type";
+            return false;
+        }
+
+        Arg *A = new (Actions.getASTContext()) RawExprArg(CI,Expr.get(),&Actions.getASTContext());
+        Args.push_back(A);
+
+        pending_comma = false;
+        if (Tok.is(tok::comma)) {
+            ConsumeToken();
+            pending_comma = true;
+        }
+
+        if (Tok.is(tok::r_paren))
+            break;
+    }
+
+    if (pending_comma)
+        PP.Diag(Tok,diag::warn_pragma_acc_pending_comma);
+
+    //ignore any construct with empty list
+    if (Args.empty())
         return false;
+
     return true;
 }
 
 bool
 Parser::ParseClauseEnergy_joule(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgScalarIntExpr(DK,CI);
+    if (!ParseArgScalarIntExpr(DK,CI))
+        return false;
+    return true;
 }
 
 bool
 Parser::ParseClauseRatio(DirectiveKind DK, ClauseInfo *CI) {
-    return ParseArgDoubleExpr(DK,CI);
+    if (!ParseArgDoubleExpr(DK,CI))
+        return false;
+    return true;
 }
 
 //Parse Directives

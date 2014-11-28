@@ -251,7 +251,7 @@ Arg::Arg(ArgKind K, CommonInfo *p, Expr *expr, clang::ASTContext *Context) :
 
     //set ICE if we know the value
     if (isa<RawExprArg>(this) || isa<VarArg>(this) || isa<ArrayElementArg>(this))
-        if (E->isIntegerConstantExpr(getICE(), *Context))
+        if (E->isIntegerConstantExpr(ICE, *Context))
             setValidICE(true);
 
     if (isa<ArrayElementArg>(this) || isa<SubArrayArg>(this) ||
@@ -291,10 +291,10 @@ Arg::Arg(ArgKind K, CommonInfo *p, llvm::APSInt Value) :
     ICE = Value;
 }
 
-Arg::Arg(ArgKind K, CommonInfo *p) :
-        Kind(K), Parent(p), ICE(/*Bitwidth=*/64), ValidICE(false), E(0), V(0), Context(0)
+Arg::Arg(ArgKind K, CommonInfo *p, Expr *expr) :
+        Kind(K), Parent(p), ICE(/*Bitwidth=*/64), ValidICE(false), E(expr), V(0), Context(0)
 {
-    assert(Kind == A_Label || Kind == A_Function);
+    assert((Kind == A_Label && E) || Kind == A_Function);
 }
 
 RawExprArg::RawExprArg(CommonInfo *Parent, Expr *E, clang::ASTContext *Context) :
@@ -318,11 +318,17 @@ ArrayElementArg::ArrayElementArg(CommonInfo *Parent, Expr *E, clang::ASTContext 
 SubArrayArg::SubArrayArg(CommonInfo *Parent, Expr *firstASE, Expr *length, clang::ASTContext *Context) :
     Arg(A_SubArray,Parent,firstASE,Context), Length(length) {}
 
-LabelArg::LabelArg(CommonInfo *Parent, const std::string Label) :
-        Arg(A_Label,Parent), Label(Label) {}
+LabelArg::LabelArg(CommonInfo *Parent, Expr *E) :
+    Arg(A_Label,Parent,E) {}
 
 FunctionArg::FunctionArg(CommonInfo *Parent, const FunctionDecl *FD) :
         Arg(A_Function,Parent), FD(FD) {}
+
+StringRef
+LabelArg::getLabel() const {
+    StringLiteral *SL = cast<StringLiteral>(getExpr());
+    return SL->getString();
+}
 
 bool
 OpenACC::isVarExpr(Expr *E) {
@@ -497,7 +503,7 @@ OpenACC::isValidClauseOn(DirectiveKind DK, ClauseInfo *CI) {
 
 bool
 OpenACC::isValidClauseWorkers(DirectiveKind DK, ClauseInfo *CI) {
-    return FindValidICE(CI->getArg());
+    return true;
 }
 
 bool
@@ -530,10 +536,38 @@ OpenACC::isValidDirectiveTask(DirectiveInfo *DI) {
 
 bool
 OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
-    if (!DI->hasArgs())
+    assert(DI->getKind() == DK_TASKWAIT);
+
+    if (DI->getClauseList().empty())
         return true;
-#warning FIXME: on() clause and ratio() clause are incompatible in the same taskwait directive
-    //wait for all
+
+    bool hasOnClause(false);
+    bool hasRatioClause(false);
+    bool hasLabelClause(false);
+    bool hasEnergy_jouleClause(false);
+    ClauseList &CList = DI->getClauseList();
+    for (ClauseList::iterator II = CList.begin(), EE = CList.end(); II != EE; ++II) {
+        ClauseInfo *CI = *II;
+        if (CI->getKind() == CK_ON)
+            hasOnClause = true;
+        if (CI->getKind() == CK_RATIO)
+            hasRatioClause = true;
+        if (CI->getKind() == CK_LABEL)
+            hasLabelClause = true;
+        if (CI->getKind() == CK_ENERGY_JOULE)
+            hasEnergy_jouleClause = true;
+    }
+
+    if (((hasOnClause || hasEnergy_jouleClause) && (hasRatioClause || hasLabelClause)) ||
+        (hasOnClause && hasEnergy_jouleClause)) {
+        //suggest spliting this wait directive into two distinct wait directives
+        //one that has all the on() clauses, and another that has all the label()
+        //and ratio clauses(). ratio() clause is unique.
+
+        S.Diag(DI->getStartLocation(),diag::err_pragma_acc_taskwait_clauses);
+        return false;
+    }
+
     return true;
 }
 
@@ -551,13 +585,11 @@ OpenACC::DiscardAndWarn() {
 }
 
 DirectiveInfo *
-OpenACC::ConsumeDirective(DirectiveKind DK) {
+OpenACC::getPendingDirectiveOrNull(enum DirectiveKind DK) {
     if (!PendingDirective)
         return 0;
-    if (PendingDirective->getKind() != DK) {
-        DiscardAndWarn();
+    if (PendingDirective->getKind() != DK)
         return 0;
-    }
 
     DirectiveInfo *DI = PendingDirective;
     PendingDirective = 0;
@@ -595,13 +627,10 @@ OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
 
         if (isa<CallExpr>(SubStmt))
             ACC->setSubStmt(SubStmt);
-        else if (isa<CompoundStmt>(SubStmt)) {
-            assert(0 && "unsupported inline OpenCL");
-            return StmtEmpty();
-            //ACC->setSubStmt(SubStmt);
-        }
+        else if (isa<CompoundStmt>(SubStmt))
+            ACC->setSubStmt(SubStmt);
         else {
-            assert(0 && "bad SubStmt");
+            WarnOnDirective(DI);
             return StmtEmpty();
         }
     }
