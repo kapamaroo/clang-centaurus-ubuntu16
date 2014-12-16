@@ -1004,9 +1004,7 @@ RegionStack::FindBufferObjectInRegionStack(Arg *Target) {
     ArgVector &Args = Target->getVarDecl()->getOpenAccArgs();
     for (ArgVector::iterator II = Args.begin(), EE = Args.end(); II != EE; ++II) {
         Arg *A = *II;
-        ClauseInfo *ParentCI = A->getParent()->getAsClause();
-        assert(ParentCI);
-        (void)ParentCI;
+        assert(A->getParent()->getAsClause());
         if (A->Matches(Target))
             return A;
     }
