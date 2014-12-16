@@ -1,6 +1,5 @@
 #include "Stages.hpp"
 #include "Common.hpp"
-#include "Reduction.h"
 
 #include <iostream>
 #include <fstream>
@@ -11,6 +10,17 @@ using namespace clang;
 using namespace clang::tooling;
 using namespace clang::openacc;
 using namespace accll;
+
+static bool isRuntimeCall(const std::string Name) {
+    std::string data[] = {"acc_create_task","acc_taskwait"};
+    static const std::vector<std::string> RuntimeCalls(data, data + sizeof(data)/sizeof(std::string));
+
+    for (std::vector<std::string>::const_iterator II = RuntimeCalls.begin(), EE = RuntimeCalls.end();
+             II != EE; ++II)
+        if (Name.compare(*II) == 0)
+            return true;
+    return false;
+}
 
 #if 0
 std::string accll::KernelHeader =
@@ -48,7 +58,7 @@ accll::CreateNewArgFrom(Expr *E, ClauseInfo *ImplicitCI, ASTContext *Context) {
             Target = new VarArg(ImplicitCI,E,Context);
     }
     else
-        Target = new ConstArg(ImplicitCI,E,Context);
+        Target = new RawExprArg(ImplicitCI,E,Context);
 
 #if 1
     assert(Target && "null Target");
@@ -93,45 +103,25 @@ Stage0_ASTVisitor::GetDotExtension(const std::string &filename) {
 
 bool
 Stage0_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
-    DirectiveInfo *DI = ACC->getDirective();
-    //if (DI->getKind() == DK_PARALLEL || DI->isStartOfLoopRegion())
-    if (DI->isComputeDirective() || DI->isStartOfLoopRegion())
-        hasDeviceCode = true;
-    //else if (DI->getKind() == DK_KERNELS && isa<ForStmt>(ACC->getSubStmt()))
-    //    hasDeviceCode = true;
     hasDirectives = true;
     return true;
 }
 
 bool
 Stage0_ASTVisitor::VisitCallExpr(CallExpr *CE) {
+    //do nothing
+    return true;
+
     FunctionDecl *FD = CE->getDirectCallee();
     if (!FD)
         return true;
 
     std::string Name = FD->getNameAsString();
 
-#define TEST_RUNTIME_CALL(name,call) (name.compare(#call) == 0)
-    if (TEST_RUNTIME_CALL(Name,acc_get_num_devices) ||
-        TEST_RUNTIME_CALL(Name,acc_set_device_type) ||
-        TEST_RUNTIME_CALL(Name,acc_get_device_type) ||
-        TEST_RUNTIME_CALL(Name,acc_set_device_num) ||
-        TEST_RUNTIME_CALL(Name,acc_get_device_num) ||
-        TEST_RUNTIME_CALL(Name,acc_async_test) ||
-        TEST_RUNTIME_CALL(Name,acc_async_test_all) ||
-        TEST_RUNTIME_CALL(Name,acc_async_wait) ||
-        TEST_RUNTIME_CALL(Name,acc_async_wait_all) ||
-        TEST_RUNTIME_CALL(Name,acc_init) ||
-        TEST_RUNTIME_CALL(Name,acc_shutdown) ||
-        TEST_RUNTIME_CALL(Name,acc_on_device) ||
-        TEST_RUNTIME_CALL(Name,acc_malloc) ||
-        TEST_RUNTIME_CALL(Name,acc_free) ||
-        TEST_RUNTIME_CALL(Name,acc_set_device)
-        ) {
+    if (isRuntimeCall(Name)) {
         hasRuntimeCalls = true;
         llvm::outs() << "Runtime call to '" << Name << "'\n";
     }
-#undef TEST_RUNTIME_CALL
 
     return true;
 }
@@ -192,474 +182,6 @@ Stage0_ASTVisitor::Finish(ASTContext *Context) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-//                        Stage00
-///////////////////////////////////////////////////////////////////////////////
-
-void
-Stage00_ASTVisitor::applyReplacement(Replacement &R) {
-    static const bool WRITE_REPLACEMENTS (true);
-    static const bool DEBUG_REPLACEMENTS (false);
-
-    if (DEBUG_REPLACEMENTS)
-        llvm::outs() << R.toString() << "\n";
-
-    if (!R.isApplicable()) {
-        llvm::outs() << "  -  Stage00:  bad replacement !!!\n";
-        return;
-    }
-
-    if (WRITE_REPLACEMENTS)
-        Replaces.insert(R);
-}
-
-void Stage00_ASTVisitor::Init(ASTContext *C) {
-    Context = C;
-}
-
-bool
-Stage00_ASTVisitor::TraverseAccStmt(AccStmt *S) {
-    if (ParentIfClause)
-        return true;
-    ParentIfClause = S->getDirective()->getIfClause();
-    TRY_TO(WalkUpFromAccStmt(S));
-    //{ CODE; }
-
-    for (Stmt::child_range range = S->children(); range; ++range) {
-        TRY_TO(TraverseStmt(*range));
-    }
-    ParentIfClause = 0;
-    return true;
-}
-
-bool
-Stage00_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
-    DirectiveInfo *DI = ACC->getDirective();
-
-    ClauseInfo *IfClause = DI->getIfClause();
-    if (!IfClause)
-        return true;
-
-    std::string Tmp;
-    raw_string_ostream OS(Tmp);
-    ACC->printPrettyAccWithIfClause(IfClause,OS,0,Context->getPrintingPolicy());
-
-    SourceLocation LocStart = ACC->getLocStart().getLocWithOffset(-9);
-    SourceLocation LocEnd = ACC->getLocEnd().getLocWithOffset(1);
-
-    CharSourceRange Range(SourceRange(LocStart,LocEnd),/*IsTokenRange=*/false);
-    std::string NewCode = OS.str();
-    //Replacement R(Context->getSourceManager(),ACC,NewCode);
-    Replacement R(Context->getSourceManager(),Range,NewCode);
-    applyReplacement(R);
-
-    std::string IfCond = IfClause->getPrettyClause(Context->getPrintingPolicy());
-    llvm::outs() << "expand '" << IfCond << "' of directive '"
-                 << DI->getAsString() << "'\n";
-
-    return true;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-//                        Stage01
-///////////////////////////////////////////////////////////////////////////////
-std::string
-Stage01_ASTVisitor::RemoveDotExtension(const std::string &filename) {
-    size_t lastdot = filename.find_last_of(".");
-    if (lastdot == std::string::npos) return filename;
-    return filename.substr(0, lastdot);
-}
-
-std::string
-Stage01_ASTVisitor::GetDotExtension(const std::string &filename) {
-    size_t lastdot = filename.find_last_of(".");
-    if (lastdot == std::string::npos) return "";
-    return filename.substr(lastdot,std::string::npos-1);
-}
-
-void
-Stage01_ASTVisitor::applyReplacement(Replacement &R) {
-    static const bool WRITE_REPLACEMENTS (true);
-    static const bool DEBUG_REPLACEMENTS (false);
-
-    if (DEBUG_REPLACEMENTS)
-        llvm::outs() << R.toString() << "\n";
-
-    if (!R.isApplicable()) {
-        llvm::outs() << "  -  Stage01:  bad replacement !!!\n";
-        return;
-    }
-
-    if (WRITE_REPLACEMENTS)
-        Replaces.insert(R);
-}
-
-std::string
-Stage01_ASTVisitor::getPrettyExpr(Expr *E) {
-    std::string StrExpr;
-    raw_string_ostream OS(StrExpr);
-    E->printPretty(OS,/*Helper=*/0,
-                   Context->getPrintingPolicy(),/*Indentation=*/0);
-    return OS.str();  //flush
-}
-
-void Stage01_ASTVisitor::Init(ASTContext *C) {
-    Context = C;
-}
-
-bool
-Stage01_ASTVisitor::TraverseAccStmt(AccStmt *S) {
-    TRY_TO(WalkUpFromAccStmt(S));
-    //{ CODE; }
-
-    //enter the region after the traversal
-    //only the children 'see' the region
-
-    RStack.EnterRegion(S->getDirective());
-    for (Stmt::child_range range = S->children(); range; ++range) {
-        TRY_TO(TraverseStmt(*range));
-    }
-    RStack.ExitRegion(S->getDirective());
-    return true;
-}
-
-bool
-Stage01_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
-    DirectiveInfo *DI = ACC->getDirective();
-
-    if (!DI->isComputeDirective())
-        return true;
-
-    //expected CompoundStmt or 'parallel loop' or 'kernels loop' directive,
-    //if not fix it for the next Stages
-    if (isa<ForStmt>(ACC->getSubStmt())) {
-        llvm::outs() << "*** found implicit for loop in kernels directive\n";
-        std::string NewCode;
-        if (DI->getKind() == DK_KERNELS)
-            NewCode = "acc kernels loop ";
-        else
-            NewCode = "acc parallel loop ";
-        ClauseList &CList = DI->getClauseList();
-        for (ClauseList::iterator II = CList.begin(), EE = CList.end();
-             II != EE; ++II) {
-            ClauseInfo *CI = *II;
-            NewCode += CI->getPrettyClause(Context->getPrintingPolicy());
-            if (*II != CList.back())
-                NewCode += ", ";
-        }
-        NewCode += "\n";
-
-        //FIXME: add getSourceRange() methods to OpenACC classes
-
-        Replacement R(Context->getSourceManager(),ACC,NewCode);
-        applyReplacement(R);
-        return true;
-    }
-
-    //continue only for the kernels directive
-    if (DI->getKind() != DK_KERNELS)
-        return true;
-
-    CompoundStmt *Comp = dyn_cast<CompoundStmt>(ACC->getSubStmt());
-    assert(Comp);
-
-    if (Comp->body_empty())
-        return true;
-
-    SourceLocation DILocStart = DI->getStartLocation().getLocWithOffset(-8);
-    SourceLocation DILocEnd = DI->getEndLocation();
-
-    CharSourceRange Range(SourceRange(DILocStart,DILocEnd),/*IsTokenRange=*/false);
-    Replacement R3(Context->getSourceManager(),Range,"");
-    applyReplacement(R3);
-
-    for (CompoundStmt::body_iterator
-             II = Comp->body_begin(), EE = Comp->body_end(); II != EE; ++II) {
-        SourceLocation Loc = (*II)->getLocStart();
-        if (isa<AccStmt>(*II))
-            Loc = Loc.getLocWithOffset(-9);
-
-        std::string NewCode = "";
-
-        if (II != Comp->body_begin()) {
-            CompoundStmt::body_iterator Prev = II - 1;
-
-            if (isa<DeclStmt>(*Prev)) {
-                if (isa<DeclStmt>(*II)) {
-                    ;  //ok
-                }
-                else if (isa<AccStmt>(*II)) {
-                    NewCode +=
-                        DI->getPrettyDirective(Context->getPrintingPolicy(),false);
-                    NewCode += "\n{\n";
-                }
-                else {
-                    NewCode +=
-                        DI->getPrettyDirective(Context->getPrintingPolicy(),false);
-                    NewCode += "\n{\n";
-                    NewCode += "\n#pragma acc loop gang(1), worker(1)\n";
-                    NewCode += "for (int __i__ = 0; __i__ < 1; ++__i__) {\n";
-                    llvm::outs() << "resolve ambiguity of parallelization method inside 'kernels' directive, please restructure the code\n";
-                }
-            }
-            else if (isa<AccStmt>(*Prev)) {
-                if (isa<DeclStmt>(*II)) {
-                    NewCode += "\n}\n";  //close #pragma acc kernels
-                }
-                else if (isa<AccStmt>(*II)) {
-                    ;  //ok
-                }
-                else {
-                    NewCode += "\n}\n";  //close #pragma acc kernels
-                    NewCode +=
-                        DI->getPrettyDirective(Context->getPrintingPolicy(),false);
-                    NewCode += "\n{\n";
-                    NewCode += "\n#pragma acc loop gang(1), worker(1)\n";
-                    NewCode += "for (int __i__ = 0; __i__ < 1; ++__i__) {\n";
-                    llvm::outs() << "resolve ambiguity of parallelization method inside 'kernels' directive, please restructure the code\n";
-                }
-            }
-            else {
-                if (isa<DeclStmt>(*II)) {
-                    NewCode += "\n}\n";  //close #pragma acc loop
-                    NewCode += "\n}\n";  //close #pragma acc kernels
-                }
-                else if (isa<AccStmt>(*II)) {
-                    NewCode += "\n}\n";  //close #pragma acc loop
-                    NewCode += "\n}\n";  //close #pragma acc kernels
-                    NewCode +=
-                        DI->getPrettyDirective(Context->getPrintingPolicy(),false);
-                    NewCode += "\n{\n";
-                }
-                else {
-                    ;  //ok
-                }
-            }
-        }
-        else {
-            if (isa<DeclStmt>(*II)) {
-                ;  //ok
-            }
-            else if (isa<AccStmt>(*II)) {
-                NewCode +=
-                    DI->getPrettyDirective(Context->getPrintingPolicy(),false);
-                NewCode += "\n{\n";
-            }
-            else {
-                NewCode +=
-                    DI->getPrettyDirective(Context->getPrintingPolicy(),false);
-                NewCode += "\n{\n";
-                NewCode += "\n#pragma acc loop gang(1), worker(1)\n";
-                NewCode += "for (int __i__ = 0; __i__ < 1; ++__i__) {\n";
-            }
-        }
-        Replacement R1(Context->getSourceManager(),Loc,0,NewCode);
-        applyReplacement(R1);
-    }
-    Stmt *Last = Comp->body_back();
-    SourceLocation Loc = Comp->getLocEnd();
-    if (isa<AccStmt>(Last))
-        Loc = Loc.getLocWithOffset(-9);
-    std::string NewCode = "";
-    if (isa<DeclStmt>(Last)) {
-        ;  //ok
-    }
-    else if (isa<AccStmt>(Last)) {
-        NewCode += "\n}\n";  //close #pragma acc kernels
-    }
-    else {
-        NewCode += "\n}\n";  //close #pragma acc loop
-        NewCode += "\n}\n";  //close #pragma acc kernels
-    }
-    Replacement R1(Context->getSourceManager(),Loc,0,NewCode);
-    applyReplacement(R1);
-
-    return true;
-}
-
-bool
-Stage01_ASTVisitor::VisitFunctionDecl(FunctionDecl *FD) {
-    SourceManager &SM = Context->getSourceManager();
-    CurrentFunction = 0;
-    if (!SM.isInSystemHeader(FD->getSourceRange().getBegin()))
-        CurrentFunction = FD;
-    return true;
-}
-
-static
-bool getEndLocOfForStmt(CompoundStmt *Body, ForStmt *F, SourceLocation &Loc) {
-    //BIG FAT HACK
-    //someone must fix the SourceLocation Issues. Seriously
-
-    //FIXME: we may restructure any comments between this and next Statement
-
-    assert(Body);
-    assert(F);
-
-    if (Body->body_empty())
-        return false;
-    //check if this is the last stmt
-    else if (F == Body->body_back()) {
-        Loc = Body->getLocEnd();
-        return true;
-    }
-    else if (AccStmt *ACC = dyn_cast<AccStmt>(Body->body_back())) {
-        Stmt *SubStmt = ACC->getSubStmt();
-        if (!SubStmt)
-            ;  //skip the next cases and go to the main for loop below
-        else if (F == dyn_cast<ForStmt>(SubStmt)) {
-            Loc = Body->getLocEnd();
-            return true;
-        }
-        else {
-            CompoundStmt *SubBody = dyn_cast<CompoundStmt>(SubStmt);
-            assert(SubBody);
-            bool Nested = getEndLocOfForStmt(SubBody,F,Loc);
-            if (Nested)
-                return true;
-        }
-    }
-
-    for (CompoundStmt::body_iterator
-             IS = Body->body_begin(),
-             ES = Body->body_end(); IS != ES; ++IS) {
-        Stmt *CurrentStmt = *IS;
-        Stmt *NextStmt = *(IS + 1);
-        if (F == dyn_cast<ForStmt>(CurrentStmt)) {
-            Loc = NextStmt->getLocStart();
-            if (isa<AccStmt>(NextStmt))
-                Loc = Loc.getLocWithOffset(-9);
-            return true;
-        }
-        else if (AccStmt *ACC = dyn_cast<AccStmt>(CurrentStmt)) {
-            Stmt *SubStmt = ACC->getSubStmt();
-            if (!SubStmt)
-                ;  //skip the next cases and this ACCStmt, go to next statement
-            else if (F == dyn_cast<ForStmt>(SubStmt)) {
-                Loc = NextStmt->getLocStart();
-                if (isa<AccStmt>(NextStmt))
-                    Loc = Loc.getLocWithOffset(-9);
-                return true;
-            }
-            else {
-                CompoundStmt *SubBody = dyn_cast<CompoundStmt>(SubStmt);
-                assert(SubBody);
-                bool Nested = getEndLocOfForStmt(SubBody,F,Loc);
-                if (Nested)
-                    return true;
-            }
-        }
-    }
-
-    return false;
-}
-
-bool
-Stage01_ASTVisitor::VisitForStmt(ForStmt *F) {
-    if (RStack.empty())
-        return true;
-
-    //FIXME: clang bug!
-    //wrong Source Locations if the statement ends with a macro
-
-    if (!isa<CompoundStmt>(F->getBody())) {
-        SourceLocation BeginLoc = F->getRParenLoc().getLocWithOffset(1);
-        //add a new line before and after lbrace, we may have a preprocessor directive at this
-        //point therefore we must ignore it
-        Replacement RBegin(Context->getSourceManager(),BeginLoc,0,"\n{\n");
-        applyReplacement(RBegin);
-
-#if 0
-        assert(0 && "macro definitions and unary operators may produce bad sourcelocations");
-#error macro definitions and unary operators may produce bad sourcelocations
-        SourceLocation EndLoc = F->getLocEnd().getLocWithOffset(2);
-#else
-        SourceLocation EndLoc;
-        assert(getEndLocOfForStmt(cast<CompoundStmt>(CurrentFunction->getBody()),F,EndLoc));
-#endif
-        //add a new line before and after rbrace, we may have a preprocessor directive at this
-        //point therefore we must ignore it
-        Replacement REnd(Context->getSourceManager(),EndLoc,0,"\n}\n");
-        applyReplacement(REnd);
-    }
-    return true;
-}
-
-bool
-Stage01_ASTVisitor::VisitCallExpr(CallExpr *CE) {
-    SourceManager &SM = Context->getSourceManager();
-    if (SM.isInSystemHeader(CE->getSourceRange().getBegin())) {
-        //llvm::outs() << "Writing to system header prevented!\n";
-        return true;
-    }
-
-    FunctionDecl *FD = CE->getDirectCallee();
-    if (!FD)
-        return true;
-
-    std::string Name = FD->getNameAsString();
-
-#define TEST_RUNTIME_CALL(name,call) (name.compare(#call) == 0)
-
-    //runtime calls must be in host code
-
-    if (TEST_RUNTIME_CALL(Name,acc_get_num_devices) ||
-        TEST_RUNTIME_CALL(Name,acc_set_device_type) ||
-        TEST_RUNTIME_CALL(Name,acc_get_device_type) ||
-        TEST_RUNTIME_CALL(Name,acc_set_device_num) ||
-        TEST_RUNTIME_CALL(Name,acc_get_device_num) ||
-        TEST_RUNTIME_CALL(Name,acc_async_test) ||
-        TEST_RUNTIME_CALL(Name,acc_async_test_all) ||
-        TEST_RUNTIME_CALL(Name,acc_async_wait) ||
-        TEST_RUNTIME_CALL(Name,acc_async_wait_all) ||
-        TEST_RUNTIME_CALL(Name,acc_init) ||
-        TEST_RUNTIME_CALL(Name,acc_shutdown) ||
-
-        //FIXME: comment the acc_on_device case
-        //       allow acc_on_device in both host and device code
-        TEST_RUNTIME_CALL(Name,acc_on_device) ||
-
-        TEST_RUNTIME_CALL(Name,acc_malloc) ||
-        TEST_RUNTIME_CALL(Name,acc_free) ||
-        TEST_RUNTIME_CALL(Name,acc_set_device)
-        ) {
-        if (DirectiveInfo *DI = RStack.getTopComputeOrCombinedRegion()) {
-            //error
-            llvm::outs() << "error: Runtime Call '" << Name
-                         << "' on device code  -  '" << DI->getAsString() << "'\n";
-            Errors = true;
-            return true;
-        }
-    }
-
-    if (TEST_RUNTIME_CALL(Name,acc_async_wait)) {
-        llvm::outs() << "Replace '" + Name + "' OpenACC Runtime Routine with a wait Directive\n";
-        assert(CE->getNumArgs() == 1 && "OpenACC API changed, update your program!");
-        //we just print the expression, let it with any casts or parens
-        Expr *E = CE->getArg(0);  //->IgnoreParenCasts();
-
-        std::string NewCode = "\n#pragma acc wait (" + getPrettyExpr(E) + ")\n";
-        SourceLocation StartLoc = CE->getSourceRange().getBegin();
-        SourceLocation EndLoc = CE->getSourceRange().getEnd().getLocWithOffset(2);
-        CharSourceRange Range(SourceRange(StartLoc,EndLoc),/*IsTokenRange=*/false);
-        Replacement R(Context->getSourceManager(),Range,NewCode);
-        applyReplacement(R);
-    }
-    else if (TEST_RUNTIME_CALL(Name,acc_async_wait_all)) {
-        llvm::outs() << "Replace '" + Name + "' OpenACC Runtime Routine with a wait Directive\n";
-
-        std::string NewCode = "\n#pragma acc wait\n";
-        SourceLocation StartLoc = CE->getSourceRange().getBegin();
-        SourceLocation EndLoc = CE->getSourceRange().getEnd().getLocWithOffset(2);
-        CharSourceRange Range(SourceRange(StartLoc,EndLoc),/*IsTokenRange=*/false);
-        Replacement R(Context->getSourceManager(),Range,NewCode);
-        applyReplacement(R);
-    }
-#undef TEST_RUNTIME_CALL
-
-    return true;
-}
-
-///////////////////////////////////////////////////////////////////////////////
 //                        Stage1
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -707,11 +229,11 @@ Stage1_ASTVisitor::CreateNewUniqueEventNameFor(Arg *A) {
     std::string NewName("__accll_update_event_");  //prefix
 
     //add variable name to event name to correctly separate and identify
-    //async events without Arg or with ConstArg
+    //async events without Arg or with RawExprArg ICE
 
     if (A) {
         std::string AStr;
-        if (isa<ConstArg>(A)) {
+        if (A->isICE()) {
             NewName += "const_";
             AStr = A->getICE().toString(10);
         }
@@ -766,12 +288,14 @@ Arg*
 Stage1_ASTVisitor::EmitImplicitDataMoveCodeFor(Expr *E) {
     assert(E && "expected expression");
 
-    ClauseKind CK = CK_COPY;  //or CK_PRIVATE
+    ClauseKind CK = CK_IN;
+#if 0
     if (E->getType()->isAggregateType() ||
         Context->getAsArrayType(E->getType()))
-        CK = CK_PCOPY;
+        CK = CK_IN;
+#endif
 
-    DirectiveInfo *DI = RStack.getTopComputeOrCombinedRegion();
+    DirectiveInfo *DI = RStack.back();
     assert(DI);
 
     ClauseInfo *CI = new ClauseInfo(CK,DI);
@@ -790,22 +314,15 @@ bool
 Stage1_ASTVisitor::Rename(Expr *E) {
     assert(E && "null Expr");
 
-    DirectiveInfo *DI = RStack.getTopComputeOrCombinedRegion();
-    if (!DI) {
-        DI = RStack.back();
-        assert(DI);
-        assert(DI->getKind() != DK_DATA && "host code must not change!");
-        assert(RStack.CurrentRegionIs(DK_HOST_DATA) && "support only host_data directive at the moment");
-    }
-    assert(DI);
+    DirectiveInfo *DI = RStack.back();
+    assert(DI && DI->getKind() == DK_TASK);
 
     Expr *BaseExpr = E;
-    bool OrigExprFound = true;
     bool NeedNewName = true;
 
-    ClauseInfo *ImplicitCI = new ClauseInfo(CK_PRESENT,DI);
+    ClauseInfo *ImplicitCI = new ClauseInfo(CK_IN,DI);
     Arg *Target = CreateNewArgFrom(E,ImplicitCI,Context);
-    assert(!isa<ConstArg>(Target));
+    assert(!isa<RawExprArg>(Target));
     Arg *A = RStack.FindVisibleCopyInRegionStack(Target);
     //search for create Clauses from previous regions
     Arg *AExplicitBuffer = RStack.FindBufferObjectInRegionStack(Target);
@@ -825,15 +342,6 @@ Stage1_ASTVisitor::Rename(Expr *E) {
     //a Visible Copy
 
     if (!A) {
-        OrigExprFound = false;
-
-        if (RStack.CurrentRegionIs(DK_HOST_DATA)) {
-            //FIXME: move this check inside clang
-            llvm::outs() << "debug: use host's '" << getPrettyExpr(E)
-                         << "' (no Visible Device Copy)\n";
-            return false;
-        }
-
         //not found
         //if this is an ArraySubscriptExpr with non constant index,
         //move the whole BaseExpr to device
@@ -847,7 +355,7 @@ Stage1_ASTVisitor::Rename(Expr *E) {
         if (E != BaseExpr){
             //shadow the function global Target
             Arg *Target = CreateNewArgFrom(BaseExpr,ImplicitCI,Context);
-            assert(!isa<ConstArg>(Target));
+            assert(!Target->isICE());
             assert(!isa<ArrayElementArg>(Target));
             A = RStack.FindVisibleCopyInRegionStack(Target);
             //search for create Clauses from previous regions
@@ -873,26 +381,22 @@ Stage1_ASTVisitor::Rename(Expr *E) {
             else {
                 ClauseInfo *CI = A->getParent()->getAsClause();
                 assert(CI && CI->isDataClause());
-                if ((!CI->isImplDefault() || CI->getKind() != CK_PRESENT) &&
-                    CI->getParentDirective() != DI) {
-                    DirectiveInfo *ParentDI = CI->getParentDirective();
-                    if (ParentDI->getKind() == DK_DATA ||
-                        ParentDI->getKind() == DK_DECLARE) {
-                        ImplicitCI->getArgs().push_back(Target);
-                        DI->getClauseList().push_back(ImplicitCI);
+                DirectiveInfo *ParentDI = CI->getParentDirective();
+                if (!CI->isImplDefault() && ParentDI != DI) {
+                    ImplicitCI->getArgs().push_back(Target);
+                    DI->getClauseList().push_back(ImplicitCI);
 
-                        if (NeedNewName) {
+                    if (NeedNewName) {
                         std::string OrigName = getOrigNameFor(Target);
                         std::string NewName = CreateNewNameFor(Target);
                         Map[Target] = ArgNames(OrigName,NewName);
-                        }
-
-                        llvm::outs() << "debug: mark Arg '"
-                                     << A->getPrettyArg(Context->getPrintingPolicy())
-                                     << "' in directive '" << ParentDI->getAsString()
-                                     << "' as present in directive '"
-                                     << DI->getAsString() << "'\n";
                     }
+
+                    llvm::outs() << "debug: mark Arg '"
+                                 << A->getPrettyArg(Context->getPrintingPolicy())
+                                 << "' in directive '" << ParentDI->getAsString()
+                                 << "' as present in directive '"
+                                 << DI->getAsString() << "'\n";
                 }
             }
         }
@@ -903,7 +407,7 @@ Stage1_ASTVisitor::Rename(Expr *E) {
 
                 //shadow the function global Target
                 Arg *Target = CreateNewArgFrom(TmpBaseExpr,ImplicitCI,Context);
-                assert(!isa<ConstArg>(Target));
+                assert(!Target->isICE());
                 assert(!isa<ArrayElementArg>(Target));
                 A = RStack.FindVisibleCopyInRegionStack(Target);
                 //search for create Clauses from previous regions
@@ -928,26 +432,22 @@ Stage1_ASTVisitor::Rename(Expr *E) {
                 else {
                     ClauseInfo *CI = A->getParent()->getAsClause();
                     assert(CI && CI->isDataClause());
-                    if ((!CI->isImplDefault() || CI->getKind() != CK_PRESENT) &&
-                        CI->getParentDirective() != DI) {
-                        DirectiveInfo *ParentDI = CI->getParentDirective();
-                        if (ParentDI->getKind() == DK_DATA ||
-                            ParentDI->getKind() == DK_DECLARE) {
-                            ImplicitCI->getArgs().push_back(Target);
-                            DI->getClauseList().push_back(ImplicitCI);
+                    DirectiveInfo *ParentDI = CI->getParentDirective();
+                    if (!CI->isImplDefault() && ParentDI != DI) {
+                        ImplicitCI->getArgs().push_back(Target);
+                        DI->getClauseList().push_back(ImplicitCI);
 
-                            if (NeedNewName) {
+                        if (NeedNewName) {
                             std::string OrigName = getOrigNameFor(Target);
                             std::string NewName = CreateNewNameFor(Target);
                             Map[Target] = ArgNames(OrigName,NewName);
-                            }
-
-                            llvm::outs() << "debug: mark Arg '"
-                                         << A->getPrettyArg(Context->getPrintingPolicy())
-                                         << "' in directive '" << ParentDI->getAsString()
-                                         << "' as present in directive '"
-                                         << DI->getAsString() << "'\n";
                         }
+
+                        llvm::outs() << "debug: mark Arg '"
+                                     << A->getPrettyArg(Context->getPrintingPolicy())
+                                     << "' in directive '" << ParentDI->getAsString()
+                                     << "' as present in directive '"
+                                     << DI->getAsString() << "'\n";
                     }
                     //change only the base expr
                     BaseExpr = TmpBaseExpr;
@@ -960,6 +460,7 @@ Stage1_ASTVisitor::Rename(Expr *E) {
             }
         }
     }
+#if 0
     else if (RStack.CurrentRegionIs(DK_HOST_DATA)) {
         ClauseList &CList = RStack.back()->getClauseList();
         for (ClauseList::iterator
@@ -982,19 +483,18 @@ Stage1_ASTVisitor::Rename(Expr *E) {
                      << "'\n";
         return false;
     }
+#endif
     else {
         ClauseInfo *CI = A->getParent()->getAsClause();
-        assert(CI && (CI->isDataClause() || CI->getKind() == CK_DEVICE_RESIDENT));
+        assert(CI && (CI->isDataClause()));
 
-        if ((!CI->isImplDefault() || CI->getKind() != CK_PRESENT) &&
-            CI->getParentDirective() != DI) {
-
+        if (!CI->isImplDefault() && CI->getParentDirective() != DI) {
             //FIXME: what about present_* Data Clauses?
 
             if (NeedNewName) {
-            std::string OrigName = getOrigNameFor(Target);
-            std::string NewName = CreateNewNameFor(Target);
-            Map[Target] = ArgNames(OrigName,NewName);
+                std::string OrigName = getOrigNameFor(Target);
+                std::string NewName = CreateNewNameFor(Target);
+                Map[Target] = ArgNames(OrigName,NewName);
             }
 
             ImplicitCI->getArgs().push_back(Target);
@@ -1013,7 +513,6 @@ Stage1_ASTVisitor::Rename(Expr *E) {
 
     //should be ignored
     assert(A->getParent()->getAsClause() && "OpenACC API changed - update your program!");
-    assert(A->getParent()->getAsClause()->getKind() != CK_DEVICEPTR);
 
     if (AExplicitBuffer) {
         assert(A->Matches(AExplicitBuffer));
@@ -1023,85 +522,10 @@ Stage1_ASTVisitor::Rename(Expr *E) {
     //Do the Rename
     std::string NewName = getNewNameFor(A);
 
-    //Search for a Private Arg in a loop Directive, use the Original Target Expr
-    bool IsPrivateArg = false;
-    if (Arg *PrivateA =
-        RStack.FindMatchingPrivateOrFirstprivateInRegionStack(Target)) {
-        ClauseInfo *PrivateCI = PrivateA->getParent()->getAsClause();
-        assert(PrivateCI);
-        DirectiveInfo *DI = PrivateCI->getParentDirective();
-        if (PrivateCI->getKind() == CK_PRIVATE && DI->getKind() == DK_LOOP) {
-            assert(isa<VarArg>(PrivateA) || isa<ArrayElementArg>(PrivateA));
-
-            //create a private copy
-
-            IsPrivateArg = true;
-
-            if (!IgnorePrivateArgs->has(PrivateA)) {
-                IgnorePrivateArgs->push_back(PrivateA);
-
-                std::string Prefix = "loop_private";
-                std::string OrigPrivateName = getOrigNameFor(PrivateA);
-                std::string NewPrivateName = Prefix + CreateNewNameFor(PrivateA);
-                Map[PrivateA] = ArgNames(OrigPrivateName,NewPrivateName);
-
-                //get type as string
-                QualType Ty = PrivateA->getExpr()->getType();
-                if (const ArrayType *ATy = Context->getAsArrayType(Ty))
-                    Ty = ATy->getElementType();
-                std::string type = Ty.getAsString(Context->getPrintingPolicy());
-
-                std::string NewCode;
-                //FIXME: this is a hack, we have dependency on the NewName Prefix
-                if (isa<VarArg>(PrivateA))
-                    NewCode = type + " " + NewPrivateName
-                        + " = (*__accll_" + getPrettyExpr(E) + ");";
-                else if (isa<ArrayElementArg>(PrivateA)) {
-                    std::string InitExpr = "__accll_" + getPrettyExpr(E);
-                    ArraySubscriptExpr *ASE =
-                        dyn_cast<ArraySubscriptExpr>(PrivateA->getExpr());
-                    assert(ASE);
-                    if (ASE->getIdx()->IgnoreParenCasts()
-                        ->isIntegerConstantExpr(*Context)) {
-                        ReplaceStringInPlace(InitExpr,"[","_");  //delimiter
-                        ReplaceStringInPlace(InitExpr,"]","_");  //delimiter
-                        InitExpr = "(*" + InitExpr + ")";
-                    }
-                    NewCode = type + " " + NewPrivateName
-                        + " = " + InitExpr + ";";
-                }
-
-                llvm::outs() << "Create loop private copy for '"
-                             << getPrettyExpr(E) << "'\n";
-
-                Stmt *SubStmt = DI->getAccStmt()->getSubStmt();
-                CompoundStmt *Comp = dyn_cast<CompoundStmt>(SubStmt);
-                if (ForStmt *F = dyn_cast<ForStmt>(SubStmt)) {
-                    Comp = dyn_cast<CompoundStmt>(F->getBody());
-                }
-                assert(Comp);
-                SourceLocation Loc = Comp->getLocStart().getLocWithOffset(1);
-                Replacement R(Context->getSourceManager(),Loc,0,NewCode);
-                applyReplacement(R);
-            }
-            NewName = getNewNameFor(PrivateA);
-            //we may changed the Base Expr, see above
-            BaseExpr = E;
-        }
-        else if (DI->getKind() != DK_LOOP && !OrigExprFound &&
-                 isa<ArrayElementArg>(Target)) {
-            ArraySubscriptExpr *ASE = cast<ArraySubscriptExpr>(Target->getExpr());
-            if (ASE->getIdx()->IgnoreParenCasts()
-                ->isIntegerConstantExpr(*Context))
-                EmitImplicitDataMoveCodeFor(E);
-        }
-    }
-
     //if (!isa<ArrayArg>(A) && !A->getVarDecl()->getType()->isPointerType())
-    if (!isa<ArrayArg>(A) && !isa<SubArrayArg>(A) && !IsPrivateArg) {
+    if (!isa<ArrayArg>(A) && !isa<SubArrayArg>(A))
         //dereference
         NewName = "(*" + NewName + ")";
-    }
 
     Replacement R(Context->getSourceManager(),BaseExpr,NewName);
     applyReplacement(R);
@@ -1113,44 +537,11 @@ Stage1_ASTVisitor::Rename(Expr *E) {
     return true;
 }
 
-void
-Stage1_ASTVisitor::CheckForHostUseOfDeviceResident(Expr *E) {
-    SourceManager &SM = Context->getSourceManager();
-    if (SM.isInSystemHeader(E->getLocStart()))
-        return;
-
-    //maybe the implementiation headers are not in system directories
-    if (!SM.isFromMainFile(E->getLocStart()))
-        return;
-
-    Arg *Target = CreateNewArgFrom(E,0,Context);
-    assert(!isa<ConstArg>(Target));
-    if (Arg *A = RStack.FindVisibleCopyInRegionStack(Target))
-        if (ClauseInfo *CI = A->getParent()->getAsClause())
-            if (CI->getKind() == CK_DEVICE_RESIDENT)
-                llvm::outs() << "accll error: host access of '"
-                             << A->getPrettyArg(Context->getPrintingPolicy())
-                             << "' declared as '" << CI->getAsString()
-                             << "' is forbidden\n";
-}
-
 bool
 Stage1_ASTVisitor::TraverseAccStmt(AccStmt *S) {
     VarDeclVector IgnoreVarsPool;
     IgnoreVarsPool.Prev = IgnoreVars;
     IgnoreVars = &IgnoreVarsPool;
-
-    PrivateArgVector IgnorePrivateArgsPool;
-    IgnorePrivateArgsPool.Prev = IgnorePrivateArgs;
-    IgnorePrivateArgs = &IgnorePrivateArgsPool;
-
-#if 0
-    VarDeclVector DeviceOnlyVisibleVarsPool;
-    if (S->getDirective()->getKind() == DK_KERNELS) {
-        DeviceOnlyVisibleVarsPool.Prev = DeviceOnlyVisibleVars;
-        DeviceOnlyVisibleVars = &DeviceOnlyVisibleVarsPool;
-    }
-#endif
 
     TRY_TO(WalkUpFromAccStmt(S));
     //{ CODE; }
@@ -1161,17 +552,11 @@ Stage1_ASTVisitor::TraverseAccStmt(AccStmt *S) {
     RStack.ExitRegion(S->getDirective());
 
     IgnoreVars = IgnoreVars->Prev;
-    IgnorePrivateArgs = IgnorePrivateArgs->Prev;
-
-#if 0
-    if (S->getDirective()->getKind() == DK_KERNELS)
-        DeviceOnlyVisibleVars = DeviceOnlyVisibleVars->Prev;
-#endif
 
     //put the directive as marker for next stages after traversing
     //the children to handle any implicit clauses
     DirectiveInfo *DI = S->getDirective();
-    if (DI->isComputeDirective() || DI->isCombinedDirective()) {
+    if (DI->getKind() == DK_TASK) {
         std::string NewCode =
             DI->getPrettyDirective(Context->getPrintingPolicy(),false);
 
@@ -1220,82 +605,28 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
     DirectiveInfo *DI = ACC->getDirective();
     Stmt *SubStmt = ACC->getSubStmt();
 
-    if (DI->isStartOfLoopRegion()) {
-        ForStmt *F = cast<ForStmt>(SubStmt);
-        if (BinaryOperator *BO = dyn_cast_or_null<BinaryOperator>(F->getInit())) {
-            assert(BO->isAssignmentOp());
-            if (DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(BO->getLHS())) {
-                if (VarDecl *VD = dyn_cast<VarDecl>(DRE->getDecl()))
-                    IgnoreVars->push_back(VD);
-                else
-                    assert(0 && "unexpected declrefexpr without vardecl");
-            }
-        }
-    }
+    //generate data moves
+    EmitCodeForDataClausesWrapper(DI,SubStmt);
 
-    if (DI->isDataDirective() || DI->isComputeDirective() ||
-        DI->isCombinedDirective() || DI->getKind() == DK_DECLARE)
-        EmitCodeForDataClausesWrapper(DI,SubStmt);
-    else if (DI->isExecutableDirective())
-        EmitCodeForExecutableDirective(DI,SubStmt);
-    else if (DI->getKind() == DK_CACHE)
-        EmitCodeForDirectiveCache(DI,SubStmt);
+    //generate runtime calls for taskwait
+    EmitCodeForExecutableDirective(DI,SubStmt);
 
     NamedDecl *ND = dyn_cast<NamedDecl>(CurrentFunction);
     llvm::outs()
         << " in " << ND->getName() << "(): "
         << "Found OpenACC Directive: " << DI->getAsString() << "\n";
 
-    if (DI->getKind() == DK_DECLARE || DI->getKind() == DK_UPDATE) {
-        SourceLocation DILocStart = DI->getStartLocation().getLocWithOffset(-8);
-        std::string Comment = "//";
-        Replacement RComment(Context->getSourceManager(),DILocStart,0,Comment);
-        applyReplacement(RComment);
-    }
+#if 0
+    SourceLocation DILocStart = DI->getStartLocation().getLocWithOffset(-8);
+    std::string Comment = "//";
+    Replacement RComment(Context->getSourceManager(),DILocStart,0,Comment);
+    applyReplacement(RComment);
+#endif
 
     return true;
 }
 
-bool
-Stage1_ASTVisitor::VisitDeclStmt(DeclStmt *S) {
-    return true;
-    //take care of device_resident Clause
-
-    bool Modified = false;
-
-    DeclStmt::const_decl_iterator Begin = S->decl_begin(), End = S->decl_end();
-    SmallVector<Decl*, 2> Decls;
-    for ( ; Begin != End; ++Begin) {
-        VarDecl *VD = dyn_cast<VarDecl>(*Begin);
-        if (!VD)
-            return true;
-        ArgVector &Args = VD->getOpenAccArgs();
-        if (!Args.empty()) {
-            assert(Args.size() == 1);
-            if (ClauseInfo *CI = Args.back()->getParent()->getAsClause())
-                if (CI->getKind() == CK_DEVICE_RESIDENT) {
-                    Modified = true;
-                    continue;
-                }
-        }
-        Decls.push_back(*Begin);
-    }
-
-    if (Modified) {
-        std::string NewCode;
-        raw_string_ostream OS(NewCode);
-        Decl::printGroup(Decls.data(), Decls.size(), OS,
-                         Context->getPrintingPolicy(), /*IndentLevel=*/0);
-        if (!Decls.empty())
-            OS << ";";
-
-        Replacement R(Context->getSourceManager(),S,OS.str());
-        applyReplacement(R);
-    }
-
-    return true;
-}
-
+//used inside TraverseFunctionDecl
 bool
 Stage1_ASTVisitor::Stage1_TraverseTemplateArgumentLocsHelper(const TemplateArgumentLoc *TAL,unsigned Count) {
     for (unsigned I = 0; I < Count; ++I) {
@@ -1311,8 +642,6 @@ Stage1_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
     CurrentFunction = 0;
     if (!SM.isInSystemHeader(FD->getSourceRange().getBegin()))
         CurrentFunction = FD;
-
-    CleanupCodeForDeclareDirective.clear();
 
     //{ CODE; }
     //inline the helper function
@@ -1370,12 +699,10 @@ Stage1_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
     if (!SM.isFromMainFile(FD->getSourceRange().getBegin()))
         return true;
 
+#if 0
     if (FD->getResultType()->isVoidType()) {
-        Replacement R(Context->getSourceManager(),
-                      FD->getSourceRange().getEnd().getLocWithOffset(-1),
-                      0,CleanupCodeForDeclareDirective);
-        applyReplacement(R);
     }
+#endif
 
     return true;
 }
@@ -1386,11 +713,7 @@ Stage1_ASTVisitor::VisitVarDecl(VarDecl *VD) {
     if (RStack.empty())
         return true;
 
-#if 0
-    //if (RStack.InRegion(DK_PARALLEL) || RStack.InLoopRegion()) {
-#else
-    if (RStack.InComputeRegion() || RStack.InLoopRegion()) {
-#endif
+    if (RStack.InRegion(DK_TASK)) {
         llvm::outs() << "debug: device resident declaration of '"
                      << VD->getName() << "'\n";
         IgnoreVars->push_back(VD);
@@ -1398,14 +721,6 @@ Stage1_ASTVisitor::VisitVarDecl(VarDecl *VD) {
         //region
         //we still create any necessary data moves in this case
     }
-#if 0
-    else if (RStack.InRegion(DK_KERNELS)) {
-        llvm::outs() << "debug: device only visible declaration of '"
-                     << VD->getName() << "' (create device buffer)\n";
-        assert(DeviceOnlyVisibleVars);
-        DeviceOnlyVisibleVars->push_back(VD);
-    }
-#endif
 
     return true;
 }
@@ -1422,16 +737,18 @@ Stage1_ASTVisitor::VisitDeclRefExpr(DeclRefExpr *DRE) {
         return true;
 
     if (RStack.empty()) {
-        CheckForHostUseOfDeviceResident(dyn_cast<Expr>(DRE));
         return true;
     }
 
-    if (RStack.CurrentRegionIs(DK_DATA)) {
+#if 0
+    if (RStack.CurrentRegionIs(DK_TASK)) {
         //FIXME: maybe this should be a warning?
         llvm::outs() << "debug: use host's '"
                      << VD->getName() << "'" << "\n";
+        return true;
     }
-    else if (IgnoreVars->has(VD)) {
+#endif
+    if (IgnoreVars->has(VD)) {
         llvm::outs() << "debug: skip rename '"
                      << VD->getName() << "' (device resident)" << "\n";
     }
@@ -1447,16 +764,17 @@ Stage1_ASTVisitor::VisitMemberExpr(MemberExpr *ME) {
     //do not try to copy devise residents
 
     if (RStack.empty()) {
-        CheckForHostUseOfDeviceResident(dyn_cast<Expr>(ME));
         return true;
     }
 
-    if (RStack.CurrentRegionIs(DK_DATA)) {
+#if 0
+    if (RStack.CurrentRegionIs(DK_TASK)) {
         llvm::outs() << "debug: use host's '"
                      << getPrettyExpr(ME)
                      << "'" << "\n";
         return true;
     }
+#endif
 
     Expr *BaseExpr = ME->getBase()->IgnoreParenCasts();
     while (MemberExpr *NewME = dyn_cast<MemberExpr>(BaseExpr->IgnoreParenImpCasts())) {
@@ -1487,16 +805,17 @@ Stage1_ASTVisitor::VisitArraySubscriptExpr(clang::ArraySubscriptExpr *ASE) {
     //do not try to copy devise residents
 
     if (RStack.empty()) {
-        CheckForHostUseOfDeviceResident(dyn_cast<Expr>(ASE));
         return true;
     }
 
-    if (RStack.CurrentRegionIs(DK_DATA)) {
+#if 0
+    if (RStack.CurrentRegionIs(DK_TASK)) {
         llvm::outs() << "debug: use host's '"
                      << getPrettyExpr(ASE)
                      << "'" << "\n";
         return true;
     }
+#endif
 
     Expr *BaseExpr = ASE->getBase()->IgnoreParenCasts();
     while (MemberExpr *NewME = dyn_cast<MemberExpr>(BaseExpr->IgnoreParenImpCasts())) {
@@ -1532,106 +851,33 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
 
     std::string Name = FD->getNameAsString();
 
-#define TEST_RUNTIME_CALL(name,call) (name.compare(#call) == 0)
-    if (TEST_RUNTIME_CALL(Name,acc_async_test)) {
-        llvm::outs() << "Processing Runtime call to '" << Name << "' ...\n";
-        assert(CE->getNumArgs() == 1 && "OpenACC API changed, update your program!");
-        //ignore any casts or parens,
-        //the Arg Constructors expect a 'clean' expression
-        Expr *E = CE->getArg(0)->IgnoreParenCasts();
-        //llvm::outs() << "Argument is '" + getPrettyExpr(E) + "'\n";
-
-        Arg *Target = CreateNewArgFrom(E,0,Context);
-
-        std::string Events;
-        unsigned EventsNum = 0;
-
-        for (AsyncEventVector::iterator
-                 II = AsyncEvents.begin(), EE = AsyncEvents.end(); II != EE; ++II) {
-            Arg *IA = (II->first->hasArgs()) ? II->first->getArg() : 0;
-            if (IA && Target->Matches(IA)) {
-                if (!Events.empty())
-                    Events += ", ";
-                Events += II->second;
-                EventsNum++;
-            }
-        }
-
-        if (EventsNum == 0) {
-            //we have no async device code
-            llvm::outs() << "No asynchronous events found\n";
-            return true;
-        }
-
-        //wait for a list of events
-
-        std::string Tmp;
-        raw_string_ostream OS(Tmp);
-        OS << EventsNum;
-
-        std::string NewCode = "accll_async_test(" + OS.str() + "," + Events + ")";
-        Replacement R(Context->getSourceManager(),CE,NewCode);
-        applyReplacement(R);
-    }
-    else if (TEST_RUNTIME_CALL(Name,acc_async_test_all)) {
-        llvm::outs() << "Processing Runtime call to '" << Name << "' ...\n";
-
-        std::string Events;
-        unsigned EventsNum = 0;
-
-        for (AsyncEventVector::iterator
-                 II = AsyncEvents.begin(), EE = AsyncEvents.end(); II != EE; ++II) {
-            Arg *IA = (II->first->hasArgs()) ? II->first->getArg() : 0;
-            if (IA) {
-                if (!Events.empty())
-                    Events += ", ";
-                Events += II->second;
-                EventsNum++;
-            }
-        }
-
-        if (EventsNum == 0) {
-            //we have no async device code
-            llvm::outs() << "No asynchronous events found\n";
-            return true;
-        }
-
-        //wait for a list of events
-
-        std::string Tmp;
-        raw_string_ostream OS(Tmp);
-        OS << EventsNum;
-
-        std::string NewCode = "accll_async_test(" + OS.str() + "," + Events + ")";
-        Replacement R(Context->getSourceManager(),CE,NewCode);
-        applyReplacement(R);
-    }
-#undef TEST_RUNTIME_CALL
+    //FIXME: create accurate kernel
 
     return true;
 }
 
 bool
 Stage1_ASTVisitor::VisitReturnStmt(ReturnStmt *S) {
-    if (!CleanupCodeForDeclareDirective.empty()) {
-        std::string NewCode = "{" + CleanupCodeForDeclareDirective;
-        Replacement R1(Context->getSourceManager(),S->getLocStart().getLocWithOffset(-1),0,NewCode);
-        applyReplacement(R1);
+    //FIXME: check whether we are inside a task
 
-        //clang bug: EndLoc is the same with StartLoc
-
-        SourceLocation EndLoc = S->getLocEnd();
-        if (!S->getRetValue())
-            EndLoc = EndLoc.getLocWithOffset(6);
-        Replacement R2(Context->getSourceManager(),EndLoc.getLocWithOffset(1),0,";}");
-        applyReplacement(R2);
-    }
     return true;
 }
 
 std::string
 Stage1_ASTVisitor::addVarDeclForDevice(Arg *A) {
     //declare a new var here for the accelerator
+
+    if (Arg *AMemObj = RStack.FindBufferObjectInRegionStack(A)) {
+        (void)AMemObj;
+        //abort creation of device buffer, we created it previously
+        llvm::outs() << "abort new buffer (use existing) for '"
+                     << A->getPrettyArg(Context->getPrintingPolicy())
+                     << "' in Clause '" << A->getParent()->getAsClause()->getAsString() << "'\n";
+        return std::string();
+    }
+    else
+        //FIXME: some of the Args may already exist because of previous regions
+        RStack.InterRegionMemBuffers.push_back(A);
 
 #if 0
     //get type as string
@@ -1820,7 +1066,6 @@ SourceLocation getLocAfterDecl(FunctionDecl *CurrentFunction, VarDecl *VD, std::
     //someone must fix the SourceLocation Issues. Seriously
 
     SourceLocation DeclLoc;
-    bool Finish = false;
     CompoundStmt *Body = cast<CompoundStmt>(CurrentFunction->getBody());
     for (CompoundStmt::body_iterator
              IS = Body->body_begin(),
@@ -1841,64 +1086,34 @@ SourceLocation getLocAfterDecl(FunctionDecl *CurrentFunction, VarDecl *VD, std::
                         DeclLoc = DeclLoc.getLocWithOffset(-9);
                         CreateMem += "\n";
                     }
-                    Finish = true;
-                    break;
+                    return DeclLoc;
                 }
         }
-        if (Finish)
-            break;
     }
-    assert(Finish);
-    return DeclLoc;
+    assert(0 && "Unexpected SourceLocation of Decl");
+    return SourceLocation();
 }
 
 void Stage1_ASTVisitor::EmitCodeForDataClause(DirectiveInfo *DI, ClauseInfo *CI, Stmt *SubStmt) {
-    assert(CI->isDataClause() || CI->getKind() == CK_DEVICE_RESIDENT);
+    assert(CI->isDataClause());
 
-    ClauseKind CK = CI->getKind();
-
-    if (CK == CK_DEVICEPTR) {
-        //deviceptr variables do not get renamed
-        ArgVector &Args = CI->getArgs();
-        for (ArgVector::iterator
-                 II = Args.begin(), EE = Args.end(); II != EE; ++II)
-            IgnoreVars->push_back((*II)->getVarDecl());
+    if (CI->getKind() == CK_ON) {
+        assert(DI->getKind() == DK_TASKWAIT);
+        std::string NewCode = TaskWaitOn(DI,CI);
+        SourceLocation Loc = DI->getEndLocation();
+        Replacement R(Context->getSourceManager(),Loc,0,NewCode);
+        applyReplacement(R);
         return;
     }
 
-    bool NewBuffer = (CI->isImplDefault() || CK == CK_DEVICE_RESIDENT ||
-                               CK == CK_COPY || CK == CK_COPYIN ||
-                               CK == CK_COPYOUT || CK == CK_CREATE);
-
-    const bool MoveHostToDevice = (CK == CK_COPY || CK == CK_COPYIN ||
-                                   CK == CK_PCOPY || CK == CK_PCOPYIN);
-
-    const bool MoveDeviceToHost = (CK == CK_COPY || CK == CK_COPYOUT ||
-                                   CK == CK_PCOPY || CK == CK_PCOPYOUT);
-
-    ArgVector &Args = CI->getArgs();
     for (ArgVector::iterator
-             II = Args.begin(), EE = Args.end(); II != EE; ++II) {
+             II = CI->getArgs().begin(), EE = CI->getArgs().end(); II != EE; ++II) {
         Arg *A = *II;
 
-        Arg *AMemObj = RStack.FindBufferObjectInRegionStack(A);
-        if (AMemObj && DI->getKind() != DK_DECLARE) {
-            //abort creation of device buffer, we created it previously
-            llvm::outs() << "abort new buffer for '"
-                         << A->getPrettyArg(Context->getPrintingPolicy())
-                         << "' in Clause '" << CI->getAsString() << "'\n";
-            NewBuffer = false;
-        }
-
-        if (CK == CK_CREATE) {
-            //FIXME: some of the Args may already exist because of previous regions
-            RStack.InterRegionMemBuffers.push_back(A);
-            if (AMemObj) {
-                llvm::outs() << "explicit buffer for '"
-                             << A->getPrettyArg(Context->getPrintingPolicy())
-                             << "' already exists\n";
-            }
-        }
+#warning do we need ReleaseMem() ?
+        bool ReleaseBuffer = false;
+        const bool MoveHostToDevice = true;
+        const bool MoveDeviceToHost = true;
 
         //reminder
         // If a variable or array appears in a declare directive, the same
@@ -1909,61 +1124,25 @@ void Stage1_ASTVisitor::EmitCodeForDataClause(DirectiveInfo *DI, ClauseInfo *CI,
         std::string MoveHostToDev;
         std::string MoveDevToHost;
 
-        if (NewBuffer)
-            CreateMem += addVarDeclForDevice(A);
+        CreateMem += addVarDeclForDevice(A);
         if (MoveHostToDevice)
             MoveHostToDev += addMoveHostToDevice(A);
         if (MoveDeviceToHost)
             MoveDevToHost += addMoveDeviceToHost(A);
-        if (NewBuffer)
+        if (ReleaseBuffer)
             ReleaseMem += addDeallocDeviceMemory(A);
 
-        SourceLocation PrologueLoc;
-        std::string Prologue;
+        std::string Prologue = CreateMem + MoveHostToDev;
+        std::string Epilogue = MoveDevToHost + ReleaseMem;
 
-        if (DI->getKind() == DK_DECLARE) {
-#if 0
-#error bad code for sequentian declare directives without empty line between them
-            /*
-              #pragma acc declare ...
-              #pragma acc declare ...
-             */
-            PrologueLoc = DI->getEndLocation().getLocWithOffset(1);
-#else
-            PrologueLoc = DI->getEndLocation();
-            Prologue = "\n" + CreateMem + MoveHostToDev;
-#endif
-            Replacement R(Context->getSourceManager(),PrologueLoc,0,Prologue);
-            applyReplacement(R);
+        SourceLocation PrologueLoc = SubStmt->getLocStart();
+        SourceLocation EpilogueLoc = SubStmt->getLocEnd().getLocWithOffset(1);
 
-            CleanupCodeForDeclareDirective += MoveDevToHost + ReleaseMem;
-        }
-        else {
-            std::string Epilogue;
-            if (CK == CK_CREATE) {
-                SourceLocation DeclLoc =
-                    getLocAfterDecl(CurrentFunction,A->getVarDecl(),CreateMem);
-                Replacement R(Context->getSourceManager(),DeclLoc,0,CreateMem);
-                applyReplacement(R);
+        Replacement R1(Context->getSourceManager(),EpilogueLoc,0,Epilogue);
+        applyReplacement(R1);
 
-                Prologue = MoveHostToDev;
-                Epilogue = MoveDevToHost;
-                CleanupCodeForDeclareDirective += ReleaseMem;
-        }
-        else {
-                Prologue = CreateMem + MoveHostToDev;
-                Epilogue = MoveDevToHost + ReleaseMem;
-            }
-
-            PrologueLoc = SubStmt->getLocStart();
-
-            SourceLocation EpilogueLoc = SubStmt->getLocEnd().getLocWithOffset(1);
-            Replacement R(Context->getSourceManager(),EpilogueLoc,0,Epilogue);
-            applyReplacement(R);
-        }
-
-        Replacement R(Context->getSourceManager(),PrologueLoc,0,Prologue);
-        applyReplacement(R);
+        Replacement R2(Context->getSourceManager(),PrologueLoc,0,Prologue);
+        applyReplacement(R2);
     }
 }
 
@@ -1971,17 +1150,14 @@ void Stage1_ASTVisitor::EmitCodeForDataClausesWrapper(DirectiveInfo *DI, Stmt *S
     ClauseList &CList = DI->getClauseList();
     for (ClauseList::iterator
              II = CList.begin(), EE = CList.end(); II != EE; ++II)
-        if ((*II)->isDataClause() || (*II)->getKind() == CK_DEVICE_RESIDENT)
+        if ((*II)->isDataClause())
             EmitCodeForDataClause(DI,*II,SubStmt);
-    //else if ((II)->getKind() == CK_REDUCTION)
-    //        EmitCodeForReductionClause();
-
-    if (DI->getKind() == DK_DECLARE)
-        return;
 
     SourceLocation PrologueLoc = DI->getEndLocation();
     SourceLocation EpilogueLoc;
     if (isa<CompoundStmt>(SubStmt))
+        EpilogueLoc = SubStmt->getLocEnd().getLocWithOffset(1);
+    else if (isa<CallExpr>(SubStmt))
         EpilogueLoc = SubStmt->getLocEnd().getLocWithOffset(1);
     else
         EpilogueLoc = SubStmt->getLocEnd().getLocWithOffset(2);
@@ -1993,51 +1169,28 @@ void Stage1_ASTVisitor::EmitCodeForDataClausesWrapper(DirectiveInfo *DI, Stmt *S
 }
 
 std::string
-Stage1_ASTVisitor::EmitCodeForDirectiveUpdate(DirectiveInfo *DI, Stmt *SubStmt) {
-    ClauseInfo *AsyncCI = 0;
+Stage1_ASTVisitor::TaskWaitOn(DirectiveInfo *DI, ClauseInfo *CI) {
+    assert(CI->getKind() == CK_ON);
 
-    ClauseList &CList = DI->getClauseList();
-    for (ClauseList::iterator
-             II = CList.begin(), EE = CList.end(); II != EE; ++II) {
-        ClauseInfo *CI = *II;
-        if (CI->getKind() == CK_ASYNC) {
-            AsyncCI = CI;
-            break;
-        }
-    }
+    ClauseInfo *AsyncCI = 0;
 
     SmallVector<std::string,8> EventList;
     unsigned EventID = 0;
 
     std::string NewCode;
 
-    for (ClauseList::iterator
-             II = CList.begin(), EE = CList.end(); II != EE; ++II) {
-        ClauseInfo *CI = *II;
-        std::string (Stage1_ASTVisitor::*MoveCall)
-            (Arg *A, ClauseInfo *AsyncCI, std::string Event);
+    for (ArgVector::iterator
+             II = CI->getArgs().begin(), EE = CI->getArgs().end(); II != EE; ++II) {
+        Arg *A = RStack.FindVisibleCopyInRegionStack(*II);
+        assert(A);
 
-        if (CI->getKind() == CK_HOST)
-            MoveCall = &Stage1_ASTVisitor::addMoveDeviceToHost;
-        else if (CI->getKind() == CK_DEVICE)
-            MoveCall = &Stage1_ASTVisitor::addMoveHostToDevice;
-        else
-            continue;
+        std::string Event = "__accll_update_event_tmp_";
+        raw_string_ostream OS(Event);
+        OS << EventID;
+        EventID++;
+        EventList.push_back(OS.str());
 
-        ArgVector &Args = CI->getArgs();
-        for (ArgVector::iterator
-                 II = Args.begin(), EE = Args.end(); II != EE; ++II) {
-            Arg *A = RStack.FindVisibleCopyInRegionStack(*II,/*IgnoreDeviceResident=*/true);
-            assert(A);
-
-            std::string Event = "__accll_update_event_tmp_";
-            raw_string_ostream OS(Event);
-            OS << EventID;
-            EventID++;
-            EventList.push_back(OS.str());
-
-            NewCode += VISITOR_CALL(MoveCall)(A,AsyncCI,Event);
-        }
+        NewCode += addMoveDeviceToHost(A,AsyncCI,Event);
     }
 
     if (!AsyncCI)
@@ -2045,20 +1198,10 @@ Stage1_ASTVisitor::EmitCodeForDirectiveUpdate(DirectiveInfo *DI, Stmt *SubStmt) 
 
     Arg *A = (AsyncCI->hasArgs()) ? AsyncCI->getArg() : 0;
 
-#if 0
-#error bad code is enabled
-    //this code sometimes produces out of scope event declarations
-    //in conjuction with the use of some OpenACC runtime calls like
-    //acc_async_test, acc_async_test_all
-    SourceLocation EventLoc = (!A || isa<ConstArg>(A)) ?
-        CurrentFunction->getBody()->getLocStart().getLocWithOffset(1) :
-        A->getVarDecl()->getLocStart();
-#else
-    //a safer version, declares all the event objects at the top of
+    //a safe SourceLocation, declares all the event objects at the top of
     //the current function scope
     SourceLocation EventLoc =
         CurrentFunction->getBody()->getLocStart().getLocWithOffset(1);
-#endif
 
     std::string EventName = CreateNewUniqueEventNameFor(A);
     std::string NewEventDeclaration = "cl_event " + EventName + ";";
@@ -2069,7 +1212,6 @@ Stage1_ASTVisitor::EmitCodeForDirectiveUpdate(DirectiveInfo *DI, Stmt *SubStmt) 
 
     //Generate Marker to wait for later on
 
-    //empty update directive
     if (EventList.empty())
         return std::string();
 
@@ -2101,8 +1243,14 @@ Stage1_ASTVisitor::EmitCodeForDirectiveWait(DirectiveInfo *DI, Stmt *SubStmt) {
     //handle only the wait events from the update directives (data moves)
     //any other case will be handled at Stage3
 
-    if (!DI->hasArgs())
+    ClauseList &CList = DI->getClauseList();
+    if (CList.empty())
         return std::string();
+
+    for (ClauseList::iterator II = CList.begin(), EE = CList.end();
+         II != EE; ++II) {
+        ClauseInfo *CI = *II;
+    }
 
     Arg *A = DI->getArg();
 
@@ -2142,16 +1290,13 @@ Stage1_ASTVisitor::EmitCodeForDirectiveWait(DirectiveInfo *DI, Stmt *SubStmt) {
 }
 
 void Stage1_ASTVisitor::EmitCodeForExecutableDirective(DirectiveInfo *DI, Stmt *SubStmt) {
-    assert(DI->isExecutableDirective());
+    assert(DI->getKind() == DK_TASKWAIT);
 
     //FIXME: clang bug, wrong EndLocation for BinaryOperator stmts
     //use findLocationAfterToken() in this case
 
     std::string NewCode;
-    if (DI->getKind() == DK_UPDATE)
-        NewCode += EmitCodeForDirectiveUpdate(DI,SubStmt);
-    else
-        NewCode += EmitCodeForDirectiveWait(DI,SubStmt);
+    NewCode += EmitCodeForDirectiveWait(DI,SubStmt);
 
     if (NewCode.empty())
         return;
@@ -2163,190 +1308,8 @@ void Stage1_ASTVisitor::EmitCodeForExecutableDirective(DirectiveInfo *DI, Stmt *
     return;
 }
 
-void Stage1_ASTVisitor::EmitCodeForDirectiveCache(DirectiveInfo *DI, Stmt *SubStmt) {
-    ArgVector &Args = DI->getArgs();
-    for (ArgVector::iterator II = Args.begin(), EE = Args.end(); II != EE; ++II) {
-        Arg *A = *II;
-        assert(isa<ArrayElementArg>(A) || isa<SubArrayArg>(A));
-        //do not dereference here, wait until the last Stage
-        std::string NewCode = "prefetch(";
-        //NewCode += "&";
-        if (isa<ArrayElementArg>(A)) {
-            //bypass any mapping mechanism and get directly the new name
-
-            ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(A->getExpr());
-            assert(ASE);
-            llvm::outs() << "Cache Directive: Base is '"
-                         << getPrettyExpr(ASE->getBase())
-                         << "'\n";
-            ArrayArg Target = ArrayArg(/*Parent=*/0,ASE->getBase()->IgnoreParenCasts(),Context);
-
-            NewCode += "&(((" + A->getExpr()->getType().getAsString() + "*)";
-            NewCode += CreateNewNameFor(&Target);
-            NewCode += ")[";
-            NewCode += getPrettyExpr(ASE->getIdx());
-            NewCode += "]), 1);";
-        }
-        else if (SubArrayArg *SA = dyn_cast<SubArrayArg>(A)) {
-            assert(isa<ArraySubscriptExpr>(SA->getExpr()));
-            //bypass any mapping mechanism and get directly the new name
-            //
-            //subarrays do not exist in plain C, therefore no new name is created
-            //so far for this Arg
-
-            ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(SA->getExpr());
-            ArrayArg Target = ArrayArg(/*Parent=*/0,ASE->getBase()->IgnoreParenCasts(),Context);
-
-            NewCode += "&(((" + SA->getExpr()->getType().getAsString() + "*)";
-            NewCode += CreateNewNameFor(&Target);
-            NewCode += ")[";
-            NewCode += getPrettyExpr(ASE->getIdx());
-            NewCode += "]), ";
-            NewCode += getPrettyExpr(SA->getLength());
-            NewCode += ");";
-        }
-        SourceLocation StartLoc = DI->getStartLocation().getLocWithOffset(-9);
-        SourceLocation EndLoc = DI->getEndLocation();
-        CharSourceRange Range(SourceRange(StartLoc,EndLoc),/*IsTokenRange=*/false);
-        Replacement R(Context->getSourceManager(),Range,NewCode);
-        applyReplacement(R);
-    }
-}
-
 void Stage1_ASTVisitor::Init(ASTContext *C) {
     Context = C;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-//                        Stage2
-///////////////////////////////////////////////////////////////////////////////
-
-std::string
-Stage2_ASTVisitor::getPrettyExpr(Expr *E) {
-    std::string StrExpr;
-    raw_string_ostream OS(StrExpr);
-    E->printPretty(OS,/*Helper=*/0,
-                   Context->getPrintingPolicy(),/*Indentation=*/0);
-    return OS.str();  //flush
-}
-
-void Stage2_ASTVisitor::Init(ASTContext *C) {
-    Context = C;
-}
-
-void
-Stage2_ASTVisitor::Finish() {
-    CurrentKernelFileIterator++;
-}
-
-void
-Stage2_ASTVisitor::applyReplacement(Replacement &R) {
-    static const bool WRITE_REPLACEMENTS (true);
-    static const bool DEBUG_REPLACEMENTS (false);
-
-    if (DEBUG_REPLACEMENTS)
-        llvm::outs() << R.toString() << "\n";
-
-    if (!R.isApplicable()) {
-        llvm::outs() << "  -  Stage2:  bad replacement !!!\n";
-        return;
-    }
-
-    if (WRITE_REPLACEMENTS)
-        Replaces.insert(R);
-}
-
-bool
-Stage2_ASTVisitor::TraverseAccStmt(AccStmt *S) {
-    TRY_TO(WalkUpFromAccStmt(S));
-    //{ CODE; }
-
-    //enter the region after the traversal
-    //only the children 'see' the region
-
-    RStack.EnterRegion(S->getDirective());
-    for (Stmt::child_range range = S->children(); range; ++range) {
-        TRY_TO(TraverseStmt(*range));
-    }
-    RStack.ExitRegion(S->getDirective());
-    return true;
-}
-
-bool
-Stage2_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
-    //in this stage we care only about loop directives
-
-    if (getCurrentKernelFile().empty())
-        return true;
-
-    DirectiveInfo *DI = ACC->getDirective();
-    Stmt *SubStmt = ACC->getSubStmt();
-
-    //if (DI->isComputeDirective()) {
-    if (DI->getKind() == DK_PARALLEL) {
-        CompoundStmt *Comp = dyn_cast<CompoundStmt>(SubStmt);
-        assert(Comp);
-
-        for (CompoundStmt::body_iterator
-                 II = Comp->body_begin(), EE = Comp->body_end(); II != EE; ++II) {
-            if (isa<AccStmt>(*II) || isa<DeclStmt>(*II))
-                continue;
-            CompoundStmt::body_iterator JJ = II + 1;
-            for (JJ = II; JJ != EE; ++JJ) {
-                if (isa<AccStmt>(*JJ) || isa<DeclStmt>(*JJ))
-                    break;
-            }
-            SourceLocation Start = (*II)->getLocStart();
-            SourceLocation End = Comp->getLocEnd();
-            if (JJ != EE) {
-                End = (*JJ)->getLocStart();
-                if (isa<AccStmt>(*JJ))
-                    End = End.getLocWithOffset(-9);
-            }
-
-            Replacement R1(Context->getSourceManager(),Start,0,
-                           "if (get_local_id(0) == 0) {");
-            applyReplacement(R1);
-            Replacement R2(Context->getSourceManager(),End,0,"\n}");
-            applyReplacement(R2);
-            II = JJ - 1;
-        }
-
-        return true;
-    }
-
-    return true;
-}
-
-std::string
-Stage2_ASTVisitor::getIdxOfWorkerInLoop(ForStmt *F, std::string Qual) {
-    assert(Qual.compare("global") == 0 || Qual.compare("local") == 0);
-
-    std::string Buffer;
-    raw_string_ostream OS(Buffer);
-
-    if (const DeclStmt *InitDS = dyn_cast_or_null<DeclStmt>(F->getInit())) {
-        //asserts if not SingleDecl
-        //FIXME: what about multiple declarations?
-        //       eg. 'for (int x=1,y=2; ... ; ..) ;
-
-        const NamedDecl *ND = cast<NamedDecl>(InitDS->getSingleDecl());
-
-        InitDS->printPretty(OS,/*Helper=*/0,
-                            Context->getPrintingPolicy(),/*Indentation=*/0);
-        ND->printName(OS);
-    }
-    else if (const BinaryOperator *BO = dyn_cast_or_null<BinaryOperator>(F->getInit())) {
-        assert(BO->isAssignmentOp());
-        BO->getLHS()->printPretty(OS,/*Helper=*/0,
-                                  Context->getPrintingPolicy(),/*Indentation=*/0);
-    }
-    else
-        assert(0 && "unknown for init expr");
-
-    std::string NewCode = OS.str() + " = get_" + Qual + "_id(0);";
-
-    return NewCode;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -2369,7 +1332,7 @@ Stage3_ASTVisitor::CreateNewNameFor(Arg *A, bool AddPrefix) {
     ClauseInfo *CI = A->getParent()->getAsClause();
     assert(CI);
 
-    if (isa<ConstArg>(A))
+    if (isa<RawExprArg>(A) && A->isICE())
         return A->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
 
     std::string Prefix = "__accll_";  //prefix
@@ -2386,14 +1349,14 @@ Stage3_ASTVisitor::CreateNewNameFor(Arg *A, bool AddPrefix) {
 
         DirectiveInfo *DI = CI->getParentDirective();
         assert(DI);
-        if (!isa<ConstArg>(IndexA))
+        if (!(isa<RawExprArg>(IndexA) && IndexA->isICE()))
             if (RStack.FindVisibleCopyInDirective(DI,IndexA) ||
                 RStack.FindVisibleCopyInRegionStack(IndexA))
                 NameIndex = Prefix + NameIndex;
 
         //NameBase and NameIndex have prefix if needed, d not add it again here
 
-        if (isa<ConstArg>(IndexA))
+        if (isa<RawExprArg>(IndexA) && IndexA->isICE())
             //let the caller to add any dereference code to the final NewName
             NewName = NameBase + "_" + NameIndex + "_";
         else if (!isa<ArrayArg>(IndexA))
@@ -2436,72 +1399,6 @@ Stage3_ASTVisitor::Finish() {
         return;
 
     std::string NewCode = UserTypes;
-
-    for (std::vector<std::string>::iterator II = ReductionPool.begin(),
-             EE = ReductionPool.end(); II != EE; ++II) {
-        if ((*II).compare("plus_int") == 0)
-            NewCode += STR(REDUCTION_PLUS(int));
-        else if ((*II).compare("plus_float") == 0)
-            NewCode += STR(REDUCTION_PLUS(float));
-        else if ((*II).compare("plus_double") == 0)
-            NewCode += STR(REDUCTION_PLUS(double));
-
-        else if ((*II).compare("mult_int") == 0)
-            NewCode += STR(REDUCTION_MULT(int));
-        else if ((*II).compare("mult_float") == 0)
-            NewCode += STR(REDUCTION_MULT(float));
-        else if ((*II).compare("mult_double") == 0)
-            NewCode += STR(REDUCTION_MULT(double));
-
-        else if ((*II).compare("max_int") == 0)
-            NewCode += STR(REDUCTION_MAX_INT);
-        else if ((*II).compare("max_float") == 0)
-            NewCode += STR(REDUCTION_MAX_FLOAT);
-        else if ((*II).compare("max_double") == 0)
-            NewCode += STR(REDUCTION_MAX_DOUBLE);
-
-        else if ((*II).compare("min_int") == 0)
-            NewCode += STR(REDUCTION_MIN_INT);
-        else if ((*II).compare("min_float") == 0)
-            NewCode += STR(REDUCTION_MIN_FLOAT);
-        else if ((*II).compare("min_double") == 0)
-            NewCode += STR(REDUCTION_MIN_DOUBLE);
-
-        else if ((*II).compare("bitwise_and_int") == 0)
-            NewCode += STR(REDUCTION_BITWISE_AND(int));
-        else if ((*II).compare("bitwise_and_float") == 0)
-            NewCode += STR(REDUCTION_BITWISE_AND(float));
-        else if ((*II).compare("bitwise_and_double") == 0)
-            NewCode += STR(REDUCTION_BITWISE_AND(double));
-
-        else if ((*II).compare("bitwise_or_int") == 0)
-            NewCode += STR(REDUCTION_BITWISE_OR(int));
-        else if ((*II).compare("bitwise_or_float") == 0)
-            NewCode += STR(REDUCTION_BITWISE_OR(float));
-        else if ((*II).compare("bitwise_or_double") == 0)
-            NewCode += STR(REDUCTION_BITWISE_OR(double));
-
-        else if ((*II).compare("bitwise_xor_int") == 0)
-            NewCode += STR(REDUCTION_BITWISE_XOR(int));
-        else if ((*II).compare("bitwise_xor_float") == 0)
-            NewCode += STR(REDUCTION_BITWISE_XOR(float));
-        else if ((*II).compare("bitwise_xor_double") == 0)
-            NewCode += STR(REDUCTION_BITWISE_XOR(double));
-
-        else if ((*II).compare("logical_and_int") == 0)
-            NewCode += STR(REDUCTION_LOGICAL_AND(int));
-        else if ((*II).compare("logical_and_float") == 0)
-            NewCode += STR(REDUCTION_LOGICAL_AND(float));
-        else if ((*II).compare("logical_and_double") == 0)
-            NewCode += STR(REDUCTION_LOGICAL_AND(double));
-
-        else if ((*II).compare("logical_or_int") == 0)
-            NewCode += STR(REDUCTION_LOGICAL_OR(int));
-        else if ((*II).compare("logical_or_float") == 0)
-            NewCode += STR(REDUCTION_LOGICAL_OR(float));
-        else if ((*II).compare("logical_or_double") == 0)
-            NewCode += STR(REDUCTION_LOGICAL_OR(double));
-    }
 
     Replacement R(getCurrentKernelFile(),
                   getCurrentKernelFileStartOffset(),0,NewCode);
@@ -2548,8 +1445,8 @@ Stage3_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
     DirectiveInfo *DI = ACC->getDirective();
     Stmt *SubStmt = ACC->getSubStmt();
 
-    if (DI->getKind() == DK_WAIT) {
-        std::string NewCode = EmitCodeForDirectiveWait(DI,SubStmt);
+    if (DI->getKind() == DK_TASKWAIT) {
+        std::string NewCode = WaitForTasks(DI,SubStmt);
         if (!NewCode.empty()) {
             NewCode = "\n{" + NewCode + "\n}";
             Replacement R(Context->getSourceManager(),DI->getEndLocation(),
@@ -2557,16 +1454,7 @@ Stage3_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
             applyReplacement(R);
         }
     }
-    else if (RStack.InRegion(DK_PARALLEL) || RStack.InRegion(DK_PARALLEL_LOOP) ||
-             RStack.InRegion(DK_KERNELS_LOOP)) {
-        //skip nested device code, the parent handles it
-        llvm::outs() << "  -  Skip nested directive '" << DI->getAsString() << "'\n";
-        return true;
-    }
-    else if (DI->getKind() == DK_PARALLEL || DI->isStartOfLoopRegion()) {
-        //assert(!(DI->getKind() == DK_LOOP && RStack.InRegion(DK_PARALLEL)) &&
-        //       "Handle this case in Stage2");
-
+    else if (DI->getKind() == DK_TASK) {
         llvm::outs() << "  -  Create Kernel";
         std::string kernel = CreateKernel(DI,SubStmt);
 
@@ -2574,16 +1462,12 @@ Stage3_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         applyReplacement(R);
     }
 
-    //finished with those directives,
-    //remaining directives:
-    //     update, wait, cache
-    if (DI->isComputeDirective() || DI->isStartOfLoopRegion() ||
-        DI->isDataDirective() || DI->isExecutableDirective()) {
-        SourceLocation DILocStart = DI->getStartLocation().getLocWithOffset(-8);
-        std::string Comment = "//";
-        Replacement RComment(Context->getSourceManager(),DILocStart,0,Comment);
-        applyReplacement(RComment);
-    }
+#if 0
+    SourceLocation DILocStart = DI->getStartLocation().getLocWithOffset(-8);
+    std::string Comment = "//";
+    Replacement RComment(Context->getSourceManager(),DILocStart,0,Comment);
+    applyReplacement(RComment);
+#endif
 
     llvm::outs() << "\n";
 
@@ -2891,7 +1775,7 @@ Stage3_ASTVisitor::VisitCallExpr(CallExpr *CE) {
         SourceLocation EndLoc = CE->getLocEnd().getLocWithOffset(2);
         CharSourceRange Range(SourceRange(StartLoc,EndLoc),/*IsTokenRange=*/false);
 
-        //avoid genwration of NullStmt
+        //avoid generation of NullStmt
         //Replacement R(Context->getSourceManager(),CE,"");
         Replacement R(Context->getSourceManager(),Range,"");
         applyReplacement(R);
@@ -2940,25 +1824,7 @@ Stage3_ASTVisitor::MakeParamFromArg(Arg *A,bool MakeDefinition,
             Ty = ATy->getElementType();
         std::string type = Ty.getAsString(Context->getPrintingPolicy());
 
-        if (CI->isPrivateClause())
-            NewCode += "__local " + type + " *" + CI->getAsString() + NewName;
-        else if (CI->getKind() == CK_DEVICEPTR)
-            NewCode += "__global " + type + OrigName;
-        else if (CI->getKind() == CK_REDUCTION) {
-            //global tmp buffer goes first
-            NewCode += "__global " + type + " *reduction_global_tmp" + NewName + ",";
-            //local tmp buffer goes second
-            NewCode += "__local " + type + " *reduction_local_tmp" + NewName + ",";
-
-            //size goes third
-            NewCode += "__const int reduction_length" + NewName + ",";
-
-            //result goes fourth
-            NewCode += "__global " + type + " *reduction_result" + NewName;
-        }
-        else {
-            NewCode += "__global " + type + " *" + NewName;
-        }
+        NewCode += "__global " + type + " *" + NewName;
     }
     else {
         //get type as string
@@ -2968,72 +1834,10 @@ Stage3_ASTVisitor::MakeParamFromArg(Arg *A,bool MakeDefinition,
         std::stringstream ArgNum;
         ArgNum << ArgPos++;
 
-        if (CI->isPrivateClause()) {
-            NewCode += "error = clSetKernelArg(" + Kernel + ", " + ArgNum.str() +
-                ", sizeof(" + type + "), NULL);";
-            NewCode += "clCheckError(error,\"clSetKernelArg number " + ArgNum.str()
-                + " for '" + Kernel + "'" + "\");";
-        }
-        else if (CI->getKind() == CK_DEVICEPTR) {
-            NewCode += "error = clSetKernelArg(" + Kernel + ", " + ArgNum.str() +
-                ", sizeof(cl_mem), " + OrigName + ");";
-            NewCode += "clCheckError(error,\"clSetKernelArg number " + ArgNum.str()
-                + " for '" + Kernel + "'" + "\");";
-        }
-        else if (CI->getKind() == CK_REDUCTION) {
-            std::stringstream ArgNum2;
-            ArgNum2 << ArgPos++;
-
-            std::stringstream ArgNum3;
-            ArgNum3 << ArgPos++;
-
-            //global tmp buffer goes first
-
-            //needs allocation
-            std::string SizeExpr = "sizeof(" + type + ")*global_ws";
-            std::string NewAllocName = "reduction_global_tmp" + NewName;
-            std::string NewAlloc = "cl_mem " + NewAllocName
-                + " = clCreateBuffer(context, CL_MEM_READ_WRITE," + SizeExpr
-                + ", NULL, &error);";
-            NewCode += NewAlloc + "clCheckError(error,\"create global tmp buffer for reduction clause '" + CI->getAsString() + "'\");";
-
-            NewCode += "error = clSetKernelArg(" + Kernel + ", " + ArgNum.str()
-                + ", sizeof(cl_mem), &" + NewAllocName + ");";
-            NewCode += "clCheckError(error,\"clSetKernelArg number " + ArgNum.str()
-                + " for '" + Kernel + "'" + "\");";
-
-            //needs cleanup
-            std::string NewCleanupCode = "error = clReleaseMemObject(" + NewAllocName + ");";
-            NewCleanupCode += "clCheckError(error,\"release '" + NewAllocName + "'\");";
-
-            CleanupCode += NewCleanupCode;
-
-            //local tmp buffer goes second
-            NewCode += "error = clSetKernelArg(" + Kernel + ", " + ArgNum2.str() +
-                ", sizeof(" + type + ")*local_ws, NULL);";
-            NewCode += "clCheckError(error,\"clSetKernelArg number " + ArgNum2.str()
-                + " for '" + Kernel + "'" + "\");";
-            //size goes third
-            NewCode += "error = clSetKernelArg(" + Kernel + ", " + ArgNum3.str() +
-                ", sizeof(int), &global_ws);";
-            NewCode += "clCheckError(error,\"clSetKernelArg number " + ArgNum3.str()
-                + " for '" + Kernel + "'" + "\");";
-
-            //result goes fourth
-            std::stringstream ArgNum4;
-            ArgNum4 << ArgPos++;
-
-            NewCode += "error = clSetKernelArg(" + Kernel + ", " + ArgNum4.str() +
-                ", sizeof(cl_mem), &" + NewName + ");";
-            NewCode += "clCheckError(error,\"clSetKernelArg number " + ArgNum4.str()
-                + " for '" + Kernel + "'" + "\");";
-        }
-        else {
-            NewCode += "error = clSetKernelArg(" + Kernel + ", " + ArgNum.str() +
-                ", sizeof(cl_mem), &" + NewName + ");";
-            NewCode += "clCheckError(error,\"clSetKernelArg number " + ArgNum.str()
-                + " for '" + Kernel + "'" + "\");";
-        }
+        NewCode += "error = clSetKernelArg(" + Kernel + ", " + ArgNum.str() +
+            ", sizeof(cl_mem), &" + NewName + ");";
+        NewCode += "clCheckError(error,\"clSetKernelArg number " + ArgNum.str()
+            + " for '" + Kernel + "'" + "\");";
     }
 
     return NewCode;
@@ -3055,18 +1859,12 @@ Stage3_ASTVisitor::MakeParams(DirectiveInfo *DI,
     std::string Params;
 
     ClauseList DataClauses;
-    ClauseList PrivateClauses;
-    ClauseList ReductionClauses;
 
     ClauseList &CList = DI->getClauseList();
     for (ClauseList::iterator II = CList.begin(), EE = CList.end();
          II != EE; ++II) {
-        if ((*II)->getKind() == CK_REDUCTION)
-            ReductionClauses.push_back(*II);
-        else if ((*II)->isDataClause())
+        if ((*II)->isDataClause())
             DataClauses.push_back(*II);
-        else if ((*II)->isPrivateClause() && DI->getKind() != DK_LOOP)
-            PrivateClauses.push_back(*II);
     }
 
     UniqueArgVector UniqueArgPool;
@@ -3082,52 +1880,10 @@ Stage3_ASTVisitor::MakeParams(DirectiveInfo *DI,
 
     for (UniqueArgVector::iterator
              IA = UniqueArgPool.begin(), EA = UniqueArgPool.end();
-             IA != EA; ++IA) {
-            Params += MakeParamFromArg(*IA,MakeDefinition,Kernel,ArgNum,CleanupCode);
-            if (MakeDefinition)
+         IA != EA; ++IA) {
+        Params += MakeParamFromArg(*IA,MakeDefinition,Kernel,ArgNum,CleanupCode);
+        if (MakeDefinition)
             if (*IA != UniqueArgPool.back())
-                Params += ", ";
-    }
-
-    if (MakeDefinition)
-    if (!Params.empty())
-        if (!PrivateClauses.empty())
-                Params += ", ";
-
-    for (ClauseList::iterator
-             II = PrivateClauses.begin(), EE = PrivateClauses.end();
-         II != EE; ++II) {
-        ArgVector &Args = (*II)->getArgs();
-        for (ArgVector::iterator IA = Args.begin(), EA = Args.end();
-             IA != EA; ++IA) {
-            Params += MakeParamFromArg(*IA,MakeDefinition,Kernel,ArgNum,CleanupCode);
-            if (MakeDefinition)
-                if (*IA != Args.back())
-                    Params += ", ";
-        }
-        if (MakeDefinition)
-            if (*II != PrivateClauses.back())
-                Params += ", ";
-    }
-
-    if (!Params.empty())
-        if (!ReductionClauses.empty())
-            if (MakeDefinition)
-                Params += ", ";
-
-    for (ClauseList::iterator
-             II = ReductionClauses.begin(), EE = ReductionClauses.end();
-         II != EE; ++II) {
-        ArgVector &Args = (*II)->getArgs();
-        for (ArgVector::iterator IA = Args.begin(), EA = Args.end();
-             IA != EA; ++IA) {
-            Params += MakeParamFromArg(*IA,MakeDefinition,Kernel,ArgNum,CleanupCode);
-            if (MakeDefinition)
-                if (*IA != Args.back())
-                    Params += ", ";
-        }
-        if (MakeDefinition)
-            if (*II != ReductionClauses.back())
                 Params += ", ";
     }
 
@@ -3198,355 +1954,14 @@ Stage3_ASTVisitor::getIdxOfWorkerInLoop(ForStmt *F, std::string Qual) {
 }
 
 std::string
-Stage3_ASTVisitor::MakeReductionPrologue(DirectiveInfo *DI) {
-    std::string NewCode;
-
-    ClauseList &CList = DI->getClauseList();
-    for (ClauseList::iterator II = CList.begin(), EE = CList.end();
-         II != EE; ++II) {
-        ClauseInfo *CI = *II;
-        if (CI->getKind() != CK_REDUCTION)
-            continue;
-
-        std::string InitValue;
-        switch (CI->getReductionOperator()) {
-        case ROP_PLUS:
-            InitValue = STR(REDUCTION_INIT_VAL_PLUS);
-            break;
-        case ROP_MULT:
-            InitValue = STR(REDUCTION_INIT_VAL_MULT);
-            break;
-        case ROP_MAX: {
-            InitValue = STR(REDUCTION_INIT_VAL_MAX_INT);
-
-            QualType QTy = CI->getArgs().back()->getExpr()->getType();
-            if (const BuiltinType *BT =
-                dyn_cast<BuiltinType>(QTy->getCanonicalTypeInternal())) {
-                if (BT->getKind() >= BuiltinType::Half &&
-                    BT->getKind() <= BuiltinType::Float)
-                    InitValue = STR(REDUCTION_INIT_VAL_MAX_FLOAT);
-                else if (BT->getKind() >= BuiltinType::Double &&
-                         BT->getKind() <= BuiltinType::LongDouble)
-                    InitValue = STR(REDUCTION_INIT_VAL_MAX_DOUBLE);
-            }
-            else if (//const ComplexType *CT =
-                     dyn_cast<ComplexType>(QTy->getCanonicalTypeInternal()))
-                //return CT->getElementType()->isFloatingType();
-                assert(0 && "reduction for complex types not implemented");
-            break;
-        }
-        case ROP_MIN: {
-            InitValue = STR(REDUCTION_INIT_VAL_MIN_INT);
-
-            QualType QTy = CI->getArgs().back()->getExpr()->getType();
-            if (const BuiltinType *BT =
-                dyn_cast<BuiltinType>(QTy->getCanonicalTypeInternal())) {
-                if (BT->getKind() >= BuiltinType::Half &&
-                    BT->getKind() <= BuiltinType::Float)
-                    InitValue = STR(REDUCTION_INIT_VAL_MIN_FLOAT);
-                else if (BT->getKind() >= BuiltinType::Double &&
-                         BT->getKind() <= BuiltinType::LongDouble)
-                    InitValue = STR(REDUCTION_INIT_VAL_MIN_DOUBLE);
-            }
-            else if (//const ComplexType *CT =
-                     dyn_cast<ComplexType>(QTy->getCanonicalTypeInternal()))
-                //return CT->getElementType()->isFloatingType();
-                assert(0 && "reduction for complex types not implemented");
-            break;
-        }
-        case ROP_BITWISE_AND:
-            InitValue = STR(REDUCTION_INIT_VAL_BITWISE_AND);
-            break;
-        case ROP_BITWISE_OR:
-            InitValue = STR(REDUCTION_INIT_VAL_BITWISE_OR);
-            break;
-        case ROP_BITWISE_XOR:
-            InitValue = STR(REDUCTION_INIT_VAL_BITWISE_XOR);
-            break;
-        case ROP_LOGICAL_AND:
-            InitValue = STR(REDUCTION_INIT_VAL_LOGICAL_AND);
-            break;
-        case ROP_LOGICAL_OR:
-            InitValue = STR(REDUCTION_INIT_VAL_LOGICAL_OR);
-            break;
-        }
-
-        ArgVector &Args = CI->getArgs();
-        for (ArgVector::iterator IA = Args.begin(), EA = Args.end();
-             IA != EA; ++IA) {
-            Arg *A = *IA;
-
-            //get type as string
-            QualType Ty = A->getExpr()->getType();
-            if (const ArrayType *ATy = Context->getAsArrayType(Ty))
-                Ty = ATy->getElementType();
-            std::string type = Ty.getAsString(Context->getPrintingPolicy());
-
-
-
-            std::string OrigName =
-                A->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
-            std::string NewName = getNewNameFromOrigName(OrigName);
-            //we need a pointer
-            NewCode += type + " reduction_private" + NewName
-                + " = " + InitValue + ";";
-
-            if (Arg *PrivateA =
-                RStack.FindMatchingPrivateOrFirstprivateInRegionStack(A)) {
-                ClauseInfo *PrivateCI = PrivateA->getParent()->getAsClause();
-                assert(PrivateCI);
-                NewCode += type + " *" + PrivateCI->getAsString() + NewName
-                    + " = &reduction_private" + NewName + ";";
-            }
-            else if (Arg *PrivateA =
-                     RStack.FindMatchingPrivateOrFirstprivateInDirective(DI,A)) {
-                ClauseInfo *PrivateCI = PrivateA->getParent()->getAsClause();
-                assert(PrivateCI);
-                NewCode += type + " *" + PrivateCI->getAsString() + NewName
-                    + " = &reduction_private" + NewName + ";";
-            }
-            else
-                NewCode += type + " *" + NewName
-                    + " = &reduction_private" + NewName + ";";
-        }
-    }
-
-    return NewCode;
-}
-
-std::string
-Stage3_ASTVisitor::MakeReductionEpilogue(DirectiveInfo *DI) {
-    std::string NewCode;
-
-    ClauseList &CList = DI->getClauseList();
-    for (ClauseList::iterator II = CList.begin(), EE = CList.end();
-         II != EE; ++II) {
-        ClauseInfo *CI = *II;
-        if (CI->getKind() != CK_REDUCTION)
-            continue;
-
-        std::string Mode;
-        switch (CI->getReductionOperator()) {
-        case ROP_PLUS:         Mode = "plus";         break;
-        case ROP_MULT:         Mode = "mult";         break;
-        case ROP_MAX:          Mode = "max";          break;
-        case ROP_MIN:          Mode = "min";          break;
-        case ROP_BITWISE_AND:  Mode = "bitwise_and";  break;
-        case ROP_BITWISE_OR:   Mode = "bitwise_or";   break;
-        case ROP_BITWISE_XOR:  Mode = "bitwise_xor";  break;
-        case ROP_LOGICAL_AND:  Mode = "logical_and";  break;
-        case ROP_LOGICAL_OR:   Mode = "logical_or";   break;
-        }
-
-        std::string Type = "int";
-        QualType QTy = CI->getArgs().back()->getExpr()->getType();
-        //if (QTy->isIntegerType())
-        //    Type = "int";
-        if (const BuiltinType *BT =
-            dyn_cast<BuiltinType>(QTy->getCanonicalTypeInternal())) {
-            if (BT->getKind() >= BuiltinType::Half &&
-                BT->getKind() <= BuiltinType::Float)
-                Type = "float";
-            else if (BT->getKind() >= BuiltinType::Double &&
-                     BT->getKind() <= BuiltinType::LongDouble)
-                Type = "double";
-        }
-        else if (//const ComplexType *CT =
-                 dyn_cast<ComplexType>(QTy->getCanonicalTypeInternal()))
-            //return CT->getElementType()->isFloatingType();
-            assert(0 && "reduction for complex types not implemented");
-
-        ArgVector &Args = CI->getArgs();
-        for (ArgVector::iterator IA = Args.begin(), EA = Args.end();
-             IA != EA; ++IA) {
-            Arg *A = *IA;
-            std::string OrigName =
-                A->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
-            std::string NewName = getNewNameFromOrigName(OrigName);
-            std::string Buffer = "reduction_global_tmp" + NewName;
-            std::string Scratch = "reduction_local_tmp" + NewName;
-            std::string Length = "reduction_length" + NewName;
-            std::string Result = "reduction_result" + NewName;
-            std::string ReductionPrivate = "reduction_private" + NewName;
-
-            std::string ReductionCall =
-                CALL_REDUCTION(Mode,Type,Buffer,Scratch,Length,Result) + ";";
-            addReduction(Mode,Type);
-
-            NewCode += Buffer + "[get_global_id(0)] = " + ReductionPrivate + ";";
-            NewCode += "barrier(CLK_GLOBAL_MEM_FENCE);";
-            NewCode += ReductionCall;
-            NewCode += "barrier(CLK_GLOBAL_MEM_FENCE);";
-        }
-    }
-
-    return NewCode;
-}
-
-std::string
-Stage3_ASTVisitor::AddExtraCodeForPrivateClauses(DirectiveInfo *DI,
-                                                 std::string OrigBody,
-                                                 bool AddBrackets) {
-    if (DI->getKind() == DK_LOOP)
-        return OrigBody;
-
-    std::string Body = OrigBody;
-
-    //find Prologue and Epilogue for private and firstprivate Clauses
-    std::string Prologue;
-    std::string Epilogue;
-    bool ProloguehasArrays = false;
-    bool EpiloguehasArrays = false;
-    std::string Idx = "__i__";
-
-    ClauseList &CList = DI->getClauseList();
-    for (ClauseList::iterator II = CList.begin(), EE = CList.end();
-         II != EE; ++II) {
-        ClauseInfo *CI = *II;
-        if (!CI->isPrivateClause())
-            continue;
-
-        ArgVector &Args = CI->getArgs();
-        for (ArgVector::iterator IA = Args.begin(), EA = Args.end();
-             IA != EA; ++IA) {
-            Arg *A = *IA;
-
-            std::string PrivateName = CI->getAsString()
-                + "__accll_"
-                + A->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
-
-            ReplaceStringInPlace(PrivateName,"->","_"); //delimiter
-            ReplaceStringInPlace(PrivateName,".","_");  //delimiter
-            ReplaceStringInPlace(PrivateName,"[","_");  //delimiter
-            ReplaceStringInPlace(PrivateName,"]","_");  //delimiter
-
-            //create new name
-            std::string NewName = CreateNewNameFor(A);
-
-#if 0
-            if (isa<ArrayElementArg>(A)) {
-                ArraySubscriptExpr *ASE = cast<ArraySubscriptExpr>(A->getExpr());
-                if (ASE->getIdx()->IgnoreParenCasts()
-                    ->isIntegerConstantExpr(*Context)) {
-                    ReplaceStringInPlace(NewName,"[","_");  //delimiter
-                    ReplaceStringInPlace(NewName,"]","_");  //delimiter
-                }
-            }
-#endif
-
-            if (isa<VarArg>(A)) {
-                if (CI->getKind() == CK_FIRSTPRIVATE)
-                    Prologue += "(*" + PrivateName + ") = (*" + NewName + ");";
-                Epilogue += "(*" + NewName + ") = (*" + PrivateName + ");";
-            }
-            else if (isa<ArrayElementArg>(A)) {
-#if 1
-                ArraySubscriptExpr *ASE = cast<ArraySubscriptExpr>(A->getExpr());
-                if (ASE->getIdx()->IgnoreParenCasts()
-                    ->isIntegerConstantExpr(*Context)) {
-                    if (CI->getKind() == CK_FIRSTPRIVATE)
-                        Prologue += "(*" + PrivateName + ") = (*" + NewName + ");";
-                    Epilogue += "(*" + NewName + ") = (*" + PrivateName + ");";
-                }
-                else {
-                    if (CI->getKind() == CK_FIRSTPRIVATE)
-                        Prologue += "(*" + PrivateName + ") = " + NewName + ";";
-                    Epilogue += NewName + " = (*" + PrivateName + ");";
-                }
-#else
-                if (CI->getKind() == CK_FIRSTPRIVATE)
-                    Prologue += "(*" + PrivateName + ") = " + NewName + ";";
-                Epilogue += NewName + " = (*" + PrivateName + ");";
-#endif
-            }
-            else {
-                if (CI->getKind() == CK_FIRSTPRIVATE) {
-                    ProloguehasArrays = true;
-                    Prologue += PrivateName + "[" + Idx + "] = "
-                        + NewName + "[" + Idx + "];";
-                }
-                EpiloguehasArrays = true;
-                Epilogue += NewName + "[" + Idx + "] = "
-                    + PrivateName + "[" + Idx + "];";
-            }
-        }
-    }
-
-    std::string GetID = "int " + Idx + " = get_group_id(0);";
-    if (ProloguehasArrays)
-        Prologue = GetID + Prologue;
-
-    if (EpiloguehasArrays)
-        Epilogue = GetID + Epilogue;
-
-    //utilize the short circuit evaluation of the condition
-    //the sequence of checks matters!
-    //if (isa<ForStmt>(SubStmt) || (!isa<CompoundStmt>(BodyStmt) &&
-    //                              (!Prologue.empty() || !Epilogue.empty())))
-    if (AddBrackets || !Prologue.empty() || !Epilogue.empty())
-        Body = "{" + Body + "}";
-    Body = "\n/*Main Body*/\n" + Body;
-
-    if (!Prologue.empty())
-        Body = "\n/*Prologue*/\n{" + Prologue + "}" + Body;
-
-    if (!Epilogue.empty())
-        Body = Body + "\n/*Epilogue*/\n{" + Epilogue + "}";
-
-    return Body;
-}
-
-std::string
 Stage3_ASTVisitor::MakeBody(DirectiveInfo *DI, Stmt *SubStmt) {
     std::string Body;
     raw_string_ostream OS(Body);
 
     CompoundStmt *Comp = dyn_cast<CompoundStmt>(SubStmt);
-
-    if (ForStmt *F = dyn_cast<ForStmt>(SubStmt)) {
-        Comp = dyn_cast<CompoundStmt>(F->getBody());
-
-        assert(DI->isStartOfLoopRegion());
-        if (DI->getKind() == DK_PARALLEL_LOOP) {
-            //FIXME: share the iterations between work items
-            OS << getIdxOfWorkerInLoop(F,"global");
-            OS << "if (" + getPrettyExpr(F->getCond()) + ")\n";
-        }
-        else if (DI->getKind() == DK_KERNELS_LOOP) {
-            //give each iteration to one work item
-            OS << getIdxOfWorkerInLoop(F,"global");
-            OS << "if (" + getPrettyExpr(F->getCond()) + ")\n";
-        }
-        else {
-            //DI->getKind() == DK_LOOP
-            //loop directive does not contain data clauses
-            //DI is not yet in the RegionStack, see TraverseAccStmt()
-
-            assert(!RStack.InRegion(DK_LOOP) && "do something with nested loops\n");
-
-            DirectiveInfo *ParentRegion = RStack.getTopComputeOrCombinedRegion();
-            assert(ParentRegion);
-            if (ParentRegion->getKind() == DK_PARALLEL) {
-                //FIXME: share the iterations between work items
-                OS << getIdxOfWorkerInLoop(F,"global");
-                OS << "if (" + getPrettyExpr(F->getCond()) + ")\n";
-            }
-            else if (ParentRegion->getKind() == DK_KERNELS) {
-                OS << getIdxOfWorkerInLoop(F,"global");
-                OS << "if (" + getPrettyExpr(F->getCond()) + ")\n";
-            }
-            else if (ParentRegion->getKind() == DK_PARALLEL_LOOP) {
-                assert(0 && "nested loops are not supported yet!");
-            }
-            else if (ParentRegion->getKind() == DK_KERNELS_LOOP) {
-                assert(0 && "nested loops are not supported yet!");
-            }
-        }
-    }
     assert(Comp);
 
     OS << "{\n";
-    OS << MakeReductionPrologue(DI);
 
     /////////////////////////////////////////////////////////////
     //create nested bodies
@@ -3575,11 +1990,9 @@ Stage3_ASTVisitor::MakeBody(DirectiveInfo *DI, Stmt *SubStmt) {
     }
     /////////////////////////////////////////////////////////////
 
-    OS << MakeReductionEpilogue(DI);
     OS << "\n}\n";
     OS.str();
 
-    Body = AddExtraCodeForPrivateClauses(DI,Body,isa<ForStmt>(SubStmt));
     return Body;
 }
 
@@ -3590,38 +2003,17 @@ Stage3_ASTVisitor::CreateKernel(DirectiveInfo *DI, Stmt *SubStmt) {
     std::string qual("\n__kernel void ");
     std::string prefix("accll_kernel_");
 
-    std::string type("");
-    switch (DI->getKind()) {
-    case DK_PARALLEL:       type = "parallel";       break;
-    case DK_PARALLEL_LOOP:  type = "parallel_loop";  break;
-    case DK_KERNELS:        type = "kernels";        break;
-    case DK_KERNELS_LOOP:   type = "kernels_loop";   break;
-    case DK_LOOP:           type = "nested_loop";    break;
-    default:  assert(0 && "bad call");
-    }
+    std::string type("accurate");
 
     std::string UName = getUniqueKernelName(prefix + type);
     std::string kernel = qual + UName;
 
-    //put the original Directive here, not the Parent!!!
     std::pair<llvm::APSInt,llvm::APSInt> Geometry = getGeometry(DI);
 
     std::string CleanupCode;
 
-    DirectiveInfo *ParentRegion = DI;
-    if (DI->getKind() == DK_LOOP) {
-        //loop directive does not contain data clauses
-        //DI is not yet in the RegionStack, see TraverseAccStmt()
-        ParentRegion = RStack.getTopComputeOrCombinedRegion();
-        assert(ParentRegion);
-    }
-
     DirectiveInfo *EntryDI = DI;
     Stmt *EntrySubStmt = SubStmt;
-    if (ParentRegion->getKind() == DK_KERNELS) {
-        EntryDI = ParentRegion;
-        EntrySubStmt = ParentRegion->getAccStmt()->getSubStmt();
-    }
 
     //create device code
     int ArgNum = 0;
@@ -3644,50 +2036,27 @@ Stage3_ASTVisitor::CreateKernel(DirectiveInfo *DI, Stmt *SubStmt) {
     kernel_create += "clCheckError(error,\"create " + UName + "\");";
 
     ArgNum = 0;
-    std::string StrArgList = MakeParams((ParentRegion->getKind() == DK_KERNELS) ?
-                                        ParentRegion : DI,/*MakeDefinition=*/false,
-                                        UName,CleanupCode,ArgNum);
+    std::string StrArgList = MakeParams(DI,/*MakeDefinition=*/false,UName,CleanupCode,ArgNum);
 
     std::string NewCode;
 
-    if (RStack.InRegion(DK_KERNELS))
-        NewCode += "{";
-
+    NewCode += "{";
     NewCode += "size_t global_ws = " + Geometry.first.toString(10) + ";"
         + "size_t local_ws = " + Geometry.second.toString(10) + ";";
     NewCode += kernel_create;
     NewCode += StrArgList;
 
     ClauseInfo *AsyncCI = 0;
-    ClauseList &CList = ParentRegion->getClauseList();
-    for (ClauseList::iterator
-             II = CList.begin(), EE = CList.end(); II != EE; ++II) {
-        ClauseInfo *CI = *II;
-        if (CI->getKind() == CK_ASYNC) {
-            AsyncCI = CI;
-            break;
-        }
-    }
 
     //Make barrier if neccessary
 
-    Arg *A = (AsyncCI && AsyncCI->hasArgs()) ? AsyncCI->getArg() : 0;
+    Arg *A = 0;
     std::string EventName = CreateNewUniqueEventNameFor(A);
     if (AsyncCI) {
-#if 0
-#error bad code is enabled
-        //this code sometimes produces out of scope event declarations
-        //in conjuction with the use of some OpenACC runtime calls like
-        //acc_async_test, acc_async_test_all
-        SourceLocation EventLoc = (!A || isa<ConstArg>(A)) ?
-            CurrentFunction->getBody()->getLocStart().getLocWithOffset(1) :
-            A->getVarDecl()->getLocStart();
-#else
-        //a safer version, declares all the event objects at the top of
+        //declare all the event objects at the top of
         //the current function scope
         SourceLocation EventLoc =
             CurrentFunction->getBody()->getLocStart().getLocWithOffset(1);
-#endif
 
         //FIXME: add kernel name to AsyncEvents
         //       move release kernel after the barrier??
@@ -3743,8 +2112,7 @@ Stage3_ASTVisitor::CreateKernel(DirectiveInfo *DI, Stmt *SubStmt) {
     kernel_release += "clCheckError(error,\"release " + UName + "\");";
     NewCode += kernel_release;
 
-    if (RStack.InRegion(DK_KERNELS))
-        NewCode += "}";
+    NewCode += "}";
 
     KernelCalls++;
 
@@ -3753,13 +2121,7 @@ Stage3_ASTVisitor::CreateKernel(DirectiveInfo *DI, Stmt *SubStmt) {
 
 std::pair<llvm::APSInt,llvm::APSInt>
 Stage3_ASTVisitor::getGeometry(DirectiveInfo *DI) const {
-    DirectiveInfo *ParentRegion = DI;
-    if (DI->getKind() == DK_LOOP && RStack.InRegion(DK_PARALLEL)) {
-        //DI is not yet in the RegionStack, see TraverseAccStmt()
-        ParentRegion = RStack.getTopComputeOrCombinedRegion();
-        assert(ParentRegion);
-    }
-    return accll::getGeometry(ParentRegion);
+    return accll::getGeometry(DI);
 }
 
 std::pair<llvm::APSInt,llvm::APSInt>
@@ -3774,15 +2136,13 @@ accll::getGeometry(DirectiveInfo *DI) {
     for (ClauseList::iterator
              II = CList.begin(), EE = CList.end(); II != EE; ++II) {
         ClauseInfo *CI = *II;
-        if (CI->getKind() == CK_NUM_GANGS || CI->getKind() == CK_GANG) {
-            Gangs = CI->getArg()->getICE();
-            assert(!foundGangs);
-            foundGangs = true;
-        }
-        else if (CI->getKind() == CK_NUM_WORKERS || CI->getKind() == CK_WORKER) {
+        if (CI->getKind() == CK_WORKERS) {
             Workers = CI->getArg()->getICE();
-            assert(!foundWorkers);
             foundWorkers = true;
+        }
+        else if (CI->getKind() == CK_GROUPS) {
+            Gangs = CI->getArg()->getICE();
+            foundGangs = true;
         }
     }
 
@@ -3815,11 +2175,11 @@ Stage3_ASTVisitor::CreateNewUniqueEventNameFor(Arg *A) {
     std::string NewName("__accll_device_code_event_");  //prefix
 
     //add variable name to event name to correctly separate and identify
-    //async events without Arg or with ConstArg
+    //async events without Arg or with RawExprArgICE
 
     if (A) {
         std::string AStr;
-        if (isa<ConstArg>(A)) {
+        if (isa<RawExprArg>(A) && A->isICE()) {
             NewName += "const_";
             AStr = A->getICE().toString(10);
         }
@@ -3845,7 +2205,7 @@ Stage3_ASTVisitor::CreateNewUniqueEventNameFor(Arg *A) {
 }
 
 std::string
-Stage3_ASTVisitor::EmitCodeForDirectiveWait(DirectiveInfo *DI, Stmt *SubStmt) {
+Stage3_ASTVisitor::WaitForTasks(DirectiveInfo *DI, Stmt *SubStmt) {
     //handle async device code only
 
     if (!DI->hasArgs()) {
@@ -3929,19 +2289,6 @@ Stage4_ASTVisitor::Init(ASTContext *C) {
 
 bool
 Stage4_ASTVisitor::VisitParmVarDecl(ParmVarDecl *P) {
-    const std::string Private = "private";
-    const std::string FirstPrivate = "firstprivate";
-    std::string Name = P->getNameAsString();
-    if (Name.size() > Private.size() &&
-        Name.substr(0,Private.size()).compare(Private) == 0) {
-        hasEpilogue = true;
-    }
-    else if (Name.size() > FirstPrivate.size() &&
-             Name.substr(0,FirstPrivate.size()).compare(FirstPrivate) == 0) {
-        hasPrologue = true;
-        hasEpilogue = true;
-    }
-
     return true;
 }
 
@@ -3963,9 +2310,6 @@ Stage4_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
     if (Name.size() <= KernelPrefix.size() ||
         Name.substr(0,KernelPrefix.size()).compare(KernelPrefix) != 0)
         return true;
-
-    hasPrologue = false;
-    hasEpilogue = false;
 
     //{ CODE; }
     //inline the helper function
@@ -4016,24 +2360,12 @@ Stage4_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
         CompoundStmt *Comp = dyn_cast<CompoundStmt>(FD->getBody());
         assert(Comp);
 
-        //Prologue   -  optional (firstprivate Clauses)
         //Main Body  -  mandatory
-        //Epilogue   -  optional (private, firstprivate Clauses)
         llvm::outs() << Name + "\n";
-        assert(Comp->size() <= 3);
-        assert(Comp->size() > 0);
-
-        //Prologue and Epilogue are ready from the previous Stage
-        //just edit the main body
-
-        CompoundStmt::body_iterator II = Comp->body_begin();
-        CompoundStmt::body_iterator EE = Comp->body_end();
-        for (; II != EE; ++II)
-            assert(isa<CompoundStmt>(*II));
+        assert(Comp->size() == 1);
 
         CompoundStmt::body_iterator MainBody = Comp->body_begin();
-        if (hasPrologue)
-            ++MainBody;
+        assert(isa<CompoundStmt>(*MainBody));
         TRY_TO(TraverseStmt(*MainBody));
     }
 
@@ -4044,12 +2376,11 @@ Stage4_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
 
 bool
 Stage4_ASTVisitor::VisitDeclRefExpr(DeclRefExpr *DRE) {
+#if 0
     VarDecl *VD = dyn_cast<VarDecl>(DRE->getDecl());
     if (!VD)
         return true;
 
-    const std::string Private = "private";
-    const std::string FirstPrivate = "firstprivate";
     std::string Name = VD->getNameAsString();
 
     std::string NewCode;
@@ -4059,21 +2390,13 @@ Stage4_ASTVisitor::VisitDeclRefExpr(DeclRefExpr *DRE) {
              II = DC->decls_begin(), EE = DC->decls_end(); II != EE; ++II)
         if (VarDecl *DVD = dyn_cast<VarDecl>(*II)) {
             std::string DeclName = DVD->getNameAsString();
-            if (DeclName.size() > Private.size() &&
-                DeclName.substr(0,Private.size()).compare(Private) == 0 &&
-                DeclName.substr(Private.size()).compare(Name) == 0)
-                NewCode = Private + Name;
-            else if (DeclName.size() > FirstPrivate.size() &&
-                     DeclName.substr(0,FirstPrivate.size()).
-                     compare(FirstPrivate) == 0 &&
-                     DeclName.substr(FirstPrivate.size()).compare(Name) == 0)
-                NewCode = FirstPrivate + Name;
             if (!NewCode.empty()) {
                 Replacement R(Context->getSourceManager(),DRE,NewCode);
                 applyReplacement(R);
                 return true;
             }
         }
+#endif
     return true;
 }
 

@@ -62,25 +62,6 @@ int main(int argc, const char **argv) {
         return 1;
     }
 
-    llvm::outs() << "\n\n#######     Stage00     #######\n\n";
-    llvm::outs() << "Restructure C dataflow due to 'if' Clauses\n";
-    RefactoringTool Tool00(OptionsParser.getCompilations(), InputFiles);
-    Stage00_ConsumerFactory Stage00(Tool00.getReplacements());
-    if (Tool00.runAndSave(newFrontendActionFactory(&Stage00))) {
-        llvm::errs() << "Stage00 failed - exit.\n";
-        return 1;
-    }
-
-    llvm::outs() << "\n\n#######     Stage01     #######\n\n";
-    llvm::outs() << "Discover implicit kernels ...\n";
-    bool Errors = false;
-    RefactoringTool Tool01(OptionsParser.getCompilations(), InputFiles);
-    Stage01_ConsumerFactory Stage01(Tool01.getReplacements(),Errors);
-    if (Tool01.runAndSave(newFrontendActionFactory(&Stage01)) || Errors) {
-        llvm::errs() << "Stage01 failed - exit.\n";
-        return 1;
-    }
-
     if (InputFiles.empty()) {
         llvm::outs() << "No OpenACC Directives found, nothing to do - exit\n";
         return 1;
@@ -92,16 +73,6 @@ int main(int argc, const char **argv) {
     Stage1_ConsumerFactory Stage1(Tool1.getReplacements());
     if (Tool1.runAndSave(newFrontendActionFactory(&Stage1))) {
         llvm::errs() << "Stage1 failed - exit.\n";
-        return 1;
-    }
-
-    llvm::outs() << "\n\n#######     Stage2     #######\n\n";
-    llvm::outs() << "Set OpenCL datatypes ...\n";
-    llvm::outs() << "Generate OpenCL kernels ...\n";
-    RefactoringTool Tool2(OptionsParserSilent.getCompilations(), InputFiles);
-    Stage2_ConsumerFactory Stage2(Tool2.getReplacements(),KernelFiles);
-    if (Tool2.runAndSave(newFrontendActionFactory(&Stage2))) {
-        llvm::errs() << "Stage2 failed - exit.\n";
         return 1;
     }
 

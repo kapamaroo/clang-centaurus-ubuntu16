@@ -101,135 +101,6 @@ public:
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-//                        Stage00
-///////////////////////////////////////////////////////////////////////////////
-
-class Stage00_ASTVisitor : public clang::RecursiveASTVisitor<Stage00_ASTVisitor> {
-private:
-    clang::tooling::Replacements &Replaces;
-    clang::ASTContext *Context;
-    clang::openacc::ClauseInfo *ParentIfClause;
-
-public:
-
-    void Init(clang::ASTContext *C);
-
-    explicit Stage00_ASTVisitor(clang::tooling::Replacements &Replaces) :
-        Replaces(Replaces), Context(0), ParentIfClause(0) {}
-
-    void applyReplacement(clang::tooling::Replacement &R);
-
-    bool TraverseAccStmt(clang::AccStmt *S);
-    bool VisitAccStmt(clang::AccStmt *ACC);
-
-};
-
-class Stage00_ASTConsumer : public clang::ASTConsumer {
-private:
-    Stage00_ASTVisitor Visitor;
-
-public:
-    explicit Stage00_ASTConsumer(clang::tooling::Replacements &Replaces) :
-        Visitor(Replaces) {}
-
-    virtual void HandleTranslationUnit(clang::ASTContext &Context) {
-        clang::TranslationUnitDecl *TU = Context.getTranslationUnitDecl();
-        Visitor.Init(&Context);
-        Visitor.TraverseDecl(TU);
-    }
-};
-
-//This doesn't need to be an interface,
-//simply having the method newASTConsumer will be enough...
-class Stage00_ConsumerFactory {
-private:
-    clang::tooling::Replacements &Replaces;
-
-public:
-    Stage00_ConsumerFactory(clang::tooling::Replacements &Replaces) :
-        Replaces(Replaces) {}
-
-    clang::ASTConsumer *newASTConsumer() {
-        return new Stage00_ASTConsumer(Replaces);
-    }
-};
-
-///////////////////////////////////////////////////////////////////////////////
-//                        Stage01
-///////////////////////////////////////////////////////////////////////////////
-
-class Stage01_ASTVisitor : public clang::RecursiveASTVisitor<Stage01_ASTVisitor> {
-private:
-    clang::tooling::Replacements &Replaces;
-    clang::ASTContext *Context;
-    clang::openacc::RegionStack RStack;
-    bool &Errors;
-    clang::FunctionDecl *CurrentFunction;
-
-public:
-
-    void Init(clang::ASTContext *C);
-
-    std::string RemoveDotExtension(const std::string &filename);
-    std::string GetDotExtension(const std::string &filename);
-
-    explicit Stage01_ASTVisitor(clang::tooling::Replacements &Replaces,
-                                bool &Errors) :
-        Replaces(Replaces), Context(0), Errors(Errors), CurrentFunction(0) {}
-
-    void applyReplacement(clang::tooling::Replacement &R);
-
-    std::string getPrettyExpr(clang::Expr *E);
-
-    bool TraverseAccStmt(clang::AccStmt *S);
-    bool VisitAccStmt(clang::AccStmt *ACC);
-    bool VisitCallExpr(clang::CallExpr *CE);
-    bool VisitForStmt(clang::ForStmt *F);
-    bool VisitFunctionDecl(clang::FunctionDecl *FD);
-
-};
-
-class Stage01_ASTConsumer : public clang::ASTConsumer {
-private:
-    Stage01_ASTVisitor Visitor;
-
-public:
-    explicit Stage01_ASTConsumer(clang::tooling::Replacements &Replaces,
-                                 bool &Errors) :
-        Visitor(Replaces,Errors) {}
-
-    virtual void HandleTranslationUnit(clang::ASTContext &Context) {
-        clang::SourceManager &SM = Context.getSourceManager();
-        std::string FileName = SM.getFileEntryForID(SM.getMainFileID())->getName();
-        std::string Ext = Visitor.GetDotExtension(FileName);
-        if (Ext.compare(".c")) {
-            llvm::outs() << "skip invalid input file: '" << FileName << "'\n";
-            return;
-        }
-
-        clang::TranslationUnitDecl *TU = Context.getTranslationUnitDecl();
-        Visitor.Init(&Context);
-        Visitor.TraverseDecl(TU);
-    }
-};
-
-//This doesn't need to be an interface,
-//simply having the method newASTConsumer will be enough...
-class Stage01_ConsumerFactory {
-private:
-    clang::tooling::Replacements &Replaces;
-    bool &Errors;
-
-public:
-    Stage01_ConsumerFactory(clang::tooling::Replacements &Replaces, bool &Errors) :
-        Replaces(Replaces), Errors(Errors) {}
-
-    clang::ASTConsumer *newASTConsumer() {
-        return new Stage01_ASTConsumer(Replaces,Errors);
-    }
-};
-
-///////////////////////////////////////////////////////////////////////////////
 //                        Stage1
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -290,8 +161,6 @@ private:
     clang::FunctionDecl *CurrentFunction;
 
     VarDeclVector *IgnoreVars;
-    PrivateArgVector *IgnorePrivateArgs;
-    std::string CleanupCodeForDeclareDirective;
 
     std::string addVarDeclForDevice(clang::openacc::Arg *A);
     std::string addMoveHostToDevice(clang::openacc::Arg *A,
@@ -315,22 +184,18 @@ private:
                                clang::openacc::ClauseInfo *CI,
                                clang::Stmt *SubStmt);
 
-    void EmitCodeForDirectiveCache(clang::openacc::DirectiveInfo *DI,
-                                   clang::Stmt *SubStmt);
-
     void EmitCodeForDataClausesWrapper(clang::openacc::DirectiveInfo *DI,
                                        clang::Stmt *SubStmt);
 
     void EmitCodeForExecutableDirective(clang::openacc::DirectiveInfo *DI,
                                         clang::Stmt *SubStmt);
-    std::string EmitCodeForDirectiveUpdate(clang::openacc::DirectiveInfo *DI,
-                                           clang::Stmt *SubStmt);
+    std::string TaskWaitOn(clang::openacc::DirectiveInfo *DI,
+                           clang::openacc::ClauseInfo *CI);
     std::string EmitCodeForDirectiveWait(clang::openacc::DirectiveInfo *DI,
                                          clang::Stmt *SubStmt);
 
     clang::openacc::Arg *EmitImplicitDataMoveCodeFor(clang::Expr *E);
     bool Rename(clang::Expr *E);
-    void CheckForHostUseOfDeviceResident(clang::Expr *E);
 
     bool Stage1_TraverseTemplateArgumentLocsHelper(const clang::TemplateArgumentLoc *TAL,unsigned Count);
 
@@ -339,7 +204,7 @@ public:
     void Init(clang::ASTContext *C);
 
     explicit Stage1_ASTVisitor(clang::tooling::Replacements &Replaces) :
-        Replaces(Replaces), Context(0), IgnoreVars(0), IgnorePrivateArgs(0)
+        Replaces(Replaces), Context(0), IgnoreVars(0)
         /*, DeviceOnlyVisibleVars(0)*/ {}
 
     //////
@@ -350,7 +215,6 @@ public:
     bool TraverseFunctionDecl(clang::FunctionDecl *FD);
 
     bool VisitAccStmt(clang::AccStmt *ACC);
-    bool VisitDeclStmt(clang::DeclStmt *S);
     bool VisitVarDecl(clang::VarDecl *VD);
     bool VisitDeclRefExpr(clang::DeclRefExpr *DRE);
     bool VisitMemberExpr(clang::MemberExpr *ME);
@@ -552,8 +416,8 @@ public:
     bool VisitTypedefDecl(clang::TypedefDecl *T);
     bool VisitRecordDecl(clang::RecordDecl *R);
 
-    std::string EmitCodeForDirectiveWait(clang::openacc::DirectiveInfo *DI,
-                                         clang::Stmt *SubStmt);
+    std::string WaitForTasks(clang::openacc::DirectiveInfo *DI,
+                             clang::Stmt *SubStmt);
 
     std::string CreateKernel(clang::openacc::DirectiveInfo *DI,
                              clang::Stmt *SubStmt);
@@ -624,9 +488,6 @@ private:
     clang::tooling::Replacements &Replaces;
     clang::ASTContext *Context;
 
-    bool hasPrologue;
-    bool hasEpilogue;
-
     bool Stage4_TraverseTemplateArgumentLocsHelper(const clang::TemplateArgumentLoc *TAL,unsigned Count);
 
 public:
@@ -634,7 +495,7 @@ public:
     void Init(clang::ASTContext *C);
 
     explicit Stage4_ASTVisitor(clang::tooling::Replacements &Replaces) :
-        Replaces(Replaces), Context(0), hasPrologue(false), hasEpilogue(false) {}
+        Replaces(Replaces), Context(0) {}
 
     void applyReplacement(clang::tooling::Replacement &R);
 
