@@ -25,5 +25,33 @@ int accll_async_test(int event_num, ...);
 
 void __accll_unreachable();
 
-#endif
+struct geom {
+    int dims;
+    int *group;
+    int *size;
+};
 
+struct _memory_object {
+    cl_mem cl_obj;
+    size_t size;
+    void *host_ptr;
+    cl_event memory_event;
+} memory_object;
+
+void acc_create_task(int approx,
+                     int num_in, struct _memory_object *inputs,
+                     int num_out, struct _memory_object *outputs,
+                     const char *kernel,
+                     const char *kernel_accurate,
+                     const char *kernel_approximate,
+                     struct geom geometry,
+                     const char *group_name,
+                     size_t source_size);
+
+void acc_wait_all();
+void acc_wait_on(int varnum, ...);
+void acc_wait_label(const char *label);
+void acc_wait_label_ratio(const char *label, const double ratio);
+void acc_wait_label_energy(const char *label, const int energy);
+
+#endif

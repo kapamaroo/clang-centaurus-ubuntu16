@@ -70,12 +70,13 @@ int main(int argc, const char **argv) {
     llvm::outs() << "\n\n#######     Stage1     #######\n\n";
     llvm::outs() << "Generate new scopes, data moves, renaming ...\n";
     RefactoringTool Tool1(OptionsParser.getCompilations(), InputFiles);
-    Stage1_ConsumerFactory Stage1(Tool1.getReplacements());
+    Stage1_ConsumerFactory Stage1(Tool1.getReplacements(),KernelFiles);
     if (Tool1.runAndSave(newFrontendActionFactory(&Stage1))) {
         llvm::errs() << "Stage1 failed - exit.\n";
         return 1;
     }
 
+#if 0
     llvm::outs() << "\n\n#######     Stage3     #######\n\n";
     llvm::outs() << "Write new kernels to separate '*.cl' files ...\n";
     llvm::outs() << "Generate OpenCL API calls on host program ...\n";
@@ -85,6 +86,7 @@ int main(int argc, const char **argv) {
         llvm::errs() << "Stage3 failed - exit.\n";
         return 1;
     }
+#endif
 
     std::vector<std::string> RealKernelFiles;
     for (std::vector<std::string>::iterator
@@ -109,21 +111,6 @@ int main(int argc, const char **argv) {
     KernelARGC += Extra;
 
     int ExitValue = 0;
-
-    llvm::outs() << "\n\n#######     Stage4     #######\n\n";
-    llvm::outs() << "Finalize Kernel Files ...\n";
-    if (!RealKernelFiles.empty()) {
-        CommonOptionsParser KernelOptionsParser(KernelARGC, KernelARGV);
-        RefactoringTool Tool4(KernelOptionsParser.getCompilations(), RealKernelFiles);
-        Stage4_ConsumerFactory Stage4(Tool4.getReplacements());
-        if (Tool4.runAndSave(newFrontendActionFactory(&Stage4))) {
-            llvm::errs() << "Stage4 failed - exit.\n";
-            ExitValue = 4;
-        }
-    }
-    else {
-        llvm::outs() << "Skip\n";
-    }
 
     //format new files
     int status = 0;

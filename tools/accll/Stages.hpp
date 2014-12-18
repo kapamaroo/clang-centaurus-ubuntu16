@@ -19,9 +19,18 @@
 
 namespace accll {
 
+struct ObjRefDef {
+    std::string name_ref;
+    std::string definition;
+
+    ObjRefDef(std::string name_ref, std::string definition) :
+        name_ref(name_ref), definition(definition) {}
+    ObjRefDef() {}
+};
+
 extern std::string KernelHeader;
 
-std::pair<llvm::APSInt,llvm::APSInt>
+std::pair<std::string,std::string>
 getGeometry(clang::openacc::DirectiveInfo *DI);
 
 std::string getNewNameFromOrigName(std::string OrigName);
@@ -124,30 +133,12 @@ public:
     };
 };
 
-class PrivateArgVector : public llvm::SmallVector<clang::openacc::Arg*,32> {
-public:
-    class PrivateArgVector *Prev;
-
-    PrivateArgVector() : Prev(0) {}
-
-    bool has(clang::openacc::Arg* Target) const {
-        for (const_iterator II(begin()), EE(end()); II != EE; ++II) {
-            clang::openacc::Arg *A = *II;
-            if (Target == A)
-                return true;
-        }
-
-        if (Prev)
-            return Prev->has(Target);
-
-        return false;
-    };
-};
-
 class Stage1_ASTVisitor : public clang::RecursiveASTVisitor<Stage1_ASTVisitor> {
 private:
     clang::tooling::Replacements &Replaces;
+    std::vector<std::string> &KernelFiles;
     clang::ASTContext *Context;
+    std::vector<std::string>::iterator CurrentKernelFileIterator;
 
     typedef std::pair<std::string, std::string> ArgNames;
     typedef llvm::DenseMap<clang::openacc::Arg*,ArgNames> NameMap;
@@ -162,7 +153,11 @@ private:
 
     VarDeclVector *IgnoreVars;
 
-    std::string addVarDeclForDevice(clang::openacc::Arg *A);
+    int KernelCalls;
+    int UID;  //unique kernel identifier
+    std::string UserTypes;
+
+    struct ObjRefDef addVarDeclForDevice(clang::openacc::Arg *A);
     std::string addMoveHostToDevice(clang::openacc::Arg *A,
                                     clang::openacc::ClauseInfo *AsyncCI = 0,
                                     std::string Event = std::string());
@@ -182,7 +177,8 @@ private:
 
     void EmitCodeForDataClause(clang::openacc::DirectiveInfo *DI,
                                clang::openacc::ClauseInfo *CI,
-                               clang::Stmt *SubStmt);
+                               clang::Stmt *SubStmt,
+                               llvm::SmallVector<ObjRefDef,8> &init_list);
 
     void EmitCodeForDataClausesWrapper(clang::openacc::DirectiveInfo *DI,
                                        clang::Stmt *SubStmt);
@@ -199,12 +195,40 @@ private:
 
     bool Stage1_TraverseTemplateArgumentLocsHelper(const clang::TemplateArgumentLoc *TAL,unsigned Count);
 
+    std::string getUniqueKernelName(const std::string Base);
+
+    ObjRefDef CreateKernel(clang::openacc::DirectiveInfo *DI,
+                           clang::Stmt *SubStmt);
+    std::string MakeParamFromArg(clang::openacc::Arg *A, bool MakeDefinition,
+                                 std::string Kernel, int &ArgPos,
+                                 std::string &CleanupCode);
+    std::string MakeParams(clang::openacc::DirectiveInfo *DI,
+                           bool MakeDefinition, std::string Kernels,
+                           std::string &CleanupCode, int &ArgNum);
+    std::string MakeBody(clang::openacc::DirectiveInfo *DI, clang::Stmt *SubStmt);
+
+    std::string getCurrentKernelFile() const { return *CurrentKernelFileIterator; }
+    unsigned getCurrentKernelFileStartOffset() const {
+        return KernelHeader.size();
+    }
+    unsigned getCurrentKernelFileEndOffset() const {
+        clang::SourceManager &SM = Context->getSourceManager();
+        const clang::FileEntry *KernelEntry =
+            SM.getFileManager().getFile(getCurrentKernelFile());
+        assert(KernelEntry);
+        return KernelEntry->getSize();
+    }
+
 public:
 
     void Init(clang::ASTContext *C);
+    void Finish();
 
-    explicit Stage1_ASTVisitor(clang::tooling::Replacements &Replaces) :
-        Replaces(Replaces), Context(0), IgnoreVars(0)
+    explicit Stage1_ASTVisitor(clang::tooling::Replacements &Replaces,
+                               std::vector<std::string> &KernelFiles) :
+        Replaces(Replaces), KernelFiles(KernelFiles), Context(0),
+        CurrentKernelFileIterator(KernelFiles.begin()),
+        IgnoreVars(0), KernelCalls(0), UID(0)
         /*, DeviceOnlyVisibleVars(0)*/ {}
 
     //////
@@ -221,6 +245,10 @@ public:
     bool VisitArraySubscriptExpr(clang::ArraySubscriptExpr *ASE);
     bool VisitCallExpr(clang::CallExpr *CE);
     bool VisitReturnStmt(clang::ReturnStmt *S);
+
+    bool VisitEnumDecl(clang::EnumDecl *E);
+    bool VisitTypedefDecl(clang::TypedefDecl *T);
+    bool VisitRecordDecl(clang::RecordDecl *R);
 };
 
 class Stage1_ASTConsumer : public clang::ASTConsumer {
@@ -228,86 +256,12 @@ private:
     Stage1_ASTVisitor Visitor;
 
 public:
-    explicit Stage1_ASTConsumer(clang::tooling::Replacements &Replaces) :
-        Visitor(Replaces) {}
-
-    virtual void HandleTranslationUnit(clang::ASTContext &Context) {
-        clang::TranslationUnitDecl *TU = Context.getTranslationUnitDecl();
-        Visitor.Init(&Context);
-        Visitor.TraverseDecl(TU);
-    }
-};
-
-//This doesn't need to be an interface,
-//simply having the method newASTConsumer will be enough...
-class Stage1_ConsumerFactory {
-private:
-    clang::tooling::Replacements &Replaces;
-
-public:
-    Stage1_ConsumerFactory(clang::tooling::Replacements &Replaces) :
-        Replaces(Replaces) {}
-    clang::ASTConsumer *newASTConsumer() {
-        return new Stage1_ASTConsumer(Replaces);
-    }
-};
-
-///////////////////////////////////////////////////////////////////////////////
-//                        Stage2
-///////////////////////////////////////////////////////////////////////////////
-
-class Stage2_ASTVisitor : public clang::RecursiveASTVisitor<Stage2_ASTVisitor> {
-private:
-    clang::tooling::Replacements &Replaces;
-    std::vector<std::string> &KernelFiles;
-    clang::ASTContext *Context;
-    clang::openacc::RegionStack RStack;
-    std::vector<std::string>::iterator CurrentKernelFileIterator;
-
-public:
-    void Init(clang::ASTContext *C);
-    void Finish();
-
-    std::string getCurrentKernelFile() const { return *CurrentKernelFileIterator; }
-
-    explicit Stage2_ASTVisitor(clang::tooling::Replacements &Replaces,
-                                   std::vector<std::string> &KernelFiles) :
-        Replaces(Replaces), KernelFiles(KernelFiles), Context(0),
-        CurrentKernelFileIterator(KernelFiles.begin()) {}
-
-    void applyReplacement(clang::tooling::Replacement &R);
-
-    std::string getPrettyExpr(clang::Expr *E);
-
-    bool TraverseAccStmt(clang::AccStmt *S);
-    bool VisitAccStmt(clang::AccStmt *ACC);
-
-    std::string getIdxOfWorkerInLoop(clang::ForStmt *F, std::string Qual);
-
-};
-
-class Stage2_ASTConsumer : public clang::ASTConsumer {
-private:
-    Stage2_ASTVisitor Visitor;
-
-public:
-    explicit Stage2_ASTConsumer(clang::tooling::Replacements &Replaces,
-                                    std::vector<std::string> &KernelFiles) :
+    explicit Stage1_ASTConsumer(clang::tooling::Replacements &Replaces,
+                                std::vector<std::string> &KernelFiles) :
         Visitor(Replaces,KernelFiles) {}
 
     virtual void HandleTranslationUnit(clang::ASTContext &Context) {
         clang::TranslationUnitDecl *TU = Context.getTranslationUnitDecl();
-
-#if 0
-        if (Visitor.getCurrentKernelFile().empty()) {
-            clang::SourceManager &SM = Context.getSourceManager();
-            std::string FileName =
-                SM.getFileEntryForID(SM.getMainFileID())->getName();
-            llvm::outs() << "No Kernels, Skip Stage2 for '" << FileName << "'\n";
-            return;
-        }
-#endif
-
         Visitor.Init(&Context);
         Visitor.TraverseDecl(TU);
         Visitor.Finish();
@@ -316,20 +270,21 @@ public:
 
 //This doesn't need to be an interface,
 //simply having the method newASTConsumer will be enough...
-class Stage2_ConsumerFactory {
+class Stage1_ConsumerFactory {
 private:
     clang::tooling::Replacements &Replaces;
     std::vector<std::string> &KernelFiles;
 
 public:
-    Stage2_ConsumerFactory(clang::tooling::Replacements &Replaces,
-                               std::vector<std::string> &KernelFiles) :
+    Stage1_ConsumerFactory(clang::tooling::Replacements &Replaces,
+                           std::vector<std::string> &KernelFiles) :
         Replaces(Replaces), KernelFiles(KernelFiles) {}
     clang::ASTConsumer *newASTConsumer() {
-        return new Stage2_ASTConsumer(Replaces,KernelFiles);
+        return new Stage1_ASTConsumer(Replaces,KernelFiles);
     }
 };
 
+#if 0
 ///////////////////////////////////////////////////////////////////////////////
 //                        Stage3
 ///////////////////////////////////////////////////////////////////////////////
@@ -352,47 +307,9 @@ private:
     int hasDirectives;
 
     std::string UserTypes;
-    std::vector<std::string> ReductionPool;
 
     bool Stage3_TraverseTemplateArgumentLocsHelper(const clang::TemplateArgumentLoc *TAL,unsigned Count);
 public:
-
-    void Init(clang::ASTContext *C);
-    void Finish();
-    std::string getCurrentKernelFile() const { return *CurrentKernelFileIterator; }
-    unsigned getCurrentKernelFileStartOffset() const {
-        return KernelHeader.size();
-    }
-    unsigned getCurrentKernelFileEndOffset() const {
-        clang::SourceManager &SM = Context->getSourceManager();
-        const clang::FileEntry *KernelEntry =
-            SM.getFileManager().getFile(getCurrentKernelFile());
-        return KernelEntry->getSize();
-    }
-
-    bool hasReduction(std::string Mode, std::string Type) {
-        std::string NewReduction = Mode + "_" + Type;
-        for (std::vector<std::string>::iterator II = ReductionPool.begin(),
-                 EE = ReductionPool.end(); II != EE; ++II)
-            if (NewReduction.compare(*II) == 0)
-                return true;
-        return false;
-    }
-
-    void addReduction(std::string Mode, std::string Type) {
-        if (hasReduction(Mode,Type))
-            return;
-        std::string NewReduction = Mode + "_" + Type;
-        ReductionPool.push_back(NewReduction);
-    }
-
-    std::pair<llvm::APSInt,llvm::APSInt>
-    getGeometry(clang::openacc::DirectiveInfo *DI) const;
-
-    std::string AddExtraCodeForPrivateClauses(clang::openacc::DirectiveInfo *DI,
-                                              std::string OrigBody,
-                                              bool AddBrackets);
-
     explicit Stage3_ASTVisitor(clang::tooling::Replacements &Replaces,
                                std::vector<std::string> &KernelFiles) :
         Replaces(Replaces), KernelFiles(KernelFiles), Context(0), UID(0),
@@ -401,38 +318,19 @@ public:
 
     void applyReplacement(clang::tooling::Replacement &R);
 
-    std::string getUniqueKernelName(const std::string Base);
     std::string CreateNewUniqueEventNameFor(clang::openacc::Arg *A);
 
     std::string getPrettyExpr(clang::Expr *E);
     std::string CreateNewNameFor(clang::openacc::Arg *A, bool AddPrefix = true);
 
-    bool TraverseAccStmt(clang::AccStmt *S);
     bool TraverseFunctionDecl(clang::FunctionDecl *FD);
-    bool VisitAccStmt(clang::AccStmt *ACC);
     bool VisitVarDecl(clang::VarDecl *VD);
     bool VisitCallExpr(clang::CallExpr *CE);
     bool VisitEnumDecl(clang::EnumDecl *E);
     bool VisitTypedefDecl(clang::TypedefDecl *T);
     bool VisitRecordDecl(clang::RecordDecl *R);
 
-    std::string WaitForTasks(clang::openacc::DirectiveInfo *DI,
-                             clang::Stmt *SubStmt);
-
-    std::string CreateKernel(clang::openacc::DirectiveInfo *DI,
-                             clang::Stmt *SubStmt);
-    std::string MakeParamFromArg(clang::openacc::Arg *A, bool MakeDefinition,
-                                 std::string Kernel, int &ArgPos,
-                                 std::string &CleanupCode);
-    std::string MakeParams(clang::openacc::DirectiveInfo *DI,
-                           bool MakeDefinition, std::string Kernels,
-                           std::string &CleanupCode, int &ArgNum);
-    std::string MakeBody(clang::openacc::DirectiveInfo *DI, clang::Stmt *SubStmt);
     std::string getIdxOfWorkerInLoop(clang::ForStmt *F, std::string Qual);
-
-    std::string MakeReductionPrologue(clang::openacc::DirectiveInfo *DI);
-    std::string MakeReductionEpilogue(clang::openacc::DirectiveInfo *DI);
-
 };
 
 class Stage3_ASTConsumer : public clang::ASTConsumer {
@@ -457,9 +355,7 @@ public:
         }
 #endif
 
-        Visitor.Init(&Context);
         Visitor.TraverseDecl(TU);
-        Visitor.Finish();
     }
 };
 
@@ -478,67 +374,7 @@ public:
         return new Stage3_ASTConsumer(Replaces,KernelFiles);
     }
 };
-
-///////////////////////////////////////////////////////////////////////////////
-//                        Stage4
-///////////////////////////////////////////////////////////////////////////////
-
-class Stage4_ASTVisitor : public clang::RecursiveASTVisitor<Stage4_ASTVisitor> {
-private:
-    clang::tooling::Replacements &Replaces;
-    clang::ASTContext *Context;
-
-    bool Stage4_TraverseTemplateArgumentLocsHelper(const clang::TemplateArgumentLoc *TAL,unsigned Count);
-
-public:
-
-    void Init(clang::ASTContext *C);
-
-    explicit Stage4_ASTVisitor(clang::tooling::Replacements &Replaces) :
-        Replaces(Replaces), Context(0) {}
-
-    void applyReplacement(clang::tooling::Replacement &R);
-
-    std::string getPrettyExpr(clang::Expr *E);
-
-    bool TraverseFunctionDecl(clang::FunctionDecl *FD);
-    bool TraverseCallExpr(clang::CallExpr *CE);
-    bool TraverseParenExpr(clang::ParenExpr *PE);
-    bool VisitDeclRefExpr(clang::DeclRefExpr *DRE);
-    bool VisitCallExpr(clang::CallExpr *CE);
-    bool VisitParmVarDecl(clang::ParmVarDecl *P);
-
-};
-
-class Stage4_ASTConsumer : public clang::ASTConsumer {
-private:
-    Stage4_ASTVisitor Visitor;
-
-public:
-    explicit Stage4_ASTConsumer(clang::tooling::Replacements &Replaces) :
-        Visitor(Replaces) {}
-
-    virtual void HandleTranslationUnit(clang::ASTContext &Context) {
-        clang::TranslationUnitDecl *TU = Context.getTranslationUnitDecl();
-
-        Visitor.Init(&Context);
-        Visitor.TraverseDecl(TU);
-    }
-};
-
-//This doesn't need to be an interface,
-//simply having the method newASTConsumer will be enough...
-class Stage4_ConsumerFactory {
-private:
-    clang::tooling::Replacements &Replaces;
-
-public:
-    Stage4_ConsumerFactory(clang::tooling::Replacements &Replaces) :
-        Replaces(Replaces) {}
-    clang::ASTConsumer *newASTConsumer() {
-        return new Stage4_ASTConsumer(Replaces);
-    }
-};
+#endif
 
 }  //namespace accll
 
