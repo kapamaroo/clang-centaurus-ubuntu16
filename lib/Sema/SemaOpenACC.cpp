@@ -526,10 +526,20 @@ OpenACC::isValidDirectiveTask(DirectiveInfo *DI) {
     //check for missing clauses and apply implementation defaults
     MaybeSetImplementationDefaultClauses(DI);
 
+    ClauseInfo *Workers = NULL;
+    ClauseInfo *Groups = NULL;
+
     ClauseList &CList = DI->getClauseList();
     for (ClauseList::iterator II = CList.begin(), EE = CList.end(); II != EE; ++II) {
-        //ClauseInfo *CI = *II;
+        ClauseInfo *CI = *II;
+        if (!Workers && CI->getKind() == CK_WORKERS)
+            Workers = CI;
+        else if (!Groups && CI->getKind() == CK_GROUPS)
+            Groups = CI;
     }
+
+    if (Workers->getArgs().size() != Groups->getArgs().size())
+        return false;
 
     return true;
 }

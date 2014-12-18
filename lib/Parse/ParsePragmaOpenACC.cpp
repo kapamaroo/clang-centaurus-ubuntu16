@@ -365,8 +365,41 @@ Parser::ParseClauseOn(DirectiveKind DK, ClauseInfo *CI) {
 
 bool
 Parser::ParseClauseWorkers(DirectiveKind DK, ClauseInfo *CI) {
-    if (!ParseArgScalarIntExpr(DK,CI))
+    ArgVector &Args = CI->getArgs();
+
+    bool pending_comma(false);
+    while (1) {
+        ExprResult Expr = ParseCastExpression(false,false,NotTypeCast);
+        if (!Expr.isUsable())
+            return false;
+
+        const Type *ETy = Expr.get()->getType().getTypePtr();
+        if (!ETy->isIntegerType()) {
+            PP.Diag(CI->getStartLocation(),diag::note_pragma_acc_parser_test)
+                << "expected expression of integer type";
+            return false;
+        }
+
+        Arg *A = new (Actions.getASTContext()) RawExprArg(CI,Expr.get(),&Actions.getASTContext());
+        Args.push_back(A);
+
+        pending_comma = false;
+        if (Tok.is(tok::comma)) {
+            ConsumeToken();
+            pending_comma = true;
+        }
+
+        if (Tok.is(tok::r_paren))
+            break;
+    }
+
+    if (pending_comma)
+        PP.Diag(Tok,diag::warn_pragma_acc_pending_comma);
+
+    //ignore any construct with empty list
+    if (Args.empty())
         return false;
+
     return true;
 }
 
