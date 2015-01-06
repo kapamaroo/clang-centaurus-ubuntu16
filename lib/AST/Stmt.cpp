@@ -1145,18 +1145,10 @@ bool CapturedStmt::capturesVariable(const VarDecl *Var) const {
 AccStmt::AccStmt(openacc::DirectiveInfo *DI) :
     Stmt(AccStmtClass), DI(DI), SubStmt(0) {}
 
-void
-AccStmt::setEndLocation(SourceLocation EndLoc) { DI->setEndLocation(EndLoc); }
-
 SourceLocation
-AccStmt::getLocStart() const { return DI->getStartLocation(); }
+AccStmt::getLocStart() const { return DI->getLocStart(); }
 
 SourceLocation
 AccStmt::getLocEnd() const {
-    return SubStmt ? SubStmt->getLocEnd() : DI->getEndLocation();
-}
-
-SourceRange
-AccStmt::getSourceRange() const {
-    return SourceRange(DI->getStartLocation(),DI->getEndLocation());
+    return SubStmt ? SubStmt->getLocEnd() : DI->getLocEnd();
 }

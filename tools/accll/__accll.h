@@ -25,10 +25,10 @@ int accll_async_test(int event_num, ...);
 
 void __accll_unreachable();
 
-struct geom {
-    int dims;
-    int *group;
-    int *size;
+struct _geometry {
+    int dimensions;
+    int *global;
+    int *local;
 };
 
 struct _memory_object {
@@ -44,7 +44,7 @@ void acc_create_task(int approx,
                      const char *kernel,
                      const char *kernel_accurate,
                      const char *kernel_approximate,
-                     struct geom geometry,
+                     struct _geometry geometry,
                      const char *group_name,
                      size_t source_size);
 

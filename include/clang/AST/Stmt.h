@@ -2127,11 +2127,8 @@ public:
   Stmt *getSubStmt() const { return SubStmt; }
   void setSubStmt(Stmt *s) { SubStmt = s; }
 
-  void setEndLocation(SourceLocation EndLoc);
-
   SourceLocation getLocStart() const LLVM_READONLY;
   SourceLocation getLocEnd() const LLVM_READONLY;
-  SourceRange getSourceRange() const LLVM_READONLY;
 
   static bool classof(const Stmt *T) {
       return T->getStmtClass() == AccStmtClass;

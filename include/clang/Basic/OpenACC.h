@@ -84,8 +84,8 @@ public:
     ArgKind getKind() const { return Kind; }
     Expr *getExpr() const { return E; }
 
-    SourceLocation getStartLocation() const { return StartLoc; }
-    SourceLocation getEndLocation() const { return EndLoc; }
+    SourceLocation getLocStart() const { return StartLoc; }
+    SourceLocation getLocEnd() const { return EndLoc; }
 
     CommonInfo *getParent() { return Parent; }
     FieldNesting &getFieldNesting() { return Fields; }
@@ -227,10 +227,11 @@ public:
     Arg *getArg() { return Args.back(); }
     Arg *getArg() const { return Args.back(); }
 
-    const SourceLocation &getStartLocation() const { return StartLoc; }
-    const SourceLocation &getEndLocation() const { return EndLoc; }
+    const SourceLocation &getLocStart() const { return StartLoc; }
+    const SourceLocation &getLocEnd() const { return EndLoc; }
+    SourceRange getSourceRange() const { return SourceRange(getLocStart(),getLocEnd()); }
 
-    void setEndLocation(SourceLocation eloc) { EndLoc = eloc; }
+    void setLocEnd(SourceLocation eloc) { EndLoc = eloc; }
     void setArg(Arg *A) { Args.push_back(A); }
     bool hasArgs() const { return !Args.empty(); }
 

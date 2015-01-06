@@ -53,9 +53,7 @@ static DirectiveInfo*
 ActOnNewOpenAccDirective(DirectiveKind DK, SourceLocation StartLoc,
                          ASTContext &Context) {
     DirectiveInfo *DI = new (Context) DirectiveInfo(DK,StartLoc);
-    assert(DI);
     AccStmt *ACC = new (Context) AccStmt(DI);
-    assert(ACC);
     DI->setAccStmt(ACC);
     return ACC->getDirective();
 }
@@ -174,7 +172,7 @@ static bool isDuplicate(ClauseList &CList, ClauseKind CK, SourceLocation &Loc) {
     for (ClauseList::iterator II = CList.begin(), EE = CList.end(); II != EE; ++II) {
         ClauseInfo *CI = *II;
         if (CI->getKind() == CK) {
-            Loc = CI->getStartLocation();
+            Loc = CI->getLocStart();
             return true;
         }
     }
@@ -205,7 +203,7 @@ bool Parser::ParseArgScalarIntExpr(DirectiveKind DK, CommonInfo *Common) {
 
     const Type *ETy = E.get()->getType().getTypePtr();
     if (!ETy->isIntegerType()) {
-        PP.Diag(Common->getStartLocation(),diag::note_pragma_acc_parser_test)
+        PP.Diag(Common->getLocStart(),diag::note_pragma_acc_parser_test)
             << "expected expression of integer type";
         return false;
     }
@@ -223,7 +221,7 @@ bool Parser::ParseArgDoubleExpr(DirectiveKind DK, CommonInfo *Common) {
 
     const Type *ETy = E.get()->getType().getTypePtr();
     if (!ETy->isFloatingType()) {
-        PP.Diag(Common->getStartLocation(),diag::note_pragma_acc_parser_test)
+        PP.Diag(Common->getLocStart(),diag::note_pragma_acc_parser_test)
             << "expected expression of floating type";
         return false;
     }
@@ -375,7 +373,7 @@ Parser::ParseClauseWorkers(DirectiveKind DK, ClauseInfo *CI) {
 
         const Type *ETy = Expr.get()->getType().getTypePtr();
         if (!ETy->isIntegerType()) {
-            PP.Diag(CI->getStartLocation(),diag::note_pragma_acc_parser_test)
+            PP.Diag(CI->getLocStart(),diag::note_pragma_acc_parser_test)
                 << "expected expression of integer type";
             return false;
         }
@@ -415,7 +413,7 @@ Parser::ParseClauseGroups(DirectiveKind DK, ClauseInfo *CI) {
 
         const Type *ETy = Expr.get()->getType().getTypePtr();
         if (!ETy->isIntegerType()) {
-            PP.Diag(CI->getStartLocation(),diag::note_pragma_acc_parser_test)
+            PP.Diag(CI->getLocStart(),diag::note_pragma_acc_parser_test)
                 << "expected expression of integer type";
             return false;
         }
@@ -514,6 +512,7 @@ void Parser::HandlePragmaOpenACC() {
     //get the first clause if any
     ConsumeAnyToken();
 
+    assert(DirectiveStartLoc.isValid());
     DirectiveInfo *DI =
         ActOnNewOpenAccDirective(DK,DirectiveStartLoc,Actions.getASTContext());
 
@@ -532,14 +531,15 @@ void Parser::HandlePragmaOpenACC() {
         else
             DirectiveEndLoc = ConsumeToken();  //consume eod
     }
-    else if (Tok.is(tok::eod))
+    else {
+        assert(Tok.is(tok::eod) && "unknown Parser state");
         DirectiveEndLoc = ConsumeToken();  //consume eod
-    else
-        assert(0 && "unknown Parser state");
+    }
 
     //we consumed the eod in each case
 
-    DI->setEndLocation(DirectiveEndLoc);
+    assert(DirectiveEndLoc.isValid());
+    DI->setLocEnd(DirectiveEndLoc);
     Actions.getACCInfo()->isValidDirectiveWrapper(DI);
 }
 
@@ -620,7 +620,7 @@ Parser::ParseClauseWrapper(DirectiveInfo *DI) {
         return false;
     }
     ClauseEndLoc = ConsumeParen();
-    CI->setEndLocation(ClauseEndLoc);
+    CI->setLocEnd(ClauseEndLoc);
 
     //PP.Diag(ClauseStartLoc,diag::note_pragma_acc_found_clause);
 

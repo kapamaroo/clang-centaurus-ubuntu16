@@ -574,7 +574,7 @@ OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
         //one that has all the on() clauses, and another that has all the label()
         //and ratio clauses(). ratio() clause is unique.
 
-        S.Diag(DI->getStartLocation(),diag::err_pragma_acc_taskwait_clauses)
+        S.Diag(DI->getLocStart(),diag::err_pragma_acc_taskwait_clauses)
             << "invalit combination of clauses";
         return false;
     }
@@ -585,7 +585,7 @@ OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
 void
 OpenACC::WarnOnDirective(DirectiveInfo *DI) {
     if (DI)
-        S.Diag(DI->getStartLocation(),diag::err_pragma_acc_illegal_directive_location)
+        S.Diag(DI->getLocStart(),diag::err_pragma_acc_illegal_directive_location)
             << DI->getAsString();
 }
 
@@ -611,16 +611,16 @@ StmtResult
 OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
     assert(DI && "Bad Call");
     //S.Diag(SubStmt->getLocStart(),diag::note_pragma_acc_test) << "this statement";
-    //S.Diag(DI->getStartLocation(),diag::note_pragma_acc_test) << "has this directive";
+    //S.Diag(DI->getLocStart(),diag::note_pragma_acc_test) << "has this directive";
 
     if (!DI)
         return StmtEmpty();
 
     if (RStack.DetectInvalidConstructNesting(DI)) {
-        SourceLocation Loc = DI->getStartLocation();
+        SourceLocation Loc = DI->getLocStart();
         S.Diag(Loc,diag::err_pragma_acc_invalid_nesting);
         if (!RStack.empty()) {
-            SourceLocation ParentLoc = RStack.back()->getStartLocation();
+            SourceLocation ParentLoc = RStack.back()->getLocStart();
             S.Diag(ParentLoc,diag::note_pragma_acc_invalid_nesting);
         }
         return StmtEmpty();
@@ -659,7 +659,7 @@ OpenACC::FindValidICE(Arg *A) {
     if (A->isICE() && A->getICE().isNonNegative())
         return true;
 
-    S.Diag(A->getStartLocation(),diag::err_pragma_acc_expected_ice);
+    S.Diag(A->getLocStart(),diag::err_pragma_acc_expected_ice);
     return false;
 }
 
@@ -687,7 +687,7 @@ OpenACC::WarnOnDuplicatesInList(ArgVector &Tmp, ArgVector &Args) {
         Arg *A = *II;
         if (isa<VarArg>(A) || isa<ArrayArg>(A)) {
             if (FindVarDecl(Tmp,A)) {
-                SourceLocation Loc =A->getStartLocation();
+                SourceLocation Loc =A->getLocStart();
                 S.Diag(Loc,diag::err_pragma_acc_duplicate_vardecl);
                 status = true;
                 continue;
@@ -796,8 +796,8 @@ OpenACC::WarnOnVisibleCopyFromDeclareDirective(ArgVector &Args) {
             for (ArgVector::iterator RR = Args.begin(), SS = Args.end(); RR != SS; ++RR) {
                 Arg *PrevArg = *RR;
                 if (A->Matches(PrevArg)) {
-                    S.Diag(A->getStartLocation(),diag::err_pragma_acc_has_visible_copy);
-                    S.Diag(PrevArg->getStartLocation(),diag::note_pragma_acc_visible_copy_location);
+                    S.Diag(A->getLocStart(),diag::err_pragma_acc_has_visible_copy);
+                    S.Diag(PrevArg->getLocStart(),diag::note_pragma_acc_visible_copy_location);
                     status = true;
                 }
             }
@@ -820,7 +820,7 @@ OpenACC::WarnOnMissingVisibleCopy(ArgVector &Args, DirectiveInfo *ExtraDI) {
         else if (RStack.FindVisibleCopyInRegionStack(A))
             continue;  //do nothing
 
-        SourceLocation Loc = A->getStartLocation();
+        SourceLocation Loc = A->getLocStart();
         S.Diag(Loc,diag::err_pragma_acc_missing_visible_copy);
         //do not return immediately, find all VarDecls without visible copy
         status = true;
@@ -869,7 +869,7 @@ OpenACC::WarnOnArgKind(ArgVector &Args, ArgKind AK) {
     for (ArgVector::iterator II = Args.begin(), EE = Args.end(); II != EE; ++II) {
         Arg *A = *II;
         if (A->getKind() == AK) {
-            S.Diag(A->getStartLocation(),diag::err_pragma_acc_illegal_arg_kind)
+            S.Diag(A->getLocStart(),diag::err_pragma_acc_illegal_arg_kind)
                 << A->getKindAsString()
                 << "list";
             status = true;
@@ -888,11 +888,11 @@ OpenACC::SetVisibleCopy(ArgVector &Args, ClauseInfo *CI) {
     bool status(false);
     for (ArgVector::iterator II = Args.begin(), EE = Args.end(); II != EE; ++II) {
         Arg *A = *II;
-        SourceLocation Loc = A->getStartLocation();
+        SourceLocation Loc = A->getLocStart();
         //do not set visible copy for array elements or subarrays
         if (isa<VarArg>(A) || isa<ArrayArg>(A)) {
             if (Arg *PrevArg = RStack.FindVisibleCopyInRegionStack(A)) {
-                SourceLocation PrevLoc = PrevArg->getStartLocation();
+                SourceLocation PrevLoc = PrevArg->getLocStart();
                 S.Diag(Loc,diag::err_pragma_acc_redeclared_vardecl);
                 S.Diag(PrevLoc,diag::note_pragma_acc_visible_copy_location);
                 status = true;

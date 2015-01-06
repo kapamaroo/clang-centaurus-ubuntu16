@@ -13,6 +13,15 @@ using namespace clang::tooling;
 using namespace clang::openacc;
 using namespace accll;
 
+static
+void EmitCodeForDataClause(clang::ASTContext *Context,
+                           clang::openacc::DirectiveInfo *DI,
+                           clang::openacc::ClauseInfo *CI,
+                           clang::Stmt *SubStmt,
+                           llvm::SmallVector<ObjRefDef,8> &init_list,
+                           NameMap &Map,
+                           RegionStack &RStack);
+
 struct GeometrySrc : ObjRefDef {
 private:
     void init(DirectiveInfo *DI, clang::ASTContext *Context);
@@ -24,22 +33,112 @@ public:
 };
 
 struct TaskSrc {
+    clang::ASTContext *Context;
+    clang::openacc::RegionStack &RStack;
+
     std::string runtime_call;
 
-    std::string approx;              //int
-    std::string num_in;              //int
-    std::string inputs;              //struct _memory_object *
-    std::string num_out;             //int
-    std::string outputs;             //struct _memory_object *
+    std::string Approx;              //int
+
+    DataIOSrc MemObjInfo;
+    ObjRefDef Newkernel;
+
     std::string kernel;              //const char *
     std::string kernel_accurate;     //const char *
     std::string kernel_approximate;  //const char *
-    std::string geometry;            //struct geom
-    std::string group_name;          //const char *
+
+    GeometrySrc Geometry;
+
+    std::string Label;               //const char *
     std::string source_size;         //size_t
 
-    TaskSrc() : runtime_call("acc_create_task") {}
+    static int KernelCalls;
+
+    TaskSrc(clang::ASTContext *Context, std::string _call, DirectiveInfo *DI,
+            NameMap &Map, clang::openacc::RegionStack &RStack,
+            clang::tooling::Replacements &ReplacementPool) :
+        Context(Context), RStack(RStack),
+        runtime_call(_call),
+        MemObjInfo(Context,DI,Map,RStack),
+        Geometry(DI,Context)
+    {
+        init(Context,DI);
+    }
+
+    std::string HostCall();
+    std::string KernelCode();
+
+private:
+    void init(clang::ASTContext *Context,DirectiveInfo *DI);
+    ObjRefDef CreateKernel(clang::openacc::DirectiveInfo *DI,
+                           clang::Stmt *SubStmt);
+    std::string MakeParams(clang::openacc::DirectiveInfo *DI,
+                           bool MakeDefinition, std::string Kernels,
+                           std::string &CleanupCode, int &ArgNum);
+    std::string MakeParamFromArg(clang::openacc::Arg *A, bool MakeDefinition,
+                                 std::string Kernel, int &ArgPos,
+                                 std::string &CleanupCode);
+    std::string MakeBody(clang::openacc::DirectiveInfo *DI, clang::Stmt *SubStmt);
+
+    std::string getTaskLabel(DirectiveInfo *DI) {
+        ClauseList &CList = DI->getClauseList();
+        for (ClauseList::iterator
+                 II = CList.begin(), EE = CList.end(); II != EE; ++II)
+            if ((*II)->getKind() == CK_LABEL)
+                return cast<LabelArg>((*II)->getArg())->getLabel().str();
+        return "NULL";
+    }
+
+    std::string getTaskApprox(clang::ASTContext *Context, DirectiveInfo *DI) {
+        ClauseList &CList = DI->getClauseList();
+        for (ClauseList::iterator
+                 II = CList.begin(), EE = CList.end(); II != EE; ++II)
+            if ((*II)->getKind() == CK_SIGNIFICANT)
+                return (*II)->getArg()->getPrettyArg(Context->getPrintingPolicy());
+#warning FIXME:  default task significance
+        return "0";
+    }
 };
+
+int TaskSrc::KernelCalls = 0;
+
+void TaskSrc::init(clang::ASTContext *Context, DirectiveInfo *DI) {
+    Label = getTaskLabel(DI);
+    Approx = getTaskApprox(Context,DI);
+
+    //generate data moves
+    Stmt *SubStmt = DI->getAccStmt()->getSubStmt();
+    Newkernel = CreateKernel(DI,SubStmt);
+
+
+}
+
+std::string TaskSrc::HostCall() {
+    /*
+    int num_in;
+    struct _memory_object * inputs;
+    int num_out;
+    struct _memory_object * outputs;
+
+
+    struct geom geometry;
+    */
+
+    std::string call = runtime_call + "("
+        + Approx + ","
+        + MemObjInfo.NumOfInMemObj + "," + MemObjInfo.InRef + ","
+        + MemObjInfo.NumOfOutMemObj + "," + MemObjInfo.OutRef + ","
+        + "NULL" + ",\"" + Newkernel.name_ref + "\"," + "NULL" + ","
+        + Geometry.name_ref + ","
+        + "\"" + Label + "\","
+        + "/*FIXME:  source_size*/ 0"
+        + ");";
+    return call;
+}
+
+std::string TaskSrc::KernelCode() {
+    return Newkernel.definition;
+}
 
 void GeometrySrc::init(DirectiveInfo *DI, clang::ASTContext *Context) {
     ClauseInfo *Workers = NULL;
@@ -74,24 +173,22 @@ void GeometrySrc::init(DirectiveInfo *DI, clang::ASTContext *Context) {
     for (ArgVector::iterator
              IA = Workers->getArgs().begin(), EA = Workers->getArgs().end(); IA != EA; ++IA) {
         local_init_list += (*IA)->getPrettyArg(Context->getPrintingPolicy());
-        if ((*IA) != Groups->getArgs().back())
+        if ((*IA) != Workers->getArgs().back())
             local_init_list += ",";
     }
 
-    name_ref = "__task_geometry";
-    definition = "struct _geometry " + name_ref + ";";
-    definition += name_ref + ".dimensions = " + Dims + ";";
-    definition += name_ref + ".global[] = { " + global_init_list + " };";
-    definition += name_ref + ".local[] = { " + local_init_list + " };";
-}
+    std::string pre_global_code = "int __accll_geometry_global[" + Dims + "] = {" + global_init_list + "};";
+    std::string pre_local_code = "int __accll_geometry_local[" + Dims + "] = {" + local_init_list + "};";
 
-static std::string getTaskLabel(DirectiveInfo *DI) {
-    ClauseList &CList = DI->getClauseList();
-    for (ClauseList::iterator
-             II = CList.begin(), EE = CList.end(); II != EE; ++II)
-        if ((*II)->getKind() == CK_LABEL)
-            return cast<LabelArg>((*II)->getArg())->getLabel().str();
-    return "NULL";
+    name_ref = "__task_geometry";
+    definition = pre_global_code + pre_local_code
+        + "struct _geometry " + name_ref + " = {"
+        //definition += name_ref
+        + ".dimensions = " + Dims + ","
+        //definition += name_ref
+        + ".global = __accll_geometry_global,"
+        //definition += name_ref
+        + ".local = __accll_geometry_local };";
 }
 
 static bool isRuntimeCall(const std::string Name) {
@@ -105,9 +202,18 @@ static bool isRuntimeCall(const std::string Name) {
     return false;
 }
 
-#if 0
+static std::string getUniqueKernelName(const std::string Base) {
+    static int UID = 0;  //unique kernel identifier
+    std::string ID;
+    raw_string_ostream OS(ID);
+    OS << Base << "_" << UID;
+    UID++;
+    return OS.str();
+}
+
+#if 1
 std::string accll::KernelHeader =
-    "\n/* Generated by accll */\n\n\n";
+    "/* Generated by accll */\n\n\n";
 #else
 std::string accll::KernelHeader =
     "\n/* Generated by accll */\n\n\
@@ -231,7 +337,7 @@ Stage0_ASTVisitor::Finish(ASTContext *Context) {
     //Create new C file
 
     std::string NewFileHeader =
-        "/* Generated by accll */\n\n#include <stdio.h>\n#include <__accll.h>\n\n";
+        "/* Generated by accll */\n\n#include <__accll.h>\n\n";
 
     std::ifstream src(FileName.c_str());
     std::ofstream dst(NewFile.c_str());
@@ -265,12 +371,7 @@ Stage0_ASTVisitor::Finish(ASTContext *Context) {
                  << "'  -  new file\n";
 }
 
-///////////////////////////////////////////////////////////////////////////////
-//                        Stage1
-///////////////////////////////////////////////////////////////////////////////
-
-std::string
-Stage1_ASTVisitor::CreateNewNameFor(Arg *A) {
+static std::string CreateNewNameFor(clang::ASTContext *Context, Arg *A) {
     std::string NewName("__accll_");  //prefix
     NewName += A->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
     ReplaceStringInPlace(NewName,"->","_");  //delimiter
@@ -291,20 +392,22 @@ Stage1_ASTVisitor::CreateNewNameFor(Arg *A) {
     return NewName;
 }
 
-std::string
-Stage1_ASTVisitor::getOrigNameFor(Arg *A) {
+static std::string getOrigNameFor(clang::ASTContext *Context,Arg *A) {
     std::string OrigName = A->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
     return OrigName;
 }
 
-std::string
-Stage1_ASTVisitor::getNewNameFor(Arg *A) {
+static std::string getNewNameFor(NameMap &Map, Arg *A) {
     assert(A && "Passed null params");
     NameMap::iterator I = Map.find(A);
     assert(I != Map.end() && "unexpected empty name");
     ArgNames Names = I->second;
     return Names.second;
 }
+
+///////////////////////////////////////////////////////////////////////////////
+//                        Stage1
+///////////////////////////////////////////////////////////////////////////////
 
 std::string
 Stage1_ASTVisitor::CreateNewUniqueEventNameFor(Arg *A) {
@@ -342,8 +445,7 @@ Stage1_ASTVisitor::CreateNewUniqueEventNameFor(Arg *A) {
     return OS.str();
 }
 
-void
-Stage1_ASTVisitor::applyReplacement(Replacement &R) {
+static void applyReplacement(Replacements &Pool, Replacement &R) {
     static const bool WRITE_REPLACEMENTS (true);
     static const bool DEBUG_REPLACEMENTS (false);
 
@@ -351,16 +453,15 @@ Stage1_ASTVisitor::applyReplacement(Replacement &R) {
         llvm::outs() << R.toString() << "\n";
 
     if (!R.isApplicable()) {
-        llvm::outs() << "  -  Stage1:  bad replacement !!!\n";
+        llvm::outs() << "****    bad replacement !!!    ****\n";
         return;
     }
 
     if (WRITE_REPLACEMENTS)
-        Replaces.insert(R);
+        Pool.insert(R);
 }
 
-std::string
-Stage1_ASTVisitor::getPrettyExpr(Expr *E) {
+static std::string getPrettyExpr(clang::ASTContext *Context, Expr *E) {
     std::string StrExpr;
     raw_string_ostream OS(StrExpr);
     E->printPretty(OS,/*Helper=*/0,
@@ -392,7 +493,7 @@ Stage1_ASTVisitor::EmitImplicitDataMoveCodeFor(Expr *E) {
 
     SmallVector<ObjRefDef,8> init_list;
 #warning FIXME: implement me
-    EmitCodeForDataClause(DI,CI,DI->getAccStmt()->getSubStmt(),init_list);
+    EmitCodeForDataClause(Context,DI,CI,DI->getAccStmt()->getSubStmt(),init_list,Map,RStack);
     return A;
 }
 
@@ -413,7 +514,7 @@ Stage1_ASTVisitor::Rename(Expr *E) {
     //search for create Clauses from previous regions
     Arg *AExplicitBuffer = RStack.FindBufferObjectInRegionStack(Target);
     if (!A) {
-        llvm::outs() << getPrettyExpr(BaseExpr)
+        llvm::outs() << getPrettyExpr(Context,BaseExpr)
                      << ": searching for explicit device copy ... ";
         A = AExplicitBuffer;
         if (A) {
@@ -447,7 +548,7 @@ Stage1_ASTVisitor::Rename(Expr *E) {
             //search for create Clauses from previous regions
             AExplicitBuffer = RStack.FindBufferObjectInRegionStack(Target);
             if (!A) {
-                llvm::outs() << getPrettyExpr(BaseExpr)
+                llvm::outs() << getPrettyExpr(Context,BaseExpr)
                              << ": searching for explicit device copy ... ";
                 A = AExplicitBuffer;
                 if (A) {
@@ -460,9 +561,9 @@ Stage1_ASTVisitor::Rename(Expr *E) {
             if (!A) {
                 A = EmitImplicitDataMoveCodeFor(BaseExpr);
                 llvm::outs() << "debug: implicit move for '"
-                             << getPrettyExpr(BaseExpr)
+                             << getPrettyExpr(Context,BaseExpr)
                              << "' (move the whole array) due to '"
-                             << getPrettyExpr(E) << "'\n";
+                             << getPrettyExpr(Context,E) << "'\n";
             }
             else {
                 ClauseInfo *CI = A->getParent()->getAsClause();
@@ -473,8 +574,8 @@ Stage1_ASTVisitor::Rename(Expr *E) {
                     DI->getClauseList().push_back(ImplicitCI);
 
                     if (NeedNewName) {
-                        std::string OrigName = getOrigNameFor(Target);
-                        std::string NewName = CreateNewNameFor(Target);
+                        std::string OrigName = getOrigNameFor(Context,Target);
+                        std::string NewName = CreateNewNameFor(Context,Target);
                         Map[Target] = ArgNames(OrigName,NewName);
                     }
 
@@ -499,7 +600,7 @@ Stage1_ASTVisitor::Rename(Expr *E) {
                 //search for create Clauses from previous regions
                 AExplicitBuffer = RStack.FindBufferObjectInRegionStack(Target);
                 if (!A) {
-                    llvm::outs() << getPrettyExpr(BaseExpr)
+                    llvm::outs() << getPrettyExpr(Context,BaseExpr)
                                  << ": searching for explicit device copy ... ";
                     A = AExplicitBuffer;
                     if (A) {
@@ -513,7 +614,7 @@ Stage1_ASTVisitor::Rename(Expr *E) {
                     //move the original Expr, because the Idx is constant
                     A = EmitImplicitDataMoveCodeFor(E);
                     llvm::outs() << "debug: implicit move for '"
-                                 << getPrettyExpr(E) << "' \n";
+                                 << getPrettyExpr(Context,E) << "' \n";
                 }
                 else {
                     ClauseInfo *CI = A->getParent()->getAsClause();
@@ -524,8 +625,8 @@ Stage1_ASTVisitor::Rename(Expr *E) {
                         DI->getClauseList().push_back(ImplicitCI);
 
                         if (NeedNewName) {
-                            std::string OrigName = getOrigNameFor(Target);
-                            std::string NewName = CreateNewNameFor(Target);
+                            std::string OrigName = getOrigNameFor(Context,Target);
+                            std::string NewName = CreateNewNameFor(Context,Target);
                             Map[Target] = ArgNames(OrigName,NewName);
                         }
 
@@ -542,7 +643,7 @@ Stage1_ASTVisitor::Rename(Expr *E) {
             else {
                 A = EmitImplicitDataMoveCodeFor(E);
                 llvm::outs() << "debug: implicit move for '"
-                             << getPrettyExpr(E) << "' \n";
+                             << getPrettyExpr(Context,E) << "' \n";
             }
         }
     }
@@ -556,16 +657,16 @@ Stage1_ASTVisitor::Rename(Expr *E) {
                      IA = Args.begin(), EA = Args.end(); IA != EA; ++IA) {
                if ((*IA)->Matches(A)) {
                     //do the Rename
-                    std::string NewCode = getNewNameFor(A);
+                    std::string NewCode = getNewNameFor(Map,A);
                     Replacement R(Context->getSourceManager(),E,NewCode);
-                    applyReplacement(R);
-                    llvm::outs() << "debug: use device's '" << getPrettyExpr(E)
+                    applyReplacement(ReplacementPool,R);
+                    llvm::outs() << "debug: use device's '" << getPrettyExpr(Context,E)
                                  << "'\n";
                     return true;
                 }
             }
         }
-        llvm::outs() << "debug: use host's '" << getPrettyExpr(E)
+        llvm::outs() << "debug: use host's '" << getPrettyExpr(Context,E)
                      << "'\n";
         return false;
     }
@@ -578,8 +679,8 @@ Stage1_ASTVisitor::Rename(Expr *E) {
             //FIXME: what about present_* Data Clauses?
 
             if (NeedNewName) {
-                std::string OrigName = getOrigNameFor(Target);
-                std::string NewName = CreateNewNameFor(Target);
+                std::string OrigName = getOrigNameFor(Context,Target);
+                std::string NewName = CreateNewNameFor(Context,Target);
                 Map[Target] = ArgNames(OrigName,NewName);
             }
 
@@ -606,7 +707,7 @@ Stage1_ASTVisitor::Rename(Expr *E) {
     }
 
     //Do the Rename
-    std::string NewName = getNewNameFor(A);
+    std::string NewName = getNewNameFor(Map,A);
 
     //if (!isa<ArrayArg>(A) && !A->getVarDecl()->getType()->isPointerType())
     if (!isa<ArrayArg>(A) && !isa<SubArrayArg>(A))
@@ -614,12 +715,12 @@ Stage1_ASTVisitor::Rename(Expr *E) {
         NewName = "(*" + NewName + ")";
 
     Replacement R(Context->getSourceManager(),BaseExpr,NewName);
-    applyReplacement(R);
+    applyReplacement(ReplacementPool,R);
 
     if (!NeedNewName)
         llvm::outs() << "debug: use explicit buffer's name for '"
-                     << getPrettyExpr(E) << "'\n";
-    llvm::outs() << "debug: use device's '" << getPrettyExpr(E) << "'\n";
+                     << getPrettyExpr(Context,E) << "'\n";
+    llvm::outs() << "debug: use device's '" << getPrettyExpr(Context,E) << "'\n";
     return true;
 }
 
@@ -638,29 +739,6 @@ Stage1_ASTVisitor::TraverseAccStmt(AccStmt *S) {
     RStack.ExitRegion(S->getDirective());
 
     IgnoreVars = IgnoreVars->Prev;
-
-    //put the directive as marker for next stages after traversing
-    //the children to handle any implicit clauses
-    DirectiveInfo *DI = S->getDirective();
-    if (DI->getKind() == DK_TASK) {
-        std::string NewCode =
-            DI->getPrettyDirective(Context->getPrintingPolicy(),false);
-
-        Replacement RDI(Context->getSourceManager(),
-                        S->getSubStmt()->getLocStart(),0,NewCode);
-        applyReplacement(RDI);
-
-        //FIXME: find the actual location from the lexer
-        //       see PPDirectives.cpp
-
-        //these directives will be rewritten with any implicit clauses
-        SourceLocation DILocStart = DI->getStartLocation().getLocWithOffset(-8);
-        SourceLocation DILocEnd = DI->getEndLocation();
-        CharSourceRange Range(SourceRange(DILocStart,DILocEnd),/*IsTokenRange=*/false);
-
-        Replacement RComment(Context->getSourceManager(),Range,"");
-        applyReplacement(RComment);
-    }
 
     return true;
 }
@@ -696,40 +774,62 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         << " in " << ND->getName() << "(): "
         << "Found OpenACC Directive: " << DI->getAsString() << "\n";
 
-    //generate data moves
-    EmitCodeForDataClausesWrapper(DI,SubStmt);
-
     if (DI->getKind() == DK_TASKWAIT) {
         return true;
+        //generate data moves
+        ClauseList &CList = DI->getClauseList();
+        for (ClauseList::iterator
+                 II = CList.begin(), EE = CList.end(); II != EE; ++II) {
+            if ((*II)->getKind() == CK_ON) {
+                std::string NewCode = TaskWaitOn(DI,*II);
+                SourceLocation Loc = DI->getLocEnd();
+                Replacement R(Context->getSourceManager(),Loc,0,NewCode);
+                applyReplacement(ReplacementPool,R);
+                return true;
+            }
+        }
+
+        DataIOSrc IOInfo(Context,DI,Map,RStack);
+
         //generate runtime calls for taskwait
         EmitCodeForExecutableDirective(DI,SubStmt);
 #warning FIXME
         std::string NewCode;
         if (!NewCode.empty()) {
             NewCode = "\n{" + NewCode + "\n}";
-            Replacement R(Context->getSourceManager(),DI->getEndLocation(),
+            Replacement R(Context->getSourceManager(),DI->getLocEnd(),
                           0,NewCode);
-            applyReplacement(R);
+            applyReplacement(ReplacementPool,R);
         }
     }
     else if (DI->getKind() == DK_TASK) {
         llvm::outs() << "  -  Create Kernel";
 
-        std::string TaskLabel = getTaskLabel(DI);
-        GeometrySrc Geometry(DI,Context);
-        ObjRefDef Newkernel = CreateKernel(DI,SubStmt);
-        TaskSrc NewTask();
+        TaskSrc NewTask(Context,"acc_create_task",DI,Map,RStack,ReplacementPool);
 
-        Replacement R(getCurrentKernelFile(),getCurrentKernelFileEndOffset(),0,Newkernel.definition);
-        applyReplacement(R);
+        Replacement Kernel(getCurrentKernelFile(),getCurrentKernelFileEndOffset(),0,NewTask.KernelCode());
+        applyReplacement(ReplacementPool,Kernel);
+
+        std::string DirectiveSrc =
+            DI->getPrettyDirective(Context->getPrintingPolicy(),false);
+        std::string NewCode = "/*" + DirectiveSrc + "*/\n"
+            + "{" + NewTask.MemObjInfo.PrologueCode
+            + NewTask.Geometry.definition
+            + NewTask.HostCall() + "}";
+
+        SourceLocation PrologueLoc = DI->getLocStart().getLocWithOffset(-8);
+        SourceLocation EpilogueLoc;
+        if (isa<CompoundStmt>(SubStmt))
+            EpilogueLoc = SubStmt->getLocEnd().getLocWithOffset(1);
+        else if (isa<CallExpr>(SubStmt))
+            EpilogueLoc = SubStmt->getLocEnd().getLocWithOffset(2);
+        else
+            EpilogueLoc = SubStmt->getLocEnd().getLocWithOffset(2);
+
+        CharSourceRange Range(SourceRange(PrologueLoc,EpilogueLoc),/*IsTokenRange=*/false);
+        Replacement HostCall(Context->getSourceManager(),Range,NewCode);
+        applyReplacement(ReplacementPool,HostCall);
     }
-
-#if 0
-    SourceLocation DILocStart = DI->getStartLocation().getLocWithOffset(-8);
-    std::string Comment = "//";
-    Replacement RComment(Context->getSourceManager(),DILocStart,0,Comment);
-    applyReplacement(RComment);
-#endif
 
     llvm::outs() << "\n";
 
@@ -866,7 +966,7 @@ Stage1_ASTVisitor::VisitDeclRefExpr(DeclRefExpr *DRE) {
     if (isa<CallExpr>(RStack.back()->getAccStmt()->getSubStmt()))
         return true;
 
-    llvm::outs() << "DEBUG: " << getPrettyExpr(DRE) << "\n";
+    llvm::outs() << "DEBUG: " << getPrettyExpr(Context,DRE) << "\n";
 
 #if 0
     if (RStack.CurrentRegionIs(DK_TASK)) {
@@ -904,7 +1004,7 @@ Stage1_ASTVisitor::VisitMemberExpr(MemberExpr *ME) {
 #if 0
     if (RStack.CurrentRegionIs(DK_TASK)) {
         llvm::outs() << "debug: use host's '"
-                     << getPrettyExpr(ME)
+                     << getPrettyExpr(Context,ME)
                      << "'" << "\n";
         return true;
     }
@@ -920,7 +1020,7 @@ Stage1_ASTVisitor::VisitMemberExpr(MemberExpr *ME) {
         if (VarDecl *VD = dyn_cast<VarDecl>(DF->getDecl()))
             if (IgnoreVars->has(VD)) {
                 llvm::outs() << "debug: skip rename '"
-                             << getPrettyExpr(ME)
+                             << getPrettyExpr(Context,ME)
                              << "' (device resident)" << "\n";
                 return true;
             }
@@ -951,7 +1051,7 @@ Stage1_ASTVisitor::VisitArraySubscriptExpr(clang::ArraySubscriptExpr *ASE) {
 #if 0
     if (RStack.CurrentRegionIs(DK_TASK)) {
         llvm::outs() << "debug: use host's '"
-                     << getPrettyExpr(ASE)
+                     << getPrettyExpr(Context,ASE)
                      << "'" << "\n";
         return true;
     }
@@ -967,7 +1067,7 @@ Stage1_ASTVisitor::VisitArraySubscriptExpr(clang::ArraySubscriptExpr *ASE) {
         if (VarDecl *VD = dyn_cast<VarDecl>(DF->getDecl()))
             if (IgnoreVars->has(VD)) {
                 llvm::outs() << "debug: skip rename '"
-                             << getPrettyExpr(ASE)
+                             << getPrettyExpr(Context,ASE)
                              << "' (device resident)" << "\n";
                 return true;
             }
@@ -1007,8 +1107,7 @@ Stage1_ASTVisitor::VisitReturnStmt(ReturnStmt *S) {
     return true;
 }
 
-struct ObjRefDef
-Stage1_ASTVisitor::addVarDeclForDevice(Arg *A) {
+ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, RegionStack &RStack) {
     //declare a new var here for the accelerator
 
     if (Arg *AMemObj = RStack.FindBufferObjectInRegionStack(A)) {
@@ -1031,8 +1130,8 @@ Stage1_ASTVisitor::addVarDeclForDevice(Arg *A) {
     std::string type = Ty.getAsString(Context->getPrintingPolicy());
 #endif
 
-    std::string OrigName = getOrigNameFor(A);
-    std::string NewName = CreateNewNameFor(A);
+    std::string OrigName = getOrigNameFor(Context,A);
+    std::string NewName = CreateNewNameFor(Context,A);
     Map[A] = ArgNames(OrigName,NewName);
     //llvm::outs() << "orig name: " << OrigName << "  new name: " << NewName << "\n";
 
@@ -1047,9 +1146,9 @@ Stage1_ASTVisitor::addVarDeclForDevice(Arg *A) {
     std::string SizeExpr;
 
     if (SubArrayArg *SA = dyn_cast<SubArrayArg>(A)) {
-        BaseName = getPrettyExpr(SA->getExpr());
+        BaseName = getPrettyExpr(Context,SA->getExpr());
         SizeExpr = "sizeof(" + SA->getExpr()->getType().getAsString()
-            + ")*(" + getPrettyExpr(SA->getLength()) + ")";
+            + ")*(" + getPrettyExpr(Context,SA->getLength()) + ")";
     }
     else {
         BaseName = OrigName;
@@ -1074,18 +1173,18 @@ Stage1_ASTVisitor::addMoveHostToDevice(Arg *A, ClauseInfo *AsyncCI, std::string 
     std::string SizeExpr;
 
     if (Arg *AMemObj = RStack.FindBufferObjectInRegionStack(A)) {
-        NewName = getNewNameFor(AMemObj);
-        OrigName = getOrigNameFor(AMemObj);
+        NewName = getNewNameFor(Map,AMemObj);
+        OrigName = getOrigNameFor(Context,AMemObj);
     }
     else {
-        NewName = getNewNameFor(A);
-        OrigName = getOrigNameFor(A);
+        NewName = getNewNameFor(Map,A);
+        OrigName = getOrigNameFor(Context,A);
     }
 
     if (SubArrayArg *SA = dyn_cast<SubArrayArg>(A)) {
-        BaseName = getPrettyExpr(SA->getExpr());
+        BaseName = getPrettyExpr(Context,SA->getExpr());
         SizeExpr = "sizeof(" + SA->getExpr()->getType().getAsString() + ")*("
-            + getPrettyExpr(SA->getLength()) + ")";
+            + getPrettyExpr(Context,SA->getLength()) + ")";
     }
     else {
         BaseName = OrigName;
@@ -1139,18 +1238,18 @@ Stage1_ASTVisitor::addMoveDeviceToHost(Arg *A, ClauseInfo *AsyncCI, std::string 
     std::string SizeExpr;
 
     if (Arg *AMemObj = RStack.FindBufferObjectInRegionStack(A)) {
-        NewName = getNewNameFor(AMemObj);
-        OrigName = getOrigNameFor(AMemObj);
+        NewName = getNewNameFor(Map,AMemObj);
+        OrigName = getOrigNameFor(Context,AMemObj);
     }
     else {
-        NewName = getNewNameFor(A);
-        OrigName = getOrigNameFor(A);
+        NewName = getNewNameFor(Map,A);
+        OrigName = getOrigNameFor(Context,A);
     }
 
     if (SubArrayArg *SA = dyn_cast<SubArrayArg>(A)) {
-        BaseName = getPrettyExpr(SA->getExpr());
+        BaseName = getPrettyExpr(Context,SA->getExpr());
         SizeExpr = "sizeof(" + SA->getExpr()->getType().getAsString() + ")*("
-            + getPrettyExpr(SA->getLength()) + ")";
+            + getPrettyExpr(Context,SA->getLength()) + ")";
     }
     else {
         BaseName = OrigName;
@@ -1196,20 +1295,22 @@ Stage1_ASTVisitor::addMoveDeviceToHost(Arg *A, ClauseInfo *AsyncCI, std::string 
     return NewCode;
 }
 
-std::string
-Stage1_ASTVisitor::addDeallocDeviceMemory(Arg *A) {
-    std::string NewName = getNewNameFor(A);
-    std::string OrigName = getOrigNameFor(A);
+#if 0
+static std::string addDeallocDeviceMemory(clang::ASTContext *Context,
+                                          NameMap &Map, Arg *A) {
+    std::string NewName = getNewNameFor(Map,A);
+    std::string OrigName = getOrigNameFor(Context,A);
     std::string NewCode = "error = clReleaseMemObject(" + NewName + ");";
     NewCode += "clCheckError(error,\"release '" + OrigName + "'\");";
 
     return NewCode;
 }
+#endif
 
 static inline
 SourceLocation getLocAfterDecl(FunctionDecl *CurrentFunction, VarDecl *VD, std::string &CreateMem) {
     //BIG FAT HACK
-    //someone must fix the SourceLocation Issues. Seriously
+    //ne must fix the SourceLocation Issues. Seriously
 
     SourceLocation DeclLoc;
     CompoundStmt *Body = cast<CompoundStmt>(CurrentFunction->getBody());
@@ -1240,29 +1341,25 @@ SourceLocation getLocAfterDecl(FunctionDecl *CurrentFunction, VarDecl *VD, std::
     return SourceLocation();
 }
 
-void Stage1_ASTVisitor::EmitCodeForDataClause(DirectiveInfo *DI, ClauseInfo *CI, Stmt *SubStmt,
-                                              SmallVector<ObjRefDef,8> &init_list) {
+void EmitCodeForDataClause(clang::ASTContext *Context,
+                           DirectiveInfo *DI, ClauseInfo *CI, Stmt *SubStmt,
+                           SmallVector<ObjRefDef,8> &init_list, NameMap &Map,
+                           RegionStack &RStack) {
     assert(CI->isDataClause());
-
-    if (CI->getKind() == CK_ON) {
-        assert(DI->getKind() == DK_TASKWAIT);
-        std::string NewCode = TaskWaitOn(DI,CI);
-        SourceLocation Loc = DI->getEndLocation();
-        Replacement R(Context->getSourceManager(),Loc,0,NewCode);
-        applyReplacement(R);
-        return;
-    }
 
     for (ArgVector::iterator
              II = CI->getArgs().begin(), EE = CI->getArgs().end(); II != EE; ++II) {
         Arg *A = *II;
 
-        ObjRefDef CreateMem = addVarDeclForDevice(A);
+        ObjRefDef CreateMem = addVarDeclForDevice(Context,A,Map,RStack);
         init_list.push_back(CreateMem);
     }
 }
 
-void Stage1_ASTVisitor::EmitCodeForDataClausesWrapper(DirectiveInfo *DI, Stmt *SubStmt) {
+void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
+                     NameMap &Map, RegionStack &RStack) {
+    Stmt *SubStmt = DI->getAccStmt()->getSubStmt();
+
     SmallVector<ObjRefDef,8> in_init_list;
     SmallVector<ObjRefDef,8> out_init_list;
 
@@ -1270,61 +1367,56 @@ void Stage1_ASTVisitor::EmitCodeForDataClausesWrapper(DirectiveInfo *DI, Stmt *S
     for (ClauseList::iterator
              II = CList.begin(), EE = CList.end(); II != EE; ++II) {
         if ((*II)->getKind() == CK_IN)
-            EmitCodeForDataClause(DI,*II,SubStmt,in_init_list);
+            EmitCodeForDataClause(Context,DI,*II,SubStmt,in_init_list,Map,RStack);
         else if ((*II)->getKind() == CK_OUT)
-            EmitCodeForDataClause(DI,*II,SubStmt,out_init_list);
+            EmitCodeForDataClause(Context,DI,*II,SubStmt,out_init_list,Map,RStack);
     }
 
-    std::string NumOfInMemObj;
-    raw_string_ostream tmpIn(NumOfInMemObj);
+    llvm::raw_string_ostream tmpIn(NumOfInMemObj);
     tmpIn << in_init_list.size();
     tmpIn.str();
-    std::string pre_in_init = "const int __accll_task_num_in = " + NumOfInMemObj + ";";
-    ObjRefDef NewInCode;
-    NewInCode.name_ref = "__accll_task_in_memobj";
-    NewInCode.definition += "struct _memory_object " + NewInCode.name_ref + "[] = {";
-    for (SmallVector<ObjRefDef,8>::iterator II = in_init_list.begin(), EE = in_init_list.end();
-         II != EE; ++II) {
-        pre_in_init += (*II).definition;
-        NewInCode.definition += (*II).name_ref;
-        if (II != &in_init_list.back())
-            NewInCode.definition += ",";
+    std::string NewInCode;
+    if (in_init_list.size()) {
+        std::string pre_in_init;
+        InRef = "__accll_task_in_memobj";
+        NewInCode += "struct _memory_object " + InRef + "[" + NumOfInMemObj +"] = {";
+        for (SmallVector<ObjRefDef,8>::iterator II = in_init_list.begin(), EE = in_init_list.end();
+             II != EE; ++II) {
+            pre_in_init += (*II).definition;
+            NewInCode += (*II).name_ref;
+            if (II != &in_init_list.back())
+                NewInCode += ",";
+        }
+        NewInCode += "};";
+        NewInCode = pre_in_init + NewInCode;
+        PrologueCode += NewInCode;
     }
-    NewInCode.definition += "};";
-    NewInCode.definition = pre_in_init + NewInCode.definition;
+    else {
+        InRef = "NULL";
+    }
 
-    std::string NumOfOutMemObj;
-    raw_string_ostream tmpOut(NumOfOutMemObj);
+    llvm::raw_string_ostream tmpOut(NumOfOutMemObj);
     tmpOut << out_init_list.size();
     tmpOut.str();
-    std::string pre_out_init = "const int __accll_task_num_out = " + NumOfOutMemObj + ";";
-    ObjRefDef NewOutCode;
-    NewOutCode.name_ref = "__accll_task_out_memobj";
-    NewOutCode.definition += "struct _memory_object " + NewOutCode.name_ref + "[] = {";
-    for (SmallVector<ObjRefDef,8>::iterator II = out_init_list.begin(), EE = out_init_list.end();
-         II != EE; ++II) {
-        pre_out_init += (*II).definition;
-        NewOutCode.definition += (*II).name_ref;
-        if (II != &out_init_list.back())
-            NewOutCode.definition += ",";
+    std::string NewOutCode;
+    if (out_init_list.size()) {
+        std::string pre_out_init;
+        OutRef = "__accll_task_out_memobj";
+        NewOutCode += "struct _memory_object " + OutRef + "[" + NumOfOutMemObj + "] = {";
+        for (SmallVector<ObjRefDef,8>::iterator II = out_init_list.begin(), EE = out_init_list.end();
+             II != EE; ++II) {
+            pre_out_init += (*II).definition;
+            NewOutCode += (*II).name_ref;
+            if (II != &out_init_list.back())
+                NewOutCode += ",";
+        }
+        NewOutCode += "};";
+        NewOutCode = pre_out_init + NewOutCode;
+        PrologueCode += NewOutCode;
     }
-    NewOutCode.definition += "};";
-    NewOutCode.definition = pre_out_init + NewOutCode.definition;
-
-    SourceLocation PrologueLoc = DI->getEndLocation();
-    SourceLocation EpilogueLoc;
-    if (isa<CompoundStmt>(SubStmt))
-        EpilogueLoc = SubStmt->getLocEnd().getLocWithOffset(1);
-    else if (isa<CallExpr>(SubStmt))
-        EpilogueLoc = SubStmt->getLocEnd().getLocWithOffset(2);
-    else
-        EpilogueLoc = SubStmt->getLocEnd().getLocWithOffset(2);
-
-    std::string PrologueCode = "\n{" + NewInCode.definition + NewOutCode.definition;
-    Replacement R1(Context->getSourceManager(),PrologueLoc,0,PrologueCode);
-    applyReplacement(R1);
-    Replacement R2(Context->getSourceManager(),EpilogueLoc,0,"\n}");
-    applyReplacement(R2);
+    else {
+        OutRef = "NULL";
+    }
 }
 
 std::string
@@ -1367,7 +1459,7 @@ Stage1_ASTVisitor::TaskWaitOn(DirectiveInfo *DI, ClauseInfo *CI) {
     AsyncEvents.push_back(AsyncEvent(AsyncCI,EventName));
 
     Replacement R(Context->getSourceManager(),EventLoc,0,NewEventDeclaration);
-    applyReplacement(R);
+    applyReplacement(ReplacementPool,R);
 
     //Generate Marker to wait for later on
 
@@ -1462,8 +1554,8 @@ void Stage1_ASTVisitor::EmitCodeForExecutableDirective(DirectiveInfo *DI, Stmt *
 
     NewCode = "\n{" + NewCode + "\n}";
 
-    Replacement R(Context->getSourceManager(),DI->getEndLocation(),0,NewCode);
-    applyReplacement(R);
+    Replacement R(Context->getSourceManager(),DI->getLocEnd(),0,NewCode);
+    applyReplacement(ReplacementPool,R);
     return;
 }
 
@@ -1473,14 +1565,14 @@ void Stage1_ASTVisitor::Init(ASTContext *C) {
 
 void
 Stage1_ASTVisitor::Finish() {
-    if (!KernelCalls)
+    if (!TaskSrc::KernelCalls)
         return;
 
     std::string NewCode = UserTypes;
 
     Replacement R(getCurrentKernelFile(),
                   getCurrentKernelFileStartOffset()-1,0,NewCode);
-    applyReplacement(R);
+    applyReplacement(ReplacementPool,R);
     CurrentKernelFileIterator++;
 }
 
@@ -1488,15 +1580,6 @@ Stage1_ASTVisitor::Finish() {
 ///////////////////////////////////////////////////////////////////////////////
 //                        Stage3
 ///////////////////////////////////////////////////////////////////////////////
-
-std::string
-Stage3_ASTVisitor::getPrettyExpr(Expr *E) {
-    std::string StrExpr;
-    raw_string_ostream OS(StrExpr);
-    E->printPretty(OS,/*Helper=*/0,
-                   Context->getPrintingPolicy(),/*Indentation=*/0);
-    return OS.str();  //flush
-}
 
 std::string
 Stage3_ASTVisitor::CreateNewNameFor(Arg *A, bool AddPrefix) {
@@ -1552,7 +1635,7 @@ Stage3_ASTVisitor::CreateNewNameFor(Arg *A, bool AddPrefix) {
         DeclRefExpr *DF = dyn_cast<DeclRefExpr>(BaseExpr);
         (void)DF;
         assert(DF && isa<VarDecl>(DF->getDecl()));
-        NewName = getPrettyExpr(BaseExpr);
+        NewName = getPrettyExpr(Context,BaseExpr);
     }
 
     if (AddPrefix)
@@ -1657,13 +1740,13 @@ Stage3_ASTVisitor::VisitVarDecl(VarDecl *VD) {
     assert(VD->hasInit());
     Expr *Init = VD->getInit();
 
-    //llvm::outs() << "'" << getPrettyExpr(Init) << "'\n";
+    //llvm::outs() << "'" << getPrettyExpr(Context,Init) << "'\n";
 
     std::string NewName = VD->getNameAsString();
-    std::string NewCode = "cl_mem " + NewName + " = " + getPrettyExpr(Init);
+    std::string NewCode = "cl_mem " + NewName + " = " + getPrettyExpr(Context,Init);
     //the semicolon remains
     Replacement R(Context->getSourceManager(),VD,NewCode);
-    applyReplacement(R);
+    applyReplacement(ReplacementPool,R);
 
     return true;
 }
@@ -1764,7 +1847,7 @@ Stage3_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
         assert(Body);
         SourceLocation StartLoc = Body->getLocStart().getLocWithOffset(1);
         Replacement R(Context->getSourceManager(),StartLoc,0,NewCode);
-        applyReplacement(R);
+        applyReplacement(ReplacementPool,R);
     }
     #endif
 
@@ -1792,7 +1875,7 @@ Stage3_ASTVisitor::VisitCallExpr(CallExpr *CE) {
         //ignore any casts or parens,
         //the Arg Constructors expect a 'clean' expression
         Expr *E = CE->getArg(0)->IgnoreParenCasts();
-        //llvm::outs() << "Argument is '" + getPrettyExpr(E) + "'\n";
+        //llvm::outs() << "Argument is '" + getPrettyExpr(Context,E) + "'\n";
 
         Arg *Target = CreateNewArgFrom(E,0,Context);
 
@@ -1824,7 +1907,7 @@ Stage3_ASTVisitor::VisitCallExpr(CallExpr *CE) {
 
         std::string NewCode = "accll_async_test(" + OS.str() + "," + Events + ")";
         Replacement R(Context->getSourceManager(),CE,NewCode);
-        applyReplacement(R);
+        applyReplacement(ReplacementPool,R);
     }
     else if (TEST_RUNTIME_CALL(Name,acc_async_test_all)) {
         llvm::outs() << "Processing Runtime call to '" << Name << "' ...\n";
@@ -1857,7 +1940,7 @@ Stage3_ASTVisitor::VisitCallExpr(CallExpr *CE) {
 
         std::string NewCode = "accll_async_test(" + OS.str() + "," + Events + ")";
         Replacement R(Context->getSourceManager(),CE,NewCode);
-        applyReplacement(R);
+        applyReplacement(ReplacementPool,R);
     }
     else if (TEST_RUNTIME_CALL(Name,__accll_unreachable)) {
         SourceLocation StartLoc = CE->getLocStart();
@@ -1868,7 +1951,7 @@ Stage3_ASTVisitor::VisitCallExpr(CallExpr *CE) {
         //avoid generation of NullStmt
         //Replacement R(Context->getSourceManager(),CE,"");
         Replacement R(Context->getSourceManager(),Range,"");
-        applyReplacement(R);
+        applyReplacement(ReplacementPool,R);
     }
 #undef TEST_RUNTIME_CALL
 
@@ -1876,10 +1959,9 @@ Stage3_ASTVisitor::VisitCallExpr(CallExpr *CE) {
 }
 #endif
 
-std::string
-Stage1_ASTVisitor::MakeParamFromArg(Arg *A,bool MakeDefinition,
-                                    std::string Kernel, int &ArgPos,
-                                    std::string &CleanupCode) {
+std::string TaskSrc::MakeParamFromArg(Arg *A,bool MakeDefinition,
+                                      std::string Kernel, int &ArgPos,
+                                      std::string &CleanupCode) {
     //get original name
     std::string OrigName = A->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
 
@@ -1940,10 +2022,9 @@ struct UniqueArgVector : ArgVector {
     }
 };
 
-std::string
-Stage1_ASTVisitor::MakeParams(DirectiveInfo *DI,
-                              bool MakeDefinition, std::string Kernel,
-                              std::string &CleanupCode, int &ArgNum) {
+std::string TaskSrc::MakeParams(DirectiveInfo *DI,
+                                bool MakeDefinition, std::string Kernel,
+                                std::string &CleanupCode, int &ArgNum) {
     std::string Params;
 
     ClauseList DataClauses;
@@ -2043,8 +2124,7 @@ Stage3_ASTVisitor::getIdxOfWorkerInLoop(ForStmt *F, std::string Qual) {
 }
 #endif
 
-std::string
-Stage1_ASTVisitor::MakeBody(DirectiveInfo *DI, Stmt *SubStmt) {
+std::string TaskSrc::MakeBody(DirectiveInfo *DI, Stmt *SubStmt) {
     std::string Body;
     raw_string_ostream OS(Body);
 
@@ -2087,7 +2167,7 @@ Stage1_ASTVisitor::MakeBody(DirectiveInfo *DI, Stmt *SubStmt) {
 }
 
 ObjRefDef
-Stage1_ASTVisitor::CreateKernel(DirectiveInfo *DI, Stmt *SubStmt) {
+TaskSrc::CreateKernel(DirectiveInfo *DI, Stmt *SubStmt) {
     assert(SubStmt && "Null SubStmt");
 
     std::string CleanupCode;
@@ -2114,6 +2194,7 @@ Stage1_ASTVisitor::CreateKernel(DirectiveInfo *DI, Stmt *SubStmt) {
         }
         FD->print(OS,Context->getPrintingPolicy());
         OS.str();
+        kernel = "__kernel " + kernel;
         llvm::outs() << "\n" << kernel;
     }
     else {
@@ -2139,15 +2220,6 @@ Stage1_ASTVisitor::CreateKernel(DirectiveInfo *DI, Stmt *SubStmt) {
     KernelCalls++;
 
     return ObjRefDef(UName,kernel);
-}
-
-std::string
-Stage1_ASTVisitor::getUniqueKernelName(const std::string Base) {
-    std::string ID;
-    raw_string_ostream OS(ID);
-    OS << Base << "_" << UID;
-    UID++;
-    return OS.str();
 }
 
 #if 0
