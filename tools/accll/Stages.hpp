@@ -23,11 +23,11 @@ typedef std::pair<std::string, std::string> ArgNames;
 typedef llvm::DenseMap<clang::openacc::Arg*,ArgNames> NameMap;
 
 struct ObjRefDef {
-    std::string name_ref;
-    std::string definition;
+    std::string NameRef;
+    std::string Declaration;
 
-    ObjRefDef(std::string name_ref, std::string definition) :
-        name_ref(name_ref), definition(definition) {}
+    ObjRefDef(std::string NameRef, std::string Declaration) :
+        NameRef(NameRef), Declaration(Declaration) {}
     ObjRefDef() {}
 };
 

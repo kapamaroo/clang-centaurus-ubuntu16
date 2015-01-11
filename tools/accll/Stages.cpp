@@ -22,6 +22,23 @@ void EmitCodeForDataClause(clang::ASTContext *Context,
                            NameMap &Map,
                            RegionStack &RStack);
 
+static std::string toString(size_t x) {
+    std::string out;
+    llvm::raw_string_ostream OS(out);
+    OS << x;
+    OS.str();
+    return out;
+}
+
+static std::string getUniqueKernelName(const std::string Base) {
+    static int UID = 0;  //unique kernel identifier
+    std::string ID;
+    raw_string_ostream OS(ID);
+    OS << Base << "_" << UID;
+    UID++;
+    return OS.str();
+}
+
 struct GeometrySrc : ObjRefDef {
 private:
     void init(DirectiveInfo *DI, clang::ASTContext *Context);
@@ -32,46 +49,90 @@ public:
     }
 };
 
-struct TaskSrc {
+struct KernelRefDef {
+    ObjRefDef HostCode;
+    ObjRefDef DeviceCode;
+    std::string DeviceCodeInlineDeclaration;
+
+    KernelRefDef() {}
+
+    KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD)
+    {
+        if (!FD) {
+            HostCode.NameRef = "NULL";
+            DeviceCode.NameRef = "NULL";
+            return;
+        }
+
+        if (!FD->getResultType()->isVoidType()) {
+            HostCode.NameRef = "NULL";
+            DeviceCode.NameRef = "NULL";
+            llvm::outs() << "Error: Function '" << FD->getNameAsString()
+                         << "' must have return type of void to define a task\n";
+            return;
+        }
+
+        DeviceCode.NameRef = FD->getNameAsString();
+        //DeviceCode.NameRef = getUniqueKernelName(Name);
+        raw_string_ostream OS(DeviceCode.Declaration);
+        FD->print(OS,Context->getPrintingPolicy());
+        OS.str();
+
+        DeviceCode.Declaration = "__kernel " + DeviceCode.Declaration;
+        CreateInlineDeclaration();
+
+        HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
+        HostCode.Declaration = "struct _kernel_struct " + HostCode.NameRef + " = {"
+            + ".src = \"" + DeviceCodeInlineDeclaration + "\","
+            + ".name = \"" + DeviceCode.NameRef + "\","
+            + ".src_size = " + toString(DeviceCodeInlineDeclaration.size()) + ","
+            + ".name_size = " + toString(DeviceCode.NameRef.size()) + ","
+            //+ ".bin = NULL,"
+            + ".isCompiled = 0"
+            + "};";
+    }
+
+    void CreateInlineDeclaration() {
+        assert(DeviceCode.Declaration.size());
+        DeviceCodeInlineDeclaration = DeviceCode.Declaration;
+        ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\\","\\\\");
+        ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\r","");
+        ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\t","");
+        ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\"","\\\"");
+        ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\n","\\n");
+    }
+};
+
+struct KernelSrc : public ObjRefDef {
     clang::ASTContext *Context;
     clang::openacc::RegionStack &RStack;
 
-    std::string runtime_call;
-
-    std::string Approx;              //int
-
-    DataIOSrc MemObjInfo;
-    ObjRefDef Newkernel;
-
-    std::string kernel;              //const char *
-    std::string kernel_accurate;     //const char *
-    std::string kernel_approximate;  //const char *
-
-    GeometrySrc Geometry;
-
-    std::string Label;               //const char *
-    std::string source_size;         //size_t
+    KernelRefDef AccurateKernel;
+    KernelRefDef ApproximateKernel;
 
     static int KernelCalls;
 
-    TaskSrc(clang::ASTContext *Context, std::string _call, DirectiveInfo *DI,
-            NameMap &Map, clang::openacc::RegionStack &RStack,
-            clang::tooling::Replacements &ReplacementPool) :
-        Context(Context), RStack(RStack),
-        runtime_call(_call),
-        MemObjInfo(Context,DI,Map,RStack),
-        Geometry(DI,Context)
+    KernelSrc(clang::ASTContext *Context,
+              clang::openacc::RegionStack &RStack,
+              DirectiveInfo *DI) :
+        Context(Context),
+        RStack(RStack),
+        AccurateKernel(), ApproximateKernel()
     {
-        init(Context,DI);
+        CreateKernel(Context,DI);
+
+        NameRef = "__accll_task_exe";
+        Declaration = AccurateKernel.HostCode.Declaration
+            + ApproximateKernel.HostCode.Declaration
+            + "struct _task_executable " + NameRef + " = {"
+            + ".kernel_accurate = " + AccurateKernel.HostCode.NameRef + ","
+            + ".kernel_approximate = " + ApproximateKernel.HostCode.NameRef
+            + "};";
     }
 
-    std::string HostCall();
-    std::string KernelCode();
-
 private:
-    void init(clang::ASTContext *Context,DirectiveInfo *DI);
-    ObjRefDef CreateKernel(clang::openacc::DirectiveInfo *DI,
-                           clang::Stmt *SubStmt);
+    void CreateKernel(clang::ASTContext *Context,
+                      clang::openacc::DirectiveInfo *DI);
     std::string MakeParams(clang::openacc::DirectiveInfo *DI,
                            bool MakeDefinition, std::string Kernels,
                            std::string &CleanupCode, int &ArgNum);
@@ -80,6 +141,43 @@ private:
                                  std::string &CleanupCode);
     std::string MakeBody(clang::openacc::DirectiveInfo *DI, clang::Stmt *SubStmt);
 
+
+    FunctionDecl *getApproxFunctionDecl(DirectiveInfo *DI) {
+        ClauseList &CList = DI->getClauseList();
+        for (ClauseList::iterator
+                 II = CList.begin(), EE = CList.end(); II != EE; ++II)
+            if ((*II)->getKind() == CK_APPROXFUN) {
+                FunctionArg *FA = dyn_cast<FunctionArg>((*II)->getArg());
+                return FA->getFunctionDecl();
+            }
+        return 0;
+    }
+};
+
+struct TaskSrc {
+    static std::string runtime_call;
+
+    std::string Label;
+    std::string Approx;
+
+    DataIOSrc MemObjInfo;
+    GeometrySrc Geometry;
+    KernelSrc OpenCLCode;
+
+    TaskSrc(clang::ASTContext *Context, DirectiveInfo *DI,
+            NameMap &Map, clang::openacc::RegionStack &RStack,
+            clang::tooling::Replacements &ReplacementPool) :
+        Label(getTaskLabel(DI)),
+        Approx(getTaskApprox(Context,DI)),
+        MemObjInfo(Context,DI,Map,RStack),
+        Geometry(DI,Context),
+        OpenCLCode(Context,RStack,DI)
+    {}
+
+    std::string HostCall();
+    std::string KernelCode();
+
+private:
     std::string getTaskLabel(DirectiveInfo *DI) {
         ClauseList &CList = DI->getClauseList();
         for (ClauseList::iterator
@@ -100,44 +198,69 @@ private:
     }
 };
 
-int TaskSrc::KernelCalls = 0;
+int KernelSrc::KernelCalls = 0;
+std::string TaskSrc::runtime_call = "create_task";
 
-void TaskSrc::init(clang::ASTContext *Context, DirectiveInfo *DI) {
-    Label = getTaskLabel(DI);
-    Approx = getTaskApprox(Context,DI);
-
-    //generate data moves
+void
+KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI) {
     Stmt *SubStmt = DI->getAccStmt()->getSubStmt();
-    Newkernel = CreateKernel(DI,SubStmt);
+    assert(SubStmt && "Null SubStmt");
 
+    std::string CleanupCode;
 
+    std::string prefix("accll_kernel_");
+    std::string type("accurate");
+
+    KernelCalls++;
+
+    //create device code
+    if (CallExpr *CE = dyn_cast<CallExpr>(SubStmt)) {
+        FunctionDecl *AccurateFun = CE->getDirectCallee();
+        FunctionDecl *ApproxFun = getApproxFunctionDecl(DI);
+
+        AccurateKernel = KernelRefDef(Context,AccurateFun);
+        ApproximateKernel = KernelRefDef(Context,ApproxFun);
+        return;
+    }
+
+    assert(isa<CompoundStmt>(SubStmt));
+    int ArgNum = 0;
+
+    DirectiveInfo *EntryDI = DI;
+    Stmt *EntrySubStmt = SubStmt;
+
+    std::string qual("\n__kernel void ");
+    std::string UName = getUniqueKernelName(prefix + type);
+    std::string kernel = qual + UName;
+    kernel += "(";
+    kernel += MakeParams(EntryDI,/*MakeDefinition=*/true,UName,CleanupCode,ArgNum);
+    kernel += ") ";
+    kernel += "{" + MakeBody(EntryDI,EntrySubStmt) + "}\n";
+
+    assert(CleanupCode.empty() && "only the host code needs cleanup");
+
+#if 0
+    //create host code
+    int ArgNum = 0;
+    std::string StrArgList = MakeParams(DI,/*MakeDefinition=*/false,UName,CleanupCode,ArgNum);
+#endif
 }
 
 std::string TaskSrc::HostCall() {
-    /*
-    int num_in;
-    struct _memory_object * inputs;
-    int num_out;
-    struct _memory_object * outputs;
-
-
-    struct geom geometry;
-    */
-
     std::string call = runtime_call + "("
         + Approx + ","
         + MemObjInfo.NumOfInMemObj + "," + MemObjInfo.InRef + ","
         + MemObjInfo.NumOfOutMemObj + "," + MemObjInfo.OutRef + ","
-        + "NULL" + ",\"" + Newkernel.name_ref + "\"," + "NULL" + ","
-        + Geometry.name_ref + ","
-        + "\"" + Label + "\","
-        + "/*FIXME:  source_size*/ 0"
+        + OpenCLCode.NameRef + ","
+        + Geometry.NameRef + ","
+        + "\"" + Label + "\""
         + ");";
     return call;
 }
 
 std::string TaskSrc::KernelCode() {
-    return Newkernel.definition;
+    return OpenCLCode.AccurateKernel.DeviceCode.Declaration
+        + OpenCLCode.ApproximateKernel.DeviceCode.Declaration;
 }
 
 void GeometrySrc::init(DirectiveInfo *DI, clang::ASTContext *Context) {
@@ -177,17 +300,17 @@ void GeometrySrc::init(DirectiveInfo *DI, clang::ASTContext *Context) {
             local_init_list += ",";
     }
 
-    std::string pre_global_code = "int __accll_geometry_global[" + Dims + "] = {" + global_init_list + "};";
-    std::string pre_local_code = "int __accll_geometry_local[" + Dims + "] = {" + local_init_list + "};";
+    std::string pre_global_code = "size_t __accll_geometry_global[" + Dims + "] = {" + global_init_list + "};";
+    std::string pre_local_code = "size_t __accll_geometry_local[" + Dims + "] = {" + local_init_list + "};";
 
-    name_ref = "__task_geometry";
-    definition = pre_global_code + pre_local_code
-        + "struct _geometry " + name_ref + " = {"
-        //definition += name_ref
+    NameRef = "__task_geometry";
+    Declaration = pre_global_code + pre_local_code
+        + "struct _geometry " + NameRef + " = {"
+        //definition += NameRef
         + ".dimensions = " + Dims + ","
-        //definition += name_ref
+        //definition += NameRef
         + ".global = __accll_geometry_global,"
-        //definition += name_ref
+        //definition += NameRef
         + ".local = __accll_geometry_local };";
 }
 
@@ -200,15 +323,6 @@ static bool isRuntimeCall(const std::string Name) {
         if (Name.compare(*II) == 0)
             return true;
     return false;
-}
-
-static std::string getUniqueKernelName(const std::string Base) {
-    static int UID = 0;  //unique kernel identifier
-    std::string ID;
-    raw_string_ostream OS(ID);
-    OS << Base << "_" << UID;
-    UID++;
-    return OS.str();
 }
 
 #if 1
@@ -337,7 +451,7 @@ Stage0_ASTVisitor::Finish(ASTContext *Context) {
     //Create new C file
 
     std::string NewFileHeader =
-        "/* Generated by accll */\n\n#include <__accll.h>\n\n";
+        "/* Generated by accll */\n\n#include <centaurus_common.h>\n\n";
 
     std::ifstream src(FileName.c_str());
     std::ofstream dst(NewFile.c_str());
@@ -805,7 +919,7 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
     else if (DI->getKind() == DK_TASK) {
         llvm::outs() << "  -  Create Kernel";
 
-        TaskSrc NewTask(Context,"acc_create_task",DI,Map,RStack,ReplacementPool);
+        TaskSrc NewTask(Context,DI,Map,RStack,ReplacementPool);
 
         Replacement Kernel(getCurrentKernelFile(),getCurrentKernelFileEndOffset(),0,NewTask.KernelCode());
         applyReplacement(ReplacementPool,Kernel);
@@ -813,9 +927,12 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         std::string DirectiveSrc =
             DI->getPrettyDirective(Context->getPrintingPolicy(),false);
         std::string NewCode = "/*" + DirectiveSrc + "*/\n"
-            + "{" + NewTask.MemObjInfo.PrologueCode
-            + NewTask.Geometry.definition
-            + NewTask.HostCall() + "}";
+            + "{"
+            + NewTask.MemObjInfo.PrologueCode
+            + NewTask.Geometry.Declaration
+            + NewTask.OpenCLCode.Declaration
+            + NewTask.HostCall()
+            + "}";
 
         SourceLocation PrologueLoc = DI->getLocStart().getLocWithOffset(-8);
         SourceLocation EpilogueLoc;
@@ -1382,8 +1499,8 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
         NewInCode += "struct _memory_object " + InRef + "[" + NumOfInMemObj +"] = {";
         for (SmallVector<ObjRefDef,8>::iterator II = in_init_list.begin(), EE = in_init_list.end();
              II != EE; ++II) {
-            pre_in_init += (*II).definition;
-            NewInCode += (*II).name_ref;
+            pre_in_init += (*II).Declaration;
+            NewInCode += (*II).NameRef;
             if (II != &in_init_list.back())
                 NewInCode += ",";
         }
@@ -1405,8 +1522,8 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
         NewOutCode += "struct _memory_object " + OutRef + "[" + NumOfOutMemObj + "] = {";
         for (SmallVector<ObjRefDef,8>::iterator II = out_init_list.begin(), EE = out_init_list.end();
              II != EE; ++II) {
-            pre_out_init += (*II).definition;
-            NewOutCode += (*II).name_ref;
+            pre_out_init += (*II).Declaration;
+            NewOutCode += (*II).NameRef;
             if (II != &out_init_list.back())
                 NewOutCode += ",";
         }
@@ -1565,7 +1682,7 @@ void Stage1_ASTVisitor::Init(ASTContext *C) {
 
 void
 Stage1_ASTVisitor::Finish() {
-    if (!TaskSrc::KernelCalls)
+    if (!KernelSrc::KernelCalls)
         return;
 
     std::string NewCode = UserTypes;
@@ -1959,7 +2076,7 @@ Stage3_ASTVisitor::VisitCallExpr(CallExpr *CE) {
 }
 #endif
 
-std::string TaskSrc::MakeParamFromArg(Arg *A,bool MakeDefinition,
+std::string KernelSrc::MakeParamFromArg(Arg *A,bool MakeDefinition,
                                       std::string Kernel, int &ArgPos,
                                       std::string &CleanupCode) {
     //get original name
@@ -2022,7 +2139,7 @@ struct UniqueArgVector : ArgVector {
     }
 };
 
-std::string TaskSrc::MakeParams(DirectiveInfo *DI,
+std::string KernelSrc::MakeParams(DirectiveInfo *DI,
                                 bool MakeDefinition, std::string Kernel,
                                 std::string &CleanupCode, int &ArgNum) {
     std::string Params;
@@ -2124,7 +2241,7 @@ Stage3_ASTVisitor::getIdxOfWorkerInLoop(ForStmt *F, std::string Qual) {
 }
 #endif
 
-std::string TaskSrc::MakeBody(DirectiveInfo *DI, Stmt *SubStmt) {
+std::string KernelSrc::MakeBody(DirectiveInfo *DI, Stmt *SubStmt) {
     std::string Body;
     raw_string_ostream OS(Body);
 
@@ -2165,63 +2282,6 @@ std::string TaskSrc::MakeBody(DirectiveInfo *DI, Stmt *SubStmt) {
 
     return Body;
 }
-
-ObjRefDef
-TaskSrc::CreateKernel(DirectiveInfo *DI, Stmt *SubStmt) {
-    assert(SubStmt && "Null SubStmt");
-
-    std::string CleanupCode;
-
-    DirectiveInfo *EntryDI = DI;
-    Stmt *EntrySubStmt = SubStmt;
-
-    std::string prefix("accll_kernel_");
-    std::string type("accurate");
-    std::string UName;
-    std::string kernel;
-
-    //create device code
-    if (CallExpr *CE = dyn_cast<CallExpr>(SubStmt)) {
-        FunctionDecl *FD = CE->getDirectCallee();
-        assert(FD);
-        std::string Name = FD->getNameAsString();
-        UName = getUniqueKernelName(Name);
-        raw_string_ostream OS(kernel);
-        if (!FD->getResultType()->isVoidType()) {
-            llvm::outs() << "Error: Function '" << Name
-                         << "' must have return type of void to define a task\n";
-            return ObjRefDef();
-        }
-        FD->print(OS,Context->getPrintingPolicy());
-        OS.str();
-        kernel = "__kernel " + kernel;
-        llvm::outs() << "\n" << kernel;
-    }
-    else {
-        int ArgNum = 0;
-
-        std::string qual("\n__kernel void ");
-        UName = getUniqueKernelName(prefix + type);
-        std::string kernel = qual + UName;
-        kernel += "(";
-        kernel += MakeParams(EntryDI,/*MakeDefinition=*/true,UName,CleanupCode,ArgNum);
-        kernel += ") ";
-        kernel += "{" + MakeBody(EntryDI,EntrySubStmt) + "}\n";
-
-        assert(CleanupCode.empty() && "only the host code needs cleanup");
-    }
-
-    //create host code
-
-#if 0
-    int ArgNum = 0;
-    std::string StrArgList = MakeParams(DI,/*MakeDefinition=*/false,UName,CleanupCode,ArgNum);
-#endif
-    KernelCalls++;
-
-    return ObjRefDef(UName,kernel);
-}
-
 #if 0
 std::string
 Stage3_ASTVisitor::CreateNewUniqueEventNameFor(Arg *A) {
