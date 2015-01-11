@@ -321,7 +321,7 @@ SubArrayArg::SubArrayArg(CommonInfo *Parent, Expr *firstASE, Expr *length, clang
 LabelArg::LabelArg(CommonInfo *Parent, Expr *E) :
     Arg(A_Label,Parent,E) {}
 
-FunctionArg::FunctionArg(CommonInfo *Parent, const FunctionDecl *FD) :
+FunctionArg::FunctionArg(CommonInfo *Parent, FunctionDecl *FD) :
         Arg(A_Function,Parent), FD(FD) {}
 
 StringRef

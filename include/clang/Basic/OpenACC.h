@@ -196,11 +196,11 @@ public:
 
 class FunctionArg : public Arg {
 private:
-    const FunctionDecl *FD;
+    FunctionDecl *FD;
 public:
-    FunctionArg(CommonInfo *Parent, const FunctionDecl *FD);
+    FunctionArg(CommonInfo *Parent, FunctionDecl *FD);
 
-    const FunctionDecl *getFunctionDecl() const { return FD; }
+    FunctionDecl *getFunctionDecl() const { return FD; }
 
     static bool classof(const Arg *A) {
         return A->getKind() == A_Function;
