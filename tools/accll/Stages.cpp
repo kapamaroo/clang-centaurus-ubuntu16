@@ -13,14 +13,7 @@ using namespace clang::tooling;
 using namespace clang::openacc;
 using namespace accll;
 
-static
-void EmitCodeForDataClause(clang::ASTContext *Context,
-                           clang::openacc::DirectiveInfo *DI,
-                           clang::openacc::ClauseInfo *CI,
-                           clang::Stmt *SubStmt,
-                           llvm::SmallVector<ObjRefDef,8> &init_list,
-                           NameMap &Map,
-                           RegionStack &RStack);
+ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, RegionStack &RStack, const int Index);
 
 static std::string toString(size_t x) {
     std::string out;
@@ -125,8 +118,8 @@ struct KernelSrc : public ObjRefDef {
         Definition = AccurateKernel.HostCode.Definition
             + ApproximateKernel.HostCode.Definition
             + "struct _task_executable " + NameRef + " = {"
-            + ".kernel_accurate = " + AccurateKernel.HostCode.NameRef
-            + ",.kernel_approximate = " + ApproximateKernel.HostCode.NameRef
+            + ".kernel_accurate = " + ref(AccurateKernel.HostCode.NameRef)
+            + ",.kernel_approximate = " + ref(ApproximateKernel.HostCode.NameRef)
             + "};";
     }
 
@@ -151,6 +144,12 @@ private:
                 return FA->getFunctionDecl();
             }
         return 0;
+    }
+
+    std::string ref(std::string Name) const {
+        if (Name.compare("NULL") == 0 || Name.compare("0") == 0)
+            return Name;
+        return "&" + Name;
     }
 };
 
@@ -247,8 +246,7 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI) {
 std::string TaskSrc::HostCall() {
     std::string call = runtime_call + "("
         + Approx + ","
-        + MemObjInfo.NumOfInMemObj + "," + MemObjInfo.InRef + ","
-        + MemObjInfo.NumOfOutMemObj + "," + MemObjInfo.OutRef + ","
+        + MemObjInfo.NameRef + "," + MemObjInfo.NumArgs + ","
         + OpenCLCode.NameRef + ","
         + Geometry.NameRef + ","
         + "\"" + Label + "\""
@@ -344,6 +342,7 @@ accll::getNewNameFromOrigName(std::string OrigName) {
 
 Arg*
 accll::CreateNewArgFrom(Expr *E, ClauseInfo *ImplicitCI, ASTContext *Context) {
+    E = E->IgnoreParenImpCasts();
     Arg *Target = 0;
     if (isa<ArraySubscriptExpr>(E))
         Target = new ArrayElementArg(ImplicitCI,E,Context);
@@ -602,7 +601,9 @@ Stage1_ASTVisitor::EmitImplicitDataMoveCodeFor(Expr *E) {
 
     SmallVector<ObjRefDef,8> init_list;
 #warning FIXME: implement me
-    EmitCodeForDataClause(Context,DI,CI,DI->getAccStmt()->getSubStmt(),init_list,Map,RStack);
+    int Index = 0;
+    ObjRefDef CreateMem = addVarDeclForDevice(Context,A,Map,RStack,Index);
+    init_list.push_back(CreateMem);
     return A;
 }
 
@@ -912,7 +913,7 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         }
     }
     else if (DI->getKind() == DK_TASK) {
-        llvm::outs() << "  -  Create Kernel";
+        llvm::outs() << "  -  Create Kernel\n";
 
         TaskSrc NewTask(Context,DI,Map,RStack,ReplacementPool);
 
@@ -923,7 +924,7 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
             DI->getPrettyDirective(Context->getPrintingPolicy(),false);
         std::string NewCode = "/*" + DirectiveSrc + "*/\n"
             + "{"
-            + NewTask.MemObjInfo.PrologueCode
+            + NewTask.MemObjInfo.Definition
             + NewTask.Geometry.Definition
             + NewTask.OpenCLCode.Definition
             + NewTask.HostCall()
@@ -1219,7 +1220,7 @@ Stage1_ASTVisitor::VisitReturnStmt(ReturnStmt *S) {
     return true;
 }
 
-ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, RegionStack &RStack) {
+ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, RegionStack &RStack, const int Index) {
     //declare a new var here for the accelerator
 
     if (Arg *AMemObj = RStack.FindBufferObjectInRegionStack(A)) {
@@ -1272,10 +1273,25 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, 
         PassByValue = "1";
     }
 
+    std::string DataDepType;
+    ClauseKind CK = A->getParent()->getAsClause()->getKind();
+    switch (CK) {
+    case CK_IN:
+        DataDepType = "D_IN";
+        break;
+    case CK_OUT:
+        DataDepType = "D_OUT";
+        break;
+    default:
+        DataDepType = "D_UNDEF";
+    }
+
     std::string NewCode = "struct _memory_object " + NewName + " = {"
-        + ".host_ptr = (void*)" + Address
+        + ".index = " + toString(Index)
+        + ",.dependency = " + DataDepType
+        + ",.host_ptr = (void*)" + Address
         + ",.size = " + SizeExpr
-        + ",.isclobj = " + PassByValue
+        + ",.pass_by_value = " + PassByValue
         + "};";
 
     return ObjRefDef(NewName,NewCode);
@@ -1457,81 +1473,85 @@ SourceLocation getLocAfterDecl(FunctionDecl *CurrentFunction, VarDecl *VD, std::
     return SourceLocation();
 }
 
-void EmitCodeForDataClause(clang::ASTContext *Context,
-                           DirectiveInfo *DI, ClauseInfo *CI, Stmt *SubStmt,
-                           SmallVector<ObjRefDef,8> &init_list, NameMap &Map,
-                           RegionStack &RStack) {
-    assert(CI->isDataClause());
-
-    for (ArgVector::iterator
-             II = CI->getArgs().begin(), EE = CI->getArgs().end(); II != EE; ++II) {
-        Arg *A = *II;
-
-        ObjRefDef CreateMem = addVarDeclForDevice(Context,A,Map,RStack);
-        init_list.push_back(CreateMem);
-    }
+static Arg *getMatchedArg(Arg *A, SmallVector<Arg*,8> &Pool) {
+    for (SmallVector<Arg*,8>::iterator
+             AI = Pool.begin(), AE = Pool.end(); AI != AE; ++AI)
+        if (A->Matches(*AI))
+            return *AI;
+    return 0;
 }
 
 void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
                      NameMap &Map, RegionStack &RStack) {
     Stmt *SubStmt = DI->getAccStmt()->getSubStmt();
 
-    SmallVector<ObjRefDef,8> in_init_list;
-    SmallVector<ObjRefDef,8> out_init_list;
-
-    ClauseList &CList = DI->getClauseList();
-    for (ClauseList::iterator
-             II = CList.begin(), EE = CList.end(); II != EE; ++II) {
-        if ((*II)->getKind() == CK_IN)
-            EmitCodeForDataClause(Context,DI,*II,SubStmt,in_init_list,Map,RStack);
-        else if ((*II)->getKind() == CK_OUT)
-            EmitCodeForDataClause(Context,DI,*II,SubStmt,out_init_list,Map,RStack);
-    }
-
-    llvm::raw_string_ostream tmpIn(NumOfInMemObj);
-    tmpIn << in_init_list.size();
-    tmpIn.str();
-    std::string NewInCode;
-    if (in_init_list.size()) {
-        std::string pre_in_init;
-        InRef = "__accll_task_in_memobj";
-        NewInCode += "struct _memory_object " + InRef + "[" + NumOfInMemObj +"] = {";
-        for (SmallVector<ObjRefDef,8>::iterator II = in_init_list.begin(), EE = in_init_list.end();
-             II != EE; ++II) {
-            pre_in_init += (*II).Definition;
-            NewInCode += (*II).NameRef;
-            if (II != &in_init_list.back())
-                NewInCode += ",";
+    if (CallExpr *CE = dyn_cast<CallExpr>(SubStmt)) {
+        if (CE->getNumArgs() == 0) {
+            NameRef = "NULL";
+            //Definition = "";
+            NumArgs = "0";
+            return;
         }
-        NewInCode += "};";
-        NewInCode = pre_in_init + NewInCode;
-        PrologueCode += NewInCode;
+
+        //gather in() out() directive args
+        SmallVector<Arg*,8> PragmaArgs;
+        ClauseList &CList = DI->getClauseList();
+        for (ClauseList::iterator
+                 II = CList.begin(), EE = CList.end(); II != EE; ++II) {
+            ClauseInfo *CI = *II;
+            if (!CI->isDataClause())
+                continue;
+            for (ArgVector::iterator
+                     AI = CI->getArgs().begin(), AE = CI->getArgs().end(); AI != AE; ++AI) {
+                Arg *A = *AI;
+                PragmaArgs.push_back(A);
+            }
+        }
+
+        if (CE->getNumArgs() != PragmaArgs.size()) {
+            NameRef = "NULL";
+            //Definition = "";
+            NumArgs = "0";
+            llvm::outs() << "error: function arguments and in/out directive arguments mismatch\n";
+            return;
+        }
+
+#warning FIXME:  what about both in/out Args ?
+
+        //gather function call args
+        ClauseInfo TmpCI(CK_IN,DI);  //the clause type here is not important
+        SmallVector<Arg*,8> FnCallArgs;
+        for (CallExpr::arg_iterator II(CE->arg_begin()),EE(CE->arg_end()); II != EE; ++II) {
+            Expr *ArgExpr = *II;
+            Arg *A = CreateNewArgFrom(ArgExpr,&TmpCI,Context);
+            TmpCI.getArgs().push_back(A);
+            FnCallArgs.push_back(A);
+        }
+
+        //generate code
+        NumArgs = toString(FnCallArgs.size());
+        std::string Prologue;
+        std::string InitList;
+
+        int Index = 0;
+        for (SmallVector<Arg*,8>::iterator
+                 II(FnCallArgs.begin()),EE(FnCallArgs.end()); II != EE; ++II) {
+            Arg *PragmaMatched = getMatchedArg(*II,PragmaArgs);
+            assert(PragmaMatched);
+            ObjRefDef MemObj = addVarDeclForDevice(Context,PragmaMatched,Map,RStack,Index++);
+            Prologue += MemObj.Definition;
+            InitList += MemObj.NameRef;
+            if (II != &FnCallArgs.back())
+                InitList += ",";
+            delete *II;
+        }
+
+        NameRef = "__accll_kernel_args";
+        Definition = Prologue
+            + "struct _memory_object " + NameRef + "[" + NumArgs + "] = {" + InitList + "};";
     }
     else {
-        InRef = "NULL";
-    }
-
-    llvm::raw_string_ostream tmpOut(NumOfOutMemObj);
-    tmpOut << out_init_list.size();
-    tmpOut.str();
-    std::string NewOutCode;
-    if (out_init_list.size()) {
-        std::string pre_out_init;
-        OutRef = "__accll_task_out_memobj";
-        NewOutCode += "struct _memory_object " + OutRef + "[" + NumOfOutMemObj + "] = {";
-        for (SmallVector<ObjRefDef,8>::iterator II = out_init_list.begin(), EE = out_init_list.end();
-             II != EE; ++II) {
-            pre_out_init += (*II).Definition;
-            NewOutCode += (*II).NameRef;
-            if (II != &out_init_list.back())
-                NewOutCode += ",";
-        }
-        NewOutCode += "};";
-        NewOutCode = pre_out_init + NewOutCode;
-        PrologueCode += NewOutCode;
-    }
-    else {
-        OutRef = "NULL";
+        assert(0 && "Unsupported feature");
     }
 }
 

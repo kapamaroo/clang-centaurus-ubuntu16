@@ -31,14 +31,8 @@ struct ObjRefDef {
     ObjRefDef() {}
 };
 
-struct DataIOSrc {
-    std::string NumOfInMemObj;
-    std::string InRef;
-
-    std::string NumOfOutMemObj;
-    std::string OutRef;
-
-    std::string PrologueCode;
+struct DataIOSrc : public ObjRefDef {
+    std::string NumArgs;
 
     DataIOSrc(clang::ASTContext *Context,clang::openacc::DirectiveInfo *DI,
               NameMap &Map,clang::openacc::RegionStack &RStack)
