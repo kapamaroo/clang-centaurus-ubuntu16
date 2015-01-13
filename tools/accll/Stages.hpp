@@ -24,10 +24,10 @@ typedef llvm::DenseMap<clang::openacc::Arg*,ArgNames> NameMap;
 
 struct ObjRefDef {
     std::string NameRef;
-    std::string Declaration;
+    std::string Definition;
 
-    ObjRefDef(std::string NameRef, std::string Declaration) :
-        NameRef(NameRef), Declaration(Declaration) {}
+    ObjRefDef(std::string NameRef, std::string Definition) :
+        NameRef(NameRef), Definition(Definition) {}
     ObjRefDef() {}
 };
 

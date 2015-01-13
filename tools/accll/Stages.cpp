@@ -74,27 +74,27 @@ struct KernelRefDef {
 
         DeviceCode.NameRef = FD->getNameAsString();
         //DeviceCode.NameRef = getUniqueKernelName(Name);
-        raw_string_ostream OS(DeviceCode.Declaration);
+        raw_string_ostream OS(DeviceCode.Definition);
         FD->print(OS,Context->getPrintingPolicy());
         OS.str();
 
-        DeviceCode.Declaration = "__kernel " + DeviceCode.Declaration;
+        DeviceCode.Definition = "__kernel " + DeviceCode.Definition;
         CreateInlineDeclaration();
 
         HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
-        HostCode.Declaration = "struct _kernel_struct " + HostCode.NameRef + " = {"
-            + ".src = \"" + DeviceCodeInlineDeclaration + "\","
-            + ".name = \"" + DeviceCode.NameRef + "\","
-            + ".src_size = " + toString(DeviceCodeInlineDeclaration.size()) + ","
-            + ".name_size = " + toString(DeviceCode.NameRef.size()) + ","
-            //+ ".bin = NULL,"
-            + ".isCompiled = 0"
+        HostCode.Definition = "struct _kernel_struct " + HostCode.NameRef + " = {"
+            + ".src = \"" + DeviceCodeInlineDeclaration + "\""
+            + ",.name = \"" + DeviceCode.NameRef + "\""
+            + ",.src_size = " + toString(DeviceCodeInlineDeclaration.size())
+            + ",.name_size = " + toString(DeviceCode.NameRef.size())
+            //+ ",.bin = NULL"
+            + ",.isCompiled = 0"
             + "};";
     }
 
     void CreateInlineDeclaration() {
-        assert(DeviceCode.Declaration.size());
-        DeviceCodeInlineDeclaration = DeviceCode.Declaration;
+        assert(DeviceCode.Definition.size());
+        DeviceCodeInlineDeclaration = DeviceCode.Definition;
         ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\\","\\\\");
         ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\r","");
         ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\t","");
@@ -122,11 +122,11 @@ struct KernelSrc : public ObjRefDef {
         CreateKernel(Context,DI);
 
         NameRef = "__accll_task_exe";
-        Declaration = AccurateKernel.HostCode.Declaration
-            + ApproximateKernel.HostCode.Declaration
+        Definition = AccurateKernel.HostCode.Definition
+            + ApproximateKernel.HostCode.Definition
             + "struct _task_executable " + NameRef + " = {"
-            + ".kernel_accurate = " + AccurateKernel.HostCode.NameRef + ","
-            + ".kernel_approximate = " + ApproximateKernel.HostCode.NameRef
+            + ".kernel_accurate = " + AccurateKernel.HostCode.NameRef
+            + ",.kernel_approximate = " + ApproximateKernel.HostCode.NameRef
             + "};";
     }
 
@@ -206,11 +206,6 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI) {
     Stmt *SubStmt = DI->getAccStmt()->getSubStmt();
     assert(SubStmt && "Null SubStmt");
 
-    std::string CleanupCode;
-
-    std::string prefix("accll_kernel_");
-    std::string type("accurate");
-
     KernelCalls++;
 
     //create device code
@@ -226,16 +221,19 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI) {
     assert(isa<CompoundStmt>(SubStmt));
     int ArgNum = 0;
 
-    DirectiveInfo *EntryDI = DI;
-    Stmt *EntrySubStmt = SubStmt;
+    std::string prefix("accll_kernel_");
+    std::string type("accurate");
 
     std::string qual("\n__kernel void ");
     std::string UName = getUniqueKernelName(prefix + type);
     std::string kernel = qual + UName;
+
+    std::string CleanupCode;
+
     kernel += "(";
-    kernel += MakeParams(EntryDI,/*MakeDefinition=*/true,UName,CleanupCode,ArgNum);
+    kernel += MakeParams(DI,/*MakeDefinition=*/true,UName,CleanupCode,ArgNum);
     kernel += ") ";
-    kernel += "{" + MakeBody(EntryDI,EntrySubStmt) + "}\n";
+    kernel += "{" + MakeBody(DI,SubStmt) + "}\n";
 
     assert(CleanupCode.empty() && "only the host code needs cleanup");
 
@@ -259,8 +257,8 @@ std::string TaskSrc::HostCall() {
 }
 
 std::string TaskSrc::KernelCode() {
-    return OpenCLCode.AccurateKernel.DeviceCode.Declaration
-        + OpenCLCode.ApproximateKernel.DeviceCode.Declaration;
+    return OpenCLCode.AccurateKernel.DeviceCode.Definition
+        + OpenCLCode.ApproximateKernel.DeviceCode.Definition;
 }
 
 void GeometrySrc::init(DirectiveInfo *DI, clang::ASTContext *Context) {
@@ -304,18 +302,15 @@ void GeometrySrc::init(DirectiveInfo *DI, clang::ASTContext *Context) {
     std::string pre_local_code = "size_t __accll_geometry_local[" + Dims + "] = {" + local_init_list + "};";
 
     NameRef = "__task_geometry";
-    Declaration = pre_global_code + pre_local_code
+    Definition = pre_global_code + pre_local_code
         + "struct _geometry " + NameRef + " = {"
-        //definition += NameRef
-        + ".dimensions = " + Dims + ","
-        //definition += NameRef
-        + ".global = __accll_geometry_global,"
-        //definition += NameRef
-        + ".local = __accll_geometry_local };";
+        + ".dimensions = " + Dims
+        + ",.global = __accll_geometry_global"
+        + ",.local = __accll_geometry_local };";
 }
 
 static bool isRuntimeCall(const std::string Name) {
-    std::string data[] = {"acc_create_task","acc_taskwait"};
+    std::string data[] = {"create_task","taskwait"};
     static const SmallVector<std::string,8> RuntimeCalls(data, data + sizeof(data)/sizeof(std::string));
 
     for (SmallVector<std::string,8>::const_iterator II = RuntimeCalls.begin(), EE = RuntimeCalls.end();
@@ -929,8 +924,8 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         std::string NewCode = "/*" + DirectiveSrc + "*/\n"
             + "{"
             + NewTask.MemObjInfo.PrologueCode
-            + NewTask.Geometry.Declaration
-            + NewTask.OpenCLCode.Declaration
+            + NewTask.Geometry.Definition
+            + NewTask.OpenCLCode.Definition
             + NewTask.HostCall()
             + "}";
 
@@ -1253,12 +1248,10 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, 
     //llvm::outs() << "orig name: " << OrigName << "  new name: " << NewName << "\n";
 
     //generate new code
-    std::string NewCode = "\n";
 
     //each stage must generate a valid file to be parsed by the next stage,
     //so put a placehoder here and remove it in the next stage
 
-    NewCode += "struct _memory_object " + NewName;
     std::string BaseName;
     std::string SizeExpr;
 
@@ -1272,12 +1265,18 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, 
         SizeExpr = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
     }
 
-    std::string address = OrigName;
-    if (!isa<ArrayArg>(A) && !isa<SubArrayArg>(A))
-        address = "&" + OrigName;
+    std::string Address = OrigName;
+    std::string PassByValue = "0";
+    if (!isa<ArrayArg>(A) && !isa<SubArrayArg>(A)) {
+        Address = "&" + OrigName;
+        PassByValue = "1";
+    }
 
-    NewCode += " = { .host_ptr = (void*)" + address
-        + ", .size = " + SizeExpr + "};";
+    std::string NewCode = "struct _memory_object " + NewName + " = {"
+        + ".host_ptr = (void*)" + Address
+        + ",.size = " + SizeExpr
+        + ",.isclobj = " + PassByValue
+        + "};";
 
     return ObjRefDef(NewName,NewCode);
 }
@@ -1499,7 +1498,7 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
         NewInCode += "struct _memory_object " + InRef + "[" + NumOfInMemObj +"] = {";
         for (SmallVector<ObjRefDef,8>::iterator II = in_init_list.begin(), EE = in_init_list.end();
              II != EE; ++II) {
-            pre_in_init += (*II).Declaration;
+            pre_in_init += (*II).Definition;
             NewInCode += (*II).NameRef;
             if (II != &in_init_list.back())
                 NewInCode += ",";
@@ -1522,7 +1521,7 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
         NewOutCode += "struct _memory_object " + OutRef + "[" + NumOfOutMemObj + "] = {";
         for (SmallVector<ObjRefDef,8>::iterator II = out_init_list.begin(), EE = out_init_list.end();
              II != EE; ++II) {
-            pre_out_init += (*II).Declaration;
+            pre_out_init += (*II).Definition;
             NewOutCode += (*II).NameRef;
             if (II != &out_init_list.back())
                 NewOutCode += ",";
