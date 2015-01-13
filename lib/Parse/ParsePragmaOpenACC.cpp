@@ -99,8 +99,8 @@ std::string Arg::getPrettyArg(const PrintingPolicy &Policy) const {
 
     //special case: implementation default values do not have an expression
     if (const RawExprArg *RE = dyn_cast<RawExprArg>(this)) {
-        assert(!E && "unexpected expression in ImplDefault ConstArg ICE");
         if (RE->IsImplDefault()) {
+            assert(!E && "unexpected expression in ImplDefault ConstArg ICE");
             ICE.print(OS,ICE.isSigned());
             return OS.str();  //flush
         }

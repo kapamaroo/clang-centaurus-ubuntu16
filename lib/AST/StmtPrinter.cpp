@@ -592,7 +592,8 @@ void StmtPrinter::VisitAccStmt(AccStmt *Node) {
     if (PrintAccStmts)
         OS << DI->getPrettyDirective(Policy);
 
-    assert(isa<CompoundStmt>(Node->getSubStmt()));
+    assert(isa<CompoundStmt>(Node->getSubStmt())
+           || isa<CallExpr>(Node->getSubStmt()));
     PrintStmt(Node->getSubStmt());
 }
 
