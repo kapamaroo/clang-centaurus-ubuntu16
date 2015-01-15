@@ -43,8 +43,8 @@ const std::string ClauseInfo::Name[CK_END] = {
     "in",
     "out",
     "on",
-    "workers",
-    "groups",
+    "local",
+    "global",
     "energy_joule",
     "ratio",
 };
