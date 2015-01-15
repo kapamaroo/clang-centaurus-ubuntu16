@@ -182,7 +182,7 @@ private:
         for (ClauseList::iterator
                  II = CList.begin(), EE = CList.end(); II != EE; ++II)
             if ((*II)->getKind() == CK_LABEL)
-                return cast<LabelArg>((*II)->getArg())->getLabel().str();
+                return (*II)->getArgAs<LabelArg>()->getLabel();
         return "NULL";
     }
 
@@ -198,7 +198,7 @@ private:
 };
 
 int KernelSrc::KernelCalls = 0;
-std::string TaskSrc::runtime_call = "create_task";
+std::string TaskSrc::runtime_call = "acl_create_task";
 
 void
 KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI) {
@@ -401,7 +401,8 @@ Stage0_ASTVisitor::GetDotExtension(const std::string &filename) {
 bool
 Stage0_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
     hasDirectives = true;
-    hasDeviceCode = true;
+    if (ACC->getDirective()->getKind() == DK_TASK)
+        hasDeviceCode = true;
     return true;
 }
 
@@ -874,6 +875,14 @@ Stage1_ASTVisitor::TraverseArraySubscriptExpr(ArraySubscriptExpr *S) {
     return true;
 }
 
+static ClauseInfo *getClauseOfKind(ClauseList &CList, ClauseKind CK) {
+    for (ClauseList::iterator
+             II = CList.begin(), EE = CList.end(); II != EE; ++II)
+        if ((*II)->getKind() == CK)
+            return *II;
+    return 0;
+}
+
 bool
 Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
     DirectiveInfo *DI = ACC->getDirective();
@@ -885,30 +894,51 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         << "Found OpenACC Directive: " << DI->getAsString() << "\n";
 
     if (DI->getKind() == DK_TASKWAIT) {
-        return true;
-        //generate data moves
+        //generate runtime calls for taskwait
         ClauseList &CList = DI->getClauseList();
-        for (ClauseList::iterator
-                 II = CList.begin(), EE = CList.end(); II != EE; ++II) {
-            if ((*II)->getKind() == CK_ON) {
-                std::string NewCode = TaskWaitOn(DI,*II);
-                SourceLocation Loc = DI->getLocEnd();
-                Replacement R(Context->getSourceManager(),Loc,0,NewCode);
-                applyReplacement(ReplacementPool,R);
-                return true;
-            }
+
+        ClauseInfo *ClauseOn = getClauseOfKind(CList,CK_ON);
+        ClauseInfo *ClauseLabel = getClauseOfKind(CList,CK_LABEL);
+        ClauseInfo *ClauseRatio = getClauseOfKind(CList,CK_RATIO);
+        ClauseInfo *ClauseEnergy_joule = getClauseOfKind(CList,CK_ENERGY_JOULE);
+
+        std::string QLabel;
+        std::string Ratio;
+        std::string Energy;
+
+        if (ClauseLabel)
+            QLabel = ClauseLabel->getArgAs<LabelArg>()->getQuotedLabel();
+        if (ClauseRatio)
+            Ratio = ClauseRatio->getArg()->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
+        if (ClauseEnergy_joule)
+            Energy = ClauseEnergy_joule->getArg()->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
+
+        std::string NewCode;
+        if (ClauseOn) {
+#warning IMPLEMENT ME:  wait_on()
+        }
+        else if (ClauseLabel && ClauseRatio) {
+            NewCode = "acl_taskwait_label_ratio(" + QLabel + "," + Ratio + ");";
+        }
+        else if (ClauseLabel && ClauseEnergy_joule) {
+            NewCode = "acl_taskwait_label_energy(" + QLabel + "," + Energy + ");";
+        }
+        else if (ClauseLabel) {
+            NewCode = "acl_taskwait_label(" + QLabel + ");";
+        }
+        else {
+            NewCode = "acl_taskwait_all();";
         }
 
-        DataIOSrc IOInfo(Context,DI,Map,RStack);
-
-        //generate runtime calls for taskwait
-        EmitCodeForExecutableDirective(DI,SubStmt);
-#warning FIXME
-        std::string NewCode;
         if (!NewCode.empty()) {
-            NewCode = "\n{" + NewCode + "\n}";
-            Replacement R(Context->getSourceManager(),DI->getLocEnd(),
-                          0,NewCode);
+            std::string DirectiveSrc =
+                DI->getPrettyDirective(Context->getPrintingPolicy(),false);
+            //NewCode = "\n{" + NewCode + "\n}";
+            NewCode = "/*" + DirectiveSrc + "*/\n" + NewCode;
+            SourceLocation StartLoc = DI->getLocStart().getLocWithOffset(-8);
+            SourceLocation EndLoc = DI->getLocEnd();
+            CharSourceRange Range(SourceRange(StartLoc,EndLoc),/*IsTokenRange=*/false);
+            Replacement R(Context->getSourceManager(),Range,NewCode);
             applyReplacement(ReplacementPool,R);
         }
     }
@@ -1553,146 +1583,6 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
     else {
         assert(0 && "Unsupported feature");
     }
-}
-
-std::string
-Stage1_ASTVisitor::TaskWaitOn(DirectiveInfo *DI, ClauseInfo *CI) {
-    assert(CI->getKind() == CK_ON);
-
-    ClauseInfo *AsyncCI = 0;
-
-    SmallVector<std::string,8> EventList;
-    unsigned EventID = 0;
-
-    std::string NewCode;
-
-    for (ArgVector::iterator
-             II = CI->getArgs().begin(), EE = CI->getArgs().end(); II != EE; ++II) {
-        Arg *A = RStack.FindVisibleCopyInRegionStack(*II);
-        assert(A);
-
-        std::string Event = "__accll_update_event_tmp_";
-        raw_string_ostream OS(Event);
-        OS << EventID;
-        EventID++;
-        EventList.push_back(OS.str());
-
-        NewCode += addMoveDeviceToHost(A,AsyncCI,Event);
-    }
-
-    if (!AsyncCI)
-        return NewCode;
-
-    Arg *A = (AsyncCI->hasArgs()) ? AsyncCI->getArg() : 0;
-
-    //a safe SourceLocation, declares all the event objects at the top of
-    //the current function scope
-    SourceLocation EventLoc =
-        CurrentFunction->getBody()->getLocStart().getLocWithOffset(1);
-
-    std::string EventName = CreateNewUniqueEventNameFor(A);
-    std::string NewEventDeclaration = "cl_event " + EventName + ";";
-    AsyncEvents.push_back(AsyncEvent(AsyncCI,EventName));
-
-    Replacement R(Context->getSourceManager(),EventLoc,0,NewEventDeclaration);
-    applyReplacement(ReplacementPool,R);
-
-    //Generate Marker to wait for later on
-
-    if (EventList.empty())
-        return std::string();
-
-    std::string Size;
-    raw_string_ostream OS(Size);
-    OS << EventList.size();
-
-    NewCode += "const cl_event __accll_event_wait_list[] = { ";
-
-    std::string Events;
-    for (SmallVector<std::string,8>::iterator
-             II = EventList.begin(), EE = EventList.end(); II != EE; ++II) {
-        if (!Events.empty())
-            Events += ", ";
-        Events += *II;
-    }
-    NewCode += Events + " };";
-
-    NewCode += "error = clEnqueueMarkerWithWaitList(queue, " + OS.str() + ", ";
-    NewCode += "__accll_event_wait_list, ";
-    NewCode += "&" + EventName + ");";
-    NewCode += "clCheckError(error, \"marker with wait list\");";
-
-    return NewCode;
-}
-
-std::string
-Stage1_ASTVisitor::EmitCodeForDirectiveWait(DirectiveInfo *DI, Stmt *SubStmt) {
-    //handle only the wait events from the update directives (data moves)
-    //any other case will be handled at Stage3
-
-    ClauseList &CList = DI->getClauseList();
-    if (CList.empty())
-        return std::string();
-
-    for (ClauseList::iterator II = CList.begin(), EE = CList.end();
-         II != EE; ++II) {
-        //ClauseInfo *CI = *II;
-    }
-
-    Arg *A = DI->getArg();
-
-    std::string Events;
-    unsigned EventsNum = 0;
-
-    for (AsyncEventVector::iterator
-             II = AsyncEvents.begin(), EE = AsyncEvents.end(); II != EE; ++II) {
-        Arg *IA = (II->first->hasArgs()) ? II->first->getArg() : 0;
-        if (IA && A->Matches(IA)) {
-            if (!Events.empty())
-                Events += ", ";
-            Events += II->second;
-            EventsNum++;
-        }
-    }
-
-    if (EventsNum == 0)
-        //we have no async data moves, skip wait directive for Stage2
-        //we check again at Stage3 for async device code
-        return std::string();
-
-    //wait for a list of events from data moves
-
-    std::string Tmp;
-    raw_string_ostream OS(Tmp);
-    OS << EventsNum;
-
-    std::string NewCode;
-    NewCode += "const cl_event __accll_event_wait_list[] = { ";
-    NewCode += Events + "};";
-    NewCode += "error = clEnqueueBarrierWithWaitList(queue, " + OS.str();
-    NewCode += ", __accll_event_wait_list, NULL);";
-    NewCode += "clCheckError(error, \"wait barrier with wait list\");";
-
-    return NewCode;
-}
-
-void Stage1_ASTVisitor::EmitCodeForExecutableDirective(DirectiveInfo *DI, Stmt *SubStmt) {
-    assert(DI->getKind() == DK_TASKWAIT);
-
-    //FIXME: clang bug, wrong EndLocation for BinaryOperator stmts
-    //use findLocationAfterToken() in this case
-
-    std::string NewCode;
-    NewCode += EmitCodeForDirectiveWait(DI,SubStmt);
-
-    if (NewCode.empty())
-        return;
-
-    NewCode = "\n{" + NewCode + "\n}";
-
-    Replacement R(Context->getSourceManager(),DI->getLocEnd(),0,NewCode);
-    applyReplacement(ReplacementPool,R);
-    return;
 }
 
 void Stage1_ASTVisitor::Init(ASTContext *C) {

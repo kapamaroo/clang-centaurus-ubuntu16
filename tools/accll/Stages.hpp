@@ -179,10 +179,6 @@ private:
 
     std::string CreateNewUniqueEventNameFor(clang::openacc::Arg *A);
 
-    void EmitCodeForExecutableDirective(clang::openacc::DirectiveInfo *DI,
-                                        clang::Stmt *SubStmt);
-    std::string TaskWaitOn(clang::openacc::DirectiveInfo *DI,
-                           clang::openacc::ClauseInfo *CI);
     std::string EmitCodeForDirectiveWait(clang::openacc::DirectiveInfo *DI,
                                          clang::Stmt *SubStmt);
 
