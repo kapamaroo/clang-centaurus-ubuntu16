@@ -324,10 +324,15 @@ LabelArg::LabelArg(CommonInfo *Parent, Expr *E) :
 FunctionArg::FunctionArg(CommonInfo *Parent, FunctionDecl *FD) :
         Arg(A_Function,Parent), FD(FD) {}
 
-StringRef
+std::string
 LabelArg::getLabel() const {
     StringLiteral *SL = cast<StringLiteral>(getExpr());
-    return SL->getString();
+    return SL->getString().str();
+}
+
+std::string
+LabelArg::getQuotedLabel() const {
+    return "\"" + getLabel() + "\"";
 }
 
 bool

@@ -84,6 +84,9 @@ public:
     ArgKind getKind() const { return Kind; }
     Expr *getExpr() const { return E; }
 
+    template<class T>
+    T *getAs() const { return cast<T>(this); }
+
     SourceLocation getLocStart() const { return StartLoc; }
     SourceLocation getLocEnd() const { return EndLoc; }
 
@@ -187,7 +190,8 @@ class LabelArg : public Arg {
 public:
     LabelArg(CommonInfo *Parent, Expr *E);
 
-    StringRef getLabel() const;
+    std::string getLabel() const;
+    std::string getQuotedLabel() const;
 
     static bool classof(const Arg *A) {
         return A->getKind() == A_Label;
@@ -224,8 +228,10 @@ private:
 public:
     ArgVector &getArgs() { return Args; }
     const ArgVector &getArgs() const { return Args; }
-    Arg *getArg() { return Args.back(); }
     Arg *getArg() const { return Args.back(); }
+
+    template<class T>
+    T *getArgAs() const { return cast<T>(getArg()); }
 
     const SourceLocation &getLocStart() const { return StartLoc; }
     const SourceLocation &getLocEnd() const { return EndLoc; }
