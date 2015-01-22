@@ -1045,12 +1045,23 @@ Stage1_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
     }
 
     /////////////////////////////////////////////////////////////////////
+    CurrentFunction = 0;
 
+#if 0
     if (SM.isInSystemHeader(FD->getSourceRange().getBegin()))
         return true;
 
     if (!SM.isFromMainFile(FD->getSourceRange().getBegin()))
         return true;
+#endif
+
+    if (FD->isMain()) {
+        std::string RuntimeInit = "acl_centaurus_init();";
+        Replacement R(Context->getSourceManager(),
+                      FD->getBody()->getLocStart().getLocWithOffset(1),0,
+                      RuntimeInit);
+        applyReplacement(ReplacementPool,R);
+    }
 
 #if 0
     if (FD->getResultType()->isVoidType()) {
@@ -1221,31 +1232,30 @@ Stage1_ASTVisitor::VisitArraySubscriptExpr(clang::ArraySubscriptExpr *ASE) {
 }
 
 bool
-Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
-    SourceManager &SM = Context->getSourceManager();
-    if (SM.isInSystemHeader(CE->getSourceRange().getBegin())) {
-        //llvm::outs() << "Writing to system header prevented!\n";
-        return true;
-    }
-
-    if (RStack.empty()) {
-        return true;
-    }
-
-    FunctionDecl *FD = CE->getDirectCallee();
-    if (!FD)
-        return true;
-
-    std::string Name = FD->getNameAsString();
-
-    //FIXME: create accurate kernel
-
-    return true;
-}
-
-bool
 Stage1_ASTVisitor::VisitReturnStmt(ReturnStmt *S) {
-    //FIXME: check whether we are inside a task
+    if (!CurrentFunction || !CurrentFunction->isMain())
+        return true;
+
+    std::string RuntimeFinish = "acl_centaurus_finish();";
+
+    //avoid subtle cases like:
+    //    if ( ... )
+    //        ReturnStmt;
+    //
+    //to become:
+    //
+    //    if ( ... )
+    //        RuntimeFinish
+    //    ReturnStmt;
+
+    std::string Return;
+    llvm::raw_string_ostream OS(Return);
+    S->printPretty(OS,/*Helper=*/0,Context->getPrintingPolicy(),/*Indentation=*/0);
+    OS.str();
+    Replacement R(Context->getSourceManager(),
+        S->getLocStart(),0,
+        "{" + RuntimeFinish + Return + "}");
+    applyReplacement(ReplacementPool,R);
 
     return true;
 }

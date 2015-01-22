@@ -223,7 +223,6 @@ public:
     bool VisitDeclRefExpr(clang::DeclRefExpr *DRE);
     bool VisitMemberExpr(clang::MemberExpr *ME);
     bool VisitArraySubscriptExpr(clang::ArraySubscriptExpr *ASE);
-    bool VisitCallExpr(clang::CallExpr *CE);
     bool VisitReturnStmt(clang::ReturnStmt *S);
 
     bool VisitEnumDecl(clang::EnumDecl *E);
