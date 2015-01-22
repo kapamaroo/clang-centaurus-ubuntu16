@@ -103,11 +103,9 @@ struct KernelSrc : public ObjRefDef {
     KernelRefDef AccurateKernel;
     KernelRefDef ApproximateKernel;
 
-    static int KernelCalls;
-
     KernelSrc(clang::ASTContext *Context,
               clang::openacc::RegionStack &RStack,
-              DirectiveInfo *DI) :
+              DirectiveInfo *DI, int TaskUID) :
         Context(Context),
         RStack(RStack),
         AccurateKernel(), ApproximateKernel()
@@ -118,7 +116,8 @@ struct KernelSrc : public ObjRefDef {
         Definition = AccurateKernel.HostCode.Definition
             + ApproximateKernel.HostCode.Definition
             + "struct _task_executable " + NameRef + " = {"
-            + ".kernel_accurate = " + ref(AccurateKernel.HostCode.NameRef)
+            + ".UID = " + toString(TaskUID)
+            + ",.kernel_accurate = " + ref(AccurateKernel.HostCode.NameRef)
             + ",.kernel_approximate = " + ref(ApproximateKernel.HostCode.NameRef)
             + "};";
     }
@@ -155,6 +154,7 @@ private:
 
 struct TaskSrc {
     static std::string runtime_call;
+    static int TaskUID;
 
     std::string Label;
     std::string Approx;
@@ -170,7 +170,7 @@ struct TaskSrc {
         Approx(getTaskApprox(Context,DI)),
         MemObjInfo(Context,DI,Map,RStack),
         Geometry(DI,Context),
-        OpenCLCode(Context,RStack,DI)
+        OpenCLCode(Context,RStack,DI,++TaskUID)
     {}
 
     std::string HostCall();
@@ -197,15 +197,13 @@ private:
     }
 };
 
-int KernelSrc::KernelCalls = 0;
+int TaskSrc::TaskUID = 0;
 std::string TaskSrc::runtime_call = "acl_create_task";
 
 void
 KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI) {
     Stmt *SubStmt = DI->getAccStmt()->getSubStmt();
     assert(SubStmt && "Null SubStmt");
-
-    KernelCalls++;
 
     //create device code
     if (CallExpr *CE = dyn_cast<CallExpr>(SubStmt)) {
@@ -1601,7 +1599,7 @@ void Stage1_ASTVisitor::Init(ASTContext *C) {
 
 void
 Stage1_ASTVisitor::Finish() {
-    if (!KernelSrc::KernelCalls)
+    if (!TaskSrc::TaskUID)
         return;
 
     std::string NewCode = UserTypes;
