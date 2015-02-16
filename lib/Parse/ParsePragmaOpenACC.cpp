@@ -20,7 +20,9 @@ const unsigned DirectiveInfo::ValidDirective[DK_END] = {
         BITMASK(CK_IN) |
         BITMASK(CK_OUT) |
         BITMASK(CK_WORKERS) |
-        BITMASK(CK_GROUPS),
+        BITMASK(CK_GROUPS) |
+        BITMASK(CK_BIND) |
+        BITMASK(CK_SUGGEST),
 
         //taskwait
         BITMASK(CK_LABEL) |
@@ -29,7 +31,7 @@ const unsigned DirectiveInfo::ValidDirective[DK_END] = {
         BITMASK(CK_RATIO),
         };
 
-const std::string clang::openacc::ExtensionName = "acc";
+const std::string clang::openacc::ExtensionName = "acl";
 
 const std::string DirectiveInfo::Name[DK_END] = {
     "task",
@@ -45,6 +47,8 @@ const std::string ClauseInfo::Name[CK_END] = {
     "on",
     "local",
     "global",
+    "bind",
+    "suggest",
     "energy_joule",
     "ratio",
 };
@@ -187,6 +191,8 @@ static bool mustBeUnique(ClauseKind CK) {
     case CK_APPROXFUN:
     case CK_WORKERS:
     case CK_GROUPS:
+    case CK_BIND:
+    case CK_SUGGEST:
     case CK_ENERGY_JOULE:
     case CK_RATIO:
         return true;
@@ -438,6 +444,20 @@ Parser::ParseClauseGroups(DirectiveKind DK, ClauseInfo *CI) {
     if (Args.empty())
         return false;
 
+    return true;
+}
+
+bool
+Parser::ParseClauseBind(DirectiveKind DK, ClauseInfo *CI) {
+    if (!ParseArgScalarIntExpr(DK,CI))
+        return false;
+    return true;
+}
+
+bool
+Parser::ParseClauseSuggest(DirectiveKind DK, ClauseInfo *CI) {
+    if (!ParseArgScalarIntExpr(DK,CI))
+        return false;
     return true;
 }
 

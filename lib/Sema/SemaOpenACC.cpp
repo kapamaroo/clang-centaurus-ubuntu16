@@ -232,6 +232,8 @@ OpenACC::OpenACC(Sema &s) : S(s), PendingDirective(0), Valid(false),
     isValidClause[CK_OUT] =          &OpenACC::isValidClauseOut;
     isValidClause[CK_WORKERS] =      &OpenACC::isValidClauseWorkers;
     isValidClause[CK_GROUPS] =       &OpenACC::isValidClauseGroups;
+    isValidClause[CK_BIND] =         &OpenACC::isValidClauseBind;
+    isValidClause[CK_SUGGEST] =      &OpenACC::isValidClauseSuggest;
     isValidClause[CK_ENERGY_JOULE] = &OpenACC::isValidClauseEnergy_joule;
     isValidClause[CK_RATIO] =        &OpenACC::isValidClauseRatio;
 
@@ -513,6 +515,16 @@ OpenACC::isValidClauseWorkers(DirectiveKind DK, ClauseInfo *CI) {
 
 bool
 OpenACC::isValidClauseGroups(DirectiveKind DK, ClauseInfo *CI) {
+    return true;
+}
+
+bool
+OpenACC::isValidClauseBind(DirectiveKind DK, ClauseInfo *CI) {
+    return true;
+}
+
+bool
+OpenACC::isValidClauseSuggest(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 

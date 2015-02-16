@@ -57,6 +57,8 @@ public:
     isValidClauseFn isValidClauseOn;
     isValidClauseFn isValidClauseWorkers;
     isValidClauseFn isValidClauseGroups;
+    isValidClauseFn isValidClauseBind;
+    isValidClauseFn isValidClauseSuggest;
     isValidClauseFn isValidClauseEnergy_joule;
     isValidClauseFn isValidClauseRatio;
 
