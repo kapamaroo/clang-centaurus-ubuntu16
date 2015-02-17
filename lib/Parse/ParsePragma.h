@@ -123,7 +123,7 @@ public:
 class PragmaOpenACCHandler : public PragmaExtensionHandler {
 public:
   explicit PragmaOpenACCHandler(bool enabled) :
-  PragmaExtensionHandler("acc", /*Enabled=*/enabled) {}
+  PragmaExtensionHandler("acl", /*Enabled=*/enabled) {}
   virtual void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
                             Token &FirstToken);
 
