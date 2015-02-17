@@ -63,7 +63,7 @@ int main(int argc, const char **argv) {
     }
 
     if (InputFiles.empty()) {
-        llvm::outs() << "No OpenACC Directives found, nothing to do - exit\n";
+        llvm::outs() << "Source code has no directives, nothing to do - exit\n";
         return 1;
     }
 
