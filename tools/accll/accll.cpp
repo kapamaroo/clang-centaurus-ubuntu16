@@ -40,7 +40,7 @@ int main(int argc, const char **argv) {
     conf.push_back("-I.");
     //conf.push_back("-x");
     //conf.push_back("cl");
-    conf.push_back("-w");
+    //conf.push_back("-w");
 
     int ARGC = argc + conf.size();
     const char **ARGV = new const char*[ARGC];
@@ -50,9 +50,7 @@ int main(int argc, const char **argv) {
     for (std::vector<std::string>::size_type i=0; i<conf.size(); ++i)
         ARGV[argc + i] = conf[i].c_str();
 
-    int _ARGC = ARGC - 1;
-    CommonOptionsParser OptionsParser(_ARGC, ARGV);
-    CommonOptionsParser OptionsParserSilent(ARGC, ARGV);
+    CommonOptionsParser OptionsParser(ARGC, ARGV);
 
     std::vector<std::string> UserInputFiles = OptionsParser.getSourcePathList();
 
@@ -87,7 +85,7 @@ int main(int argc, const char **argv) {
     llvm::outs() << "\n\n#######     Stage3     #######\n\n";
     llvm::outs() << "Write new kernels to separate '*.cl' files ...\n";
     llvm::outs() << "Generate OpenCL API calls on host program ...\n";
-    RefactoringTool Tool3(OptionsParserSilent.getCompilations(), InputFiles);
+    RefactoringTool Tool3(OptionsParser.getCompilations(), InputFiles);
     Stage3_ConsumerFactory Stage3(Tool3.getReplacements(),KernelFiles);
     if (Tool3.runAndSave(newFrontendActionFactory(&Stage3))) {
         llvm::errs() << "Stage3 failed - exit.\n";
