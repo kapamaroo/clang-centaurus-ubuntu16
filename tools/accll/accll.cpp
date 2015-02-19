@@ -34,14 +34,21 @@ static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
 static cl::extrahelp MoreHelp("\nMore help text...\n");
 
 int main(int argc, const char **argv) {
-    int ARGC = argc + 4;
+    std::vector<std::string> conf;
+    conf.push_back("--");
+    conf.push_back("-fopenacc");
+    conf.push_back("-I.");
+    //conf.push_back("-x");
+    //conf.push_back("cl");
+    conf.push_back("-w");
+
+    int ARGC = argc + conf.size();
     const char **ARGV = new const char*[ARGC];
+
     for (int i=0; i<argc; ++i)
         ARGV[i] = argv[i];
-    ARGV[argc] = "--";
-    ARGV[argc + 1] = "-fopenacc";
-    ARGV[argc + 2] = "-I.";
-    ARGV[argc + 3] = "-w";
+    for (std::vector<std::string>::size_type i=0; i<conf.size(); ++i)
+        ARGV[argc + i] = conf[i].c_str();
 
     int _ARGC = ARGC - 1;
     CommonOptionsParser OptionsParser(_ARGC, ARGV);
@@ -94,24 +101,6 @@ int main(int argc, const char **argv) {
         if (!(*II).empty())
             RealKernelFiles.push_back(*II);
 
-    int KernelARGC = RealKernelFiles.size() + 1;
-    int Extra = 2;
-    const char **KernelARGV = new const char*[KernelARGC + Extra];
-
-    KernelARGV[0] = argv[0];
-    int i = 1;
-    for (std::vector<std::string>::iterator II = RealKernelFiles.begin(),
-             EE = RealKernelFiles.end(); II != EE; ++II,++i)
-        KernelARGV[i] = (*II).c_str();
-
-    KernelARGV[KernelARGC] = "--";
-    KernelARGV[KernelARGC + 1] = "-I.";
-    //KernelARGV[KernelARGC + 2] = "-w";
-
-    KernelARGC += Extra;
-
-    int ExitValue = 0;
-
     //format new files
     int status = 0;
 
@@ -131,27 +120,38 @@ int main(int argc, const char **argv) {
 
     ClangTool Tool5(OptionsParser.getCompilations(),InputFiles);
     if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
-        llvm::errs() << "Illegal new host files, fix your program!  -  Exit.\n";
+        llvm::errs() << "FATAL: __internal_error__: illegal host code  -  Exit.\n";
         return 1;
     }
 
     if (!RealKernelFiles.empty()) {
+        std::vector<std::string> kernel_conf;
+        kernel_conf.push_back("--");
+        kernel_conf.push_back("-I.");
+        //kernel_conf.push_back("-w");
+
+        int KernelARGC = 1 + RealKernelFiles.size() + kernel_conf.size();
+        const char **KernelARGV = new const char*[1 + RealKernelFiles.size() + kernel_conf.size()];
+
+        KernelARGV[0] = argv[0];
+        int i = 1;
+        for (std::vector<std::string>::iterator II = RealKernelFiles.begin(),
+                 EE = RealKernelFiles.end(); II != EE; ++II,++i)
+            KernelARGV[i] = (*II).c_str();
+        for (std::vector<std::string>::size_type i=0; i<kernel_conf.size(); ++i)
+            KernelARGV[1 + RealKernelFiles.size() + i] = kernel_conf[i].c_str();
+
         llvm::outs() << "Check new generated device files ...\n";
         CommonOptionsParser KernelOptionsParser(KernelARGC, KernelARGV);
         ClangTool Tool6(KernelOptionsParser.getCompilations(),RealKernelFiles);
         if (Tool6.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
-            llvm::errs() << "Illegal new host files, fix your program!  -  Exit.\n";
+            llvm::errs() << "FATAL: __internal_error__: illegal device code  -  Exit.\n";
             return 1;
         }
     }
 
     llvm::outs() << "\n\n##############################\n\n";
-    if (!ExitValue) {
-        llvm::outs() << "New files are valid\n" << "Success!\n\n";
-    }
-    else {
-        llvm::outs() << "Invalid Files\n" << "Stage " << ExitValue << " Failed!\n\n";
-    }
+    llvm::outs() << "New files are valid\n" << "Success!\n\n";
 
-    return ExitValue;
+    return 0;
 }
