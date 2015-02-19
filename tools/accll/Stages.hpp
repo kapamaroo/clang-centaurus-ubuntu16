@@ -46,6 +46,7 @@ private:
 };
 
 extern std::string KernelHeader;
+extern std::string OpenCLExtensions;
 
 std::pair<std::string,std::string>
 getGeometry(clang::openacc::DirectiveInfo *DI);
@@ -189,7 +190,7 @@ private:
 
     std::string getCurrentKernelFile() const { return *CurrentKernelFileIterator; }
     unsigned getCurrentKernelFileStartOffset() const {
-        return KernelHeader.size();
+        return KernelHeader.size() + OpenCLExtensions.size();
     }
     unsigned getCurrentKernelFileEndOffset() const {
         clang::SourceManager &SM = Context->getSourceManager();
@@ -224,6 +225,7 @@ public:
     bool VisitMemberExpr(clang::MemberExpr *ME);
     bool VisitArraySubscriptExpr(clang::ArraySubscriptExpr *ASE);
     bool VisitReturnStmt(clang::ReturnStmt *S);
+    bool VisitBinaryOperator(clang::BinaryOperator *BO);
 
     bool VisitEnumDecl(clang::EnumDecl *E);
     bool VisitTypedefDecl(clang::TypedefDecl *T);
