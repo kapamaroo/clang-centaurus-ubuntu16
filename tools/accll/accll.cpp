@@ -38,6 +38,7 @@ int main(int argc, const char **argv) {
     conf.push_back("--");
     conf.push_back("-fopenacc");
     conf.push_back("-I.");
+    conf.push_back("-Wno-implicit-function-declaration");
     //conf.push_back("-x");
     //conf.push_back("cl");
     //conf.push_back("-w");
@@ -139,12 +140,13 @@ int main(int argc, const char **argv) {
         kernel_conf.push_back("-S");
         kernel_conf.push_back("-o tmp.ll");
         kernel_conf.push_back("-I.");
-        kernel_conf.push_back("-I./libclc/generic/include");
+        //kernel_conf.push_back("-I./libclc/generic/include");
         //kernel_conf.push_back("-include clc/clc.h");
-        kernel_conf.push_back("-Dcl_clang_storage_class_specifiers");
+        //kernel_conf.push_back("-Dcl_clang_storage_class_specifiers");
+        kernel_conf.push_back("-Wno-implicit-function-declaration");
         kernel_conf.push_back("-x");
         kernel_conf.push_back("cl");
-        kernel_conf.push_back("-w");
+        //kernel_conf.push_back("-w");
 
         int KernelARGC = 1 + RealKernelFiles.size() + kernel_conf.size();
         const char **KernelARGV = new const char*[1 + RealKernelFiles.size() + kernel_conf.size()];
