@@ -126,9 +126,27 @@ int main(int argc, const char **argv) {
 
     if (!RealKernelFiles.empty()) {
         std::vector<std::string> kernel_conf;
+        /* clang
+          -S
+          -emit-llvm
+          -o test.ll
+          -x cl
+          -I./libclc/generic/include
+          -include clc/clc.h
+          -Dcl_clang_storage_class_specifiers
+          -w
+         */
+
         kernel_conf.push_back("--");
+        kernel_conf.push_back("-S");
+        kernel_conf.push_back("-o tmp.ll");
         kernel_conf.push_back("-I.");
-        //kernel_conf.push_back("-w");
+        kernel_conf.push_back("-I./libclc/generic/include");
+        //kernel_conf.push_back("-include clc/clc.h");
+        kernel_conf.push_back("-Dcl_clang_storage_class_specifiers");
+        kernel_conf.push_back("-x");
+        kernel_conf.push_back("cl");
+        kernel_conf.push_back("-w");
 
         int KernelARGC = 1 + RealKernelFiles.size() + kernel_conf.size();
         const char **KernelARGV = new const char*[1 + RealKernelFiles.size() + kernel_conf.size()];
