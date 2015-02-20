@@ -1337,7 +1337,7 @@ Stage1_ASTVisitor::VisitReturnStmt(ReturnStmt *S) {
     OS.str();
     Replacement R(Context->getSourceManager(),
         S->getLocStart(),0,
-        "{" + RuntimeFinish + Return + "}");
+        "{" + RuntimeFinish + Return + "}\n//");
     applyReplacement(ReplacementPool,R);
 
     return true;
