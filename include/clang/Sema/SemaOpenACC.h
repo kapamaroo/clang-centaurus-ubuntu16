@@ -54,6 +54,7 @@ public:
     isValidClauseFn isValidClauseApproxfun;
     isValidClauseFn isValidClauseIn;
     isValidClauseFn isValidClauseOut;
+    isValidClauseFn isValidClauseInout;
     isValidClauseFn isValidClauseOn;
     isValidClauseFn isValidClauseWorkers;
     isValidClauseFn isValidClauseGroups;

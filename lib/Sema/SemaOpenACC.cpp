@@ -228,8 +228,9 @@ OpenACC::OpenACC(Sema &s) : S(s), PendingDirective(0), Valid(false),
     isValidClause[CK_SIGNIFICANT] =  &OpenACC::isValidClauseSignificant;
     isValidClause[CK_APPROXFUN] =    &OpenACC::isValidClauseApproxfun;
     isValidClause[CK_IN] =           &OpenACC::isValidClauseIn;
-    isValidClause[CK_ON] =           &OpenACC::isValidClauseOn;
     isValidClause[CK_OUT] =          &OpenACC::isValidClauseOut;
+    isValidClause[CK_INOUT] =        &OpenACC::isValidClauseInout;
+    isValidClause[CK_ON] =           &OpenACC::isValidClauseOn;
     isValidClause[CK_WORKERS] =      &OpenACC::isValidClauseWorkers;
     isValidClause[CK_GROUPS] =       &OpenACC::isValidClauseGroups;
     isValidClause[CK_BIND] =         &OpenACC::isValidClauseBind;
@@ -500,6 +501,11 @@ OpenACC::isValidClauseIn(DirectiveKind DK, ClauseInfo *CI) {
 
 bool
 OpenACC::isValidClauseOut(DirectiveKind DK, ClauseInfo *CI) {
+    return true;
+}
+
+bool
+OpenACC::isValidClauseInout(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 

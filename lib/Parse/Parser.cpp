@@ -532,6 +532,7 @@ void Parser::Initialize() {
       ParseClause[CK_APPROXFUN] = &Parser::ParseClauseApproxfun;
       ParseClause[CK_IN] = &Parser::ParseClauseIn;
       ParseClause[CK_OUT] = &Parser::ParseClauseOut;
+      ParseClause[CK_INOUT] = &Parser::ParseClauseInout;
       ParseClause[CK_ON] = &Parser::ParseClauseOn;
       ParseClause[CK_WORKERS] = &Parser::ParseClauseWorkers;
       ParseClause[CK_GROUPS] = &Parser::ParseClauseGroups;

@@ -34,6 +34,7 @@ enum ClauseKind {
     CK_APPROXFUN,
     CK_IN,
     CK_OUT,
+    CK_INOUT,
     CK_ON,
     CK_WORKERS,
     CK_GROUPS,
@@ -267,9 +268,10 @@ private:
     const bool ImplDefault;
 
     DirectiveInfo *ParentDI;
-    static const std::string Name[CK_END];
 
 public:
+    static const std::string Name[CK_END];
+
     ClauseKind getKind() const { return CK; }
 
     bool isImplDefault() const { return ImplDefault; }
@@ -301,6 +303,7 @@ public:
         switch (CK) {
         case CK_IN:
         case CK_OUT:
+        case CK_INOUT:
         case CK_ON:
         case CK_GROUPS:
             return true;
@@ -312,6 +315,7 @@ public:
         switch (CK) {
         case CK_IN:
         case CK_OUT:
+        case CK_INOUT:
         case CK_ON:
             return true;
         default:
@@ -340,9 +344,9 @@ private:
     ClauseList CList;
     AccStmt *ACC;
 
+public:
     static const std::string Name[DK_END];
 
-public:
     DirectiveKind getKind() const { return DK; }
     ClauseList &getClauseList() { return CList; }
     void setAccStmt(AccStmt *Acc) { ACC = Acc; }

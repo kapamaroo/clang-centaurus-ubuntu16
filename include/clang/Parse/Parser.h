@@ -479,6 +479,7 @@ private:
     ParseClauseFn ParseClauseApproxfun;
     ParseClauseFn ParseClauseIn;
     ParseClauseFn ParseClauseOut;
+    ParseClauseFn ParseClauseInout;
     ParseClauseFn ParseClauseOn;
     ParseClauseFn ParseClauseWorkers;
     ParseClauseFn ParseClauseGroups;
