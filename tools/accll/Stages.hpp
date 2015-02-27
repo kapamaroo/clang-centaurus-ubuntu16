@@ -21,6 +21,7 @@ namespace accll {
 
 typedef std::pair<std::string, std::string> ArgNames;
 typedef llvm::DenseMap<clang::openacc::Arg*,ArgNames> NameMap;
+typedef llvm::DenseMap<clang::FunctionDecl*,size_t> UIDKernelMap;
 
 struct ObjRefDef {
     std::string NameRef;

@@ -50,6 +50,8 @@ public:
 };
 
 struct KernelRefDef {
+    static UIDKernelMap KernelUIDMap;
+
     ObjRefDef HostCode;
     ObjRefDef DeviceCode;
     std::string DeviceCodeInlineDeclaration;
@@ -82,7 +84,8 @@ struct KernelRefDef {
 
         HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
         HostCode.Definition = "struct _kernel_struct " + HostCode.NameRef + " = {"
-            + ".src = \"" + DeviceCodeInlineDeclaration + "\""
+            + ".UID = " + toString(getKernelUID(FD))
+            + ",.src = \"" + DeviceCodeInlineDeclaration + "\""
             + ",.name = \"" + DeviceCode.NameRef + "\""
             + ",.src_size = " + toString(DeviceCodeInlineDeclaration.size())
             + ",.name_size = " + toString(DeviceCode.NameRef.size())
@@ -100,6 +103,16 @@ struct KernelRefDef {
         ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\t","");
         ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\"","\\\"");
         ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\n","\\n");
+    }
+
+    size_t getKernelUID(FunctionDecl *FD) {
+        static size_t KUID = 0;
+        if (!FD)
+            return 0;
+        UIDKernelMap::const_iterator II = KernelUIDMap.find(FD);
+        if (II == KernelUIDMap.end())
+            KernelUIDMap[FD] = ++KUID;
+        return KernelUIDMap[FD];
     }
 };
 
@@ -123,8 +136,8 @@ struct KernelSrc : public ObjRefDef {
         Definition = AccurateKernel.HostCode.Definition
             + ApproximateKernel.HostCode.Definition
             + "struct _task_executable " + NameRef + " = {"
-            + ".UID = " + toString(TaskUID)
-            + ",.kernel_accurate = " + ref(AccurateKernel.HostCode.NameRef)
+            //+ ".UID = " + toString(TaskUID)
+            + ".kernel_accurate = " + ref(AccurateKernel.HostCode.NameRef)
             + ",.kernel_approximate = " + ref(ApproximateKernel.HostCode.NameRef)
             + "};";
     }
@@ -206,6 +219,7 @@ private:
 
 int TaskSrc::TaskUID = 0;
 std::string TaskSrc::runtime_call = "acl_create_task";
+UIDKernelMap KernelRefDef::KernelUIDMap;
 
 void
 KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI) {
