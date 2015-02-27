@@ -94,8 +94,7 @@ Parser::Parser(Preprocessor &pp, Sema &actions, bool skipFunctionBodies)
   OpenACCHandler.reset(new PragmaOpenACCHandler(getLangOpts().OpenACC));
   PP.AddPragmaHandler(OpenACCHandler.get());
 
-#warning always enable OpenCL extension handler ?
-  if (getLangOpts().OpenCL) {
+  if (getLangOpts().OpenCL || getLangOpts().OpenACC) {
     OpenCLExtensionHandler.reset(new PragmaOpenCLExtensionHandler());
     PP.AddPragmaHandler("OPENCL", OpenCLExtensionHandler.get());
 
@@ -440,7 +439,7 @@ Parser::~Parser() {
   PP.RemovePragmaHandler(OpenACCHandler.get());
   OpenACCHandler.reset();
 
-  if (getLangOpts().OpenCL) {
+  if (getLangOpts().OpenCL || getLangOpts().OpenACC) {
     PP.RemovePragmaHandler("OPENCL", OpenCLExtensionHandler.get());
     OpenCLExtensionHandler.reset();
     PP.RemovePragmaHandler("OPENCL", FPContractHandler.get());

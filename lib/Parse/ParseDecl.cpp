@@ -626,7 +626,8 @@ void Parser::ParseOpenCLAttributes(ParsedAttributes &attrs) {
     SourceLocation AttrNameLoc = ConsumeToken();
     attrs.addNew(AttrName, AttrNameLoc, 0, AttrNameLoc, 0,
                  SourceLocation(), 0, 0, AttributeList::AS_Keyword);
-    PP.SetOpenCL(true);
+    if (getLangOpts().OpenACC)
+        PP.SetOpenCL(true);
   }
 }
 
@@ -1620,7 +1621,8 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
 
         Decl *TheDecl =
           ParseFunctionDefinition(D, ParsedTemplateInfo(), &LateParsedAttrs);
-        PP.SetOpenCL(false);
+        if (getLangOpts().OpenACC)
+            PP.SetOpenCL(false);
         return Actions.ConvertDeclToDeclGroup(TheDecl);
       }
 
