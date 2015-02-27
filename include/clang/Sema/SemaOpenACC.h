@@ -78,6 +78,8 @@ public:
 
     OpenACC(Sema &s);
 
+    void SetOpenCL(bool value);
+
     RegionStack &getRegionStack() { return RStack; }
 
     bool isInvalid() const { return !Valid; }

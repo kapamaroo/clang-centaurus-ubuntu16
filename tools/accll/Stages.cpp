@@ -78,7 +78,9 @@ struct KernelRefDef {
         FD->print(OS,Context->getPrintingPolicy());
         OS.str();
 
+#if 0
         DeviceCode.Definition = "__kernel " + DeviceCode.Definition;
+#endif
         CreateInlineDeclaration();
 
         HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
@@ -309,8 +311,8 @@ void GeometrySrc::init(DirectiveInfo *DI, clang::ASTContext *Context) {
     Definition = pre_global_code + pre_local_code
         + "struct _geometry " + NameRef + " = {"
         + ".dimensions = " + Dims
-        + ",.global = __accll_geometry_global"
-        + ",.local = __accll_geometry_local };";
+        + ",.acl_global = __accll_geometry_global"
+        + ",.acl_local = __accll_geometry_local };";
 }
 
 static bool isRuntimeCall(const std::string Name) {

@@ -5,6 +5,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Stmt.h"
 #include "llvm/ADT/APSInt.h"
+#include <clang/Lex/Preprocessor.h>
 
 using namespace clang;
 using namespace openacc;
@@ -241,6 +242,8 @@ OpenACC::OpenACC(Sema &s) : S(s), PendingDirective(0), Valid(false),
     isValidDirective[DK_TASK] =      &OpenACC::isValidDirectiveTask;
     isValidDirective[DK_TASKWAIT] =  &OpenACC::isValidDirectiveTaskwait;
 }
+
+void OpenACC::SetOpenCL(bool value) { S.getPreprocessor().SetOpenCL(value); }
 
 Arg::Arg(ArgKind K, CommonInfo *p, Expr *expr, clang::ASTContext *Context) :
     Kind(K), Parent(p), ICE(/*Bitwidth=*/64), ValidICE(false), E(expr), Context(Context) {

@@ -22,21 +22,21 @@
 #include "llvm/Support/raw_ostream.h"
 using namespace clang;
 
-Module::Module(StringRef Name, SourceLocation DefinitionLoc, Module *Parent, 
+Module::Module(StringRef Name, SourceLocation DefinitionLoc, Module *Parent,
                bool IsFramework, bool IsExplicit)
   : Name(Name), DefinitionLoc(DefinitionLoc), Parent(Parent),
     Umbrella(), ASTFile(0), IsAvailable(true), IsFromModuleFile(false),
     IsFramework(IsFramework), IsExplicit(IsExplicit), IsSystem(false),
-    InferSubmodules(false), InferExplicitSubmodules(false), 
+    InferSubmodules(false), InferExplicitSubmodules(false),
     InferExportWildcard(false), ConfigMacrosExhaustive(false),
     NameVisibility(Hidden)
-{ 
+{
   if (Parent) {
     if (!Parent->isAvailable())
       IsAvailable = false;
     if (Parent->IsSystem)
       IsSystem = true;
-    
+
     Parent->SubModuleIndex[Name] = Parent->SubModules.size();
     Parent->SubModules.push_back(this);
   }
@@ -61,11 +61,12 @@ static bool hasFeature(StringRef Feature, const LangOptions &LangOpts,
            .Case("objc", LangOpts.ObjC1)
            .Case("objc_arc", LangOpts.ObjCAutoRefCount)
            .Case("opencl", LangOpts.OpenCL)
+#warning consider OpenACC here?
            .Case("tls", Target.isTLSSupported())
            .Default(Target.hasFeature(Feature));
 }
 
-bool 
+bool
 Module::isAvailable(const LangOptions &LangOpts, const TargetInfo &Target,
                     StringRef &Feature) const {
   if (IsAvailable)
@@ -88,10 +89,10 @@ bool Module::isSubModuleOf(Module *Other) const {
   do {
     if (This == Other)
       return true;
-    
+
     This = This->Parent;
   } while (This);
-  
+
   return false;
 }
 
@@ -99,34 +100,34 @@ const Module *Module::getTopLevelModule() const {
   const Module *Result = this;
   while (Result->Parent)
     Result = Result->Parent;
-  
+
   return Result;
 }
 
 std::string Module::getFullModuleName() const {
   SmallVector<StringRef, 2> Names;
-  
+
   // Build up the set of module names (from innermost to outermost).
   for (const Module *M = this; M; M = M->Parent)
     Names.push_back(M->Name);
-  
+
   std::string Result;
   for (SmallVector<StringRef, 2>::reverse_iterator I = Names.rbegin(),
                                                 IEnd = Names.rend();
        I != IEnd; ++I) {
     if (!Result.empty())
       Result += '.';
-    
+
     Result += *I;
   }
-  
+
   return Result;
 }
 
 const DirectoryEntry *Module::getUmbrellaDir() const {
   if (const FileEntry *Header = getUmbrellaHeader())
     return Header->getDir();
-  
+
   return Umbrella.dyn_cast<const DirectoryEntry *>();
 }
 
@@ -177,7 +178,7 @@ Module *Module::findSubmodule(StringRef Name) const {
   llvm::StringMap<unsigned>::const_iterator Pos = SubModuleIndex.find(Name);
   if (Pos == SubModuleIndex.end())
     return 0;
-  
+
   return SubModules[Pos->getValue()];
 }
 
@@ -256,7 +257,7 @@ void Module::print(raw_ostream &OS, unsigned Indent) const {
   }
 
   OS << " {\n";
-  
+
   if (!Requires.empty()) {
     OS.indent(Indent + 2);
     OS << "requires ";
@@ -267,7 +268,7 @@ void Module::print(raw_ostream &OS, unsigned Indent) const {
     }
     OS << "\n";
   }
-  
+
   if (const FileEntry *UmbrellaHeader = getUmbrellaHeader()) {
     OS.indent(Indent + 2);
     OS << "umbrella header \"";
@@ -277,7 +278,7 @@ void Module::print(raw_ostream &OS, unsigned Indent) const {
     OS.indent(Indent + 2);
     OS << "umbrella \"";
     OS.write_escaped(UmbrellaDir->getName());
-    OS << "\"\n";    
+    OS << "\"\n";
   }
 
   if (!ConfigMacros.empty() || ConfigMacrosExhaustive) {
@@ -306,11 +307,11 @@ void Module::print(raw_ostream &OS, unsigned Indent) const {
     OS.write_escaped(ExcludedHeaders[I]->getName());
     OS << "\"\n";
   }
-  
+
   for (submodule_const_iterator MI = submodule_begin(), MIEnd = submodule_end();
        MI != MIEnd; ++MI)
     (*MI)->print(OS, Indent + 2);
-  
+
   for (unsigned I = 0, N = Exports.size(); I != N; ++I) {
     OS.indent(Indent + 2);
     OS << "export ";
@@ -377,7 +378,7 @@ void Module::print(raw_ostream &OS, unsigned Indent) const {
     OS.indent(Indent + 2);
     OS << "}\n";
   }
-  
+
   OS.indent(Indent);
   OS << "}\n";
 }
@@ -385,5 +386,3 @@ void Module::print(raw_ostream &OS, unsigned Indent) const {
 void Module::dump() const {
   print(llvm::errs());
 }
-
-

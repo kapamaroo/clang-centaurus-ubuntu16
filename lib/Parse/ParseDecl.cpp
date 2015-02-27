@@ -626,6 +626,7 @@ void Parser::ParseOpenCLAttributes(ParsedAttributes &attrs) {
     SourceLocation AttrNameLoc = ConsumeToken();
     attrs.addNew(AttrName, AttrNameLoc, 0, AttrNameLoc, 0,
                  SourceLocation(), 0, 0, AttributeList::AS_Keyword);
+    PP.SetOpenCL(true);
   }
 }
 
@@ -1314,7 +1315,7 @@ void Parser::ProhibitCXX11Attributes(ParsedAttributesWithRange &attrs) {
   AttributeList *AttrList = attrs.getList();
   while (AttrList) {
     if (AttrList->isCXX11Attribute()) {
-      Diag(AttrList->getLoc(), diag::err_attribute_not_type_attr) 
+      Diag(AttrList->getLoc(), diag::err_attribute_not_type_attr)
         << AttrList->getName();
       AttrList->setInvalid();
     }
@@ -1619,6 +1620,7 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
 
         Decl *TheDecl =
           ParseFunctionDefinition(D, ParsedTemplateInfo(), &LateParsedAttrs);
+        PP.SetOpenCL(false);
         return Actions.ConvertDeclToDeclGroup(TheDecl);
       }
 
@@ -2028,7 +2030,7 @@ static bool isValidAfterIdentifierInDeclarator(const Token &T) {
 ///
 bool Parser::ParseImplicitInt(DeclSpec &DS, CXXScopeSpec *SS,
                               const ParsedTemplateInfo &TemplateInfo,
-                              AccessSpecifier AS, DeclSpecContext DSC, 
+                              AccessSpecifier AS, DeclSpecContext DSC,
                               ParsedAttributesWithRange &Attrs) {
   assert(Tok.is(tok::identifier) && "should have identifier");
 
