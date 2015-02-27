@@ -172,7 +172,7 @@ void DeclContext::dumpDeclContext() const {
   const DeclContext *DC = this;
   while (!DC->isTranslationUnit())
     DC = DC->getParent();
-  
+
   ASTContext &Ctx = cast<TranslationUnitDecl>(DC)->getASTContext();
   DeclPrinter Printer(llvm::errs(), Ctx.getPrintingPolicy(), 0);
   Printer.VisitDeclContext(const_cast<DeclContext *>(this), /*Indent=*/false);
@@ -184,14 +184,37 @@ raw_ostream& DeclPrinter::Indent(unsigned Indentation) {
   return Out;
 }
 
-void DeclPrinter::prettyPrintAttributes(Decl *D) {
+static std::string prettyPrintAttributesBeforeFunction(Decl *D, const PrintingPolicy &Policy) {
   if (Policy.PolishForDeclaration)
-    return;
-  
+    return std::string();
+
+  std::string Str;
+  llvm::raw_string_ostream Out(Str);
+
   if (D->hasAttrs()) {
     AttrVec &Attrs = D->getAttrs();
     for (AttrVec::const_iterator i=Attrs.begin(), e=Attrs.end(); i!=e; ++i) {
       Attr *A = *i;
+      //see AttrImpl.inc
+      if (!A->getKind() == attr::OpenCLKernel)
+          continue;
+      A->printPretty(Out, Policy);
+    }
+  }
+  Out.str();
+  return Str;
+}
+
+void DeclPrinter::prettyPrintAttributes(Decl *D) {
+  if (Policy.PolishForDeclaration)
+    return;
+
+  if (D->hasAttrs()) {
+    AttrVec &Attrs = D->getAttrs();
+    for (AttrVec::const_iterator i=Attrs.begin(), e=Attrs.end(); i!=e; ++i) {
+      Attr *A = *i;
+      if (A->getKind() == attr::OpenCLKernel)
+          continue;
       A->printPretty(Out, Policy);
     }
   }
@@ -333,7 +356,7 @@ void DeclPrinter::VisitTranslationUnitDecl(TranslationUnitDecl *D) {
 void DeclPrinter::VisitTypedefDecl(TypedefDecl *D) {
   if (!Policy.SuppressSpecifiers) {
     Out << "typedef ";
-    
+
     if (D->isModulePrivate())
       Out << "__module_private__ ";
   }
@@ -419,6 +442,10 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
     Ty = PT->getInnerType();
   }
 
+  std::string PrefixAttr = prettyPrintAttributesBeforeFunction(D,Policy);
+  if (PrefixAttr.size())
+      Proto = PrefixAttr + " " + Proto;
+
   if (isa<FunctionType>(Ty)) {
     const FunctionType *AFT = Ty->getAs<FunctionType>();
     const FunctionProtoType *FT = 0;
@@ -447,7 +474,7 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
     }
 
     Proto += ")";
-    
+
     if (FT) {
       if (FT->isConst())
         Proto += " const";
@@ -461,7 +488,7 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
       Proto += " throw(";
       if (FT->getExceptionSpecType() == EST_MSAny)
         Proto += "...";
-      else 
+      else
         for (unsigned I = 0, N = FT->getNumExceptions(); I != N; ++I) {
           if (I)
             Proto += ", ";
@@ -505,7 +532,7 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
         } else {
           Out << QualType(BMInitializer->getBaseClass(), 0).getAsString(Policy);
         }
-        
+
         Out << "(";
         if (!BMInitializer->getInit()) {
           // Nothing to print
@@ -513,9 +540,9 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
           Expr *Init = BMInitializer->getInit();
           if (ExprWithCleanups *Tmp = dyn_cast<ExprWithCleanups>(Init))
             Init = Tmp->getSubExpr();
-          
+
           Init = Init->IgnoreParens();
-          
+
           Expr *SimpleInit = 0;
           Expr **Args = 0;
           unsigned NumArgs = 0;
@@ -528,14 +555,14 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
             NumArgs = Construct->getNumArgs();
           } else
             SimpleInit = Init;
-          
+
           if (SimpleInit)
             SimpleInit->printPretty(Out, 0, Policy, Indentation);
           else {
             for (unsigned I = 0; I != NumArgs; ++I) {
               if (isa<CXXDefaultArgExpr>(Args[I]))
                 break;
-              
+
               if (I)
                 Out << ", ";
               Args[I]->printPretty(Out, 0, Policy, Indentation);
@@ -840,7 +867,7 @@ void DeclPrinter::PrintTemplateParameters(const TemplateParameterList *Params,
 
       if (NTTP->isParameterPack() && !isa<PackExpansionType>(NTTP->getType()))
         Out << "...";
-        
+
       if (IdentifierInfo *Name = NTTP->getIdentifier()) {
         Out << ' ';
         Out << Name->getName();
@@ -952,7 +979,7 @@ void DeclPrinter::VisitObjCImplementationDecl(ObjCImplementationDecl *OID) {
     Out << "@implementation " << I << " : " << *SID;
   else
     Out << "@implementation " << I;
-  
+
   if (OID->ivar_size() > 0) {
     Out << "{\n";
     Indentation += Policy.Indentation;
@@ -1055,7 +1082,7 @@ void DeclPrinter::VisitObjCCategoryDecl(ObjCCategoryDecl *PID) {
     Indentation -= Policy.Indentation;
     Out << "}\n";
   }
-  
+
   VisitDeclContext(PID, false);
   Out << "@end";
 
@@ -1132,7 +1159,7 @@ void DeclPrinter::VisitObjCPropertyDecl(ObjCPropertyDecl *PDecl) {
       Out << (first ? ' ' : ',') << "atomic";
       first = false;
     }
-    
+
     (void) first; // Silence dead store warning due to idiomatic code.
     Out << " )";
   }
@@ -1187,4 +1214,3 @@ void DeclPrinter::VisitOMPThreadPrivateDecl(OMPThreadPrivateDecl *D) {
     Out << ")";
   }
 }
-

@@ -78,9 +78,6 @@ struct KernelRefDef {
         FD->print(OS,Context->getPrintingPolicy());
         OS.str();
 
-#if 0
-        DeviceCode.Definition = "__kernel " + DeviceCode.Definition;
-#endif
         CreateInlineDeclaration();
 
         HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
