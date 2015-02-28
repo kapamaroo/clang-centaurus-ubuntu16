@@ -1424,6 +1424,9 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, 
     case CK_OUT:
         DataDepType = "D_OUT";
         break;
+    case CK_INOUT:
+        DataDepType = "D_INOUT";
+        break;
     default:
         DataDepType = "D_UNDEF";
     }
