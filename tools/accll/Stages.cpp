@@ -2126,9 +2126,6 @@ std::string KernelSrc::MakeParamFromArg(Arg *A,bool MakeDefinition,
         ReplaceStringInPlace(NewName,"-","_");  //delimiter
     }
 
-    ClauseInfo *CI = A->getParent()->getAsClause();
-    assert(CI);
-
     //generate new code
     std::string NewCode;
 
