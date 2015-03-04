@@ -22,7 +22,8 @@ using namespace accll;
 
 ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, RegionStack &RStack, const int Index);
 
-static std::string toString(size_t x) {
+template <typename T>
+static std::string toString(const T &x) {
     std::string out;
     llvm::raw_string_ostream OS(out);
     OS << x;
