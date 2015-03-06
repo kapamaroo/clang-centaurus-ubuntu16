@@ -1,14 +1,14 @@
 #ifndef ACCLL_STAGES_HPP_
 #define ACCLL_STAGES_HPP_
 
-#include "llvm/ADT/DenseMap.h"
-
 #include "clang/Basic/OpenACC.h"
 #include "clang/Tooling/Refactoring.h"
 
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
+
+#include "Types.hpp"
 
 //copy from RecursiveASTVisitor.h
 #define TRY_TO(CALL_EXPR)                                       \
@@ -18,33 +18,6 @@
 #define VISITOR_CALL(method) ((*this).*(method))
 
 namespace accll {
-
-typedef std::pair<std::string, std::string> ArgNames;
-typedef llvm::DenseMap<clang::openacc::Arg*,ArgNames> NameMap;
-typedef llvm::DenseMap<clang::FunctionDecl*,size_t> UIDKernelMap;
-
-struct ObjRefDef {
-    std::string NameRef;
-    std::string Definition;
-
-    ObjRefDef(std::string NameRef, std::string Definition) :
-        NameRef(NameRef), Definition(Definition) {}
-    ObjRefDef() {}
-};
-
-struct DataIOSrc : public ObjRefDef {
-    std::string NumArgs;
-
-    DataIOSrc(clang::ASTContext *Context,clang::openacc::DirectiveInfo *DI,
-              NameMap &Map,clang::openacc::RegionStack &RStack)
-    {
-        init(Context,DI,Map,RStack);
-    }
-
-private:
-    void init(clang::ASTContext *Context,clang::openacc::DirectiveInfo *DI,
-              NameMap &Map,clang::openacc::RegionStack &RStack);
-};
 
 extern std::string KernelHeader;
 extern std::string OpenCLExtensions;

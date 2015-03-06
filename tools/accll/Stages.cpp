@@ -50,72 +50,67 @@ public:
     }
 };
 
-struct KernelRefDef {
-    static UIDKernelMap KernelUIDMap;
-
-    ObjRefDef HostCode;
-    ObjRefDef DeviceCode;
-    std::string DeviceCodeInlineDeclaration;
-
-    KernelRefDef() {}
-
-    KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD)
-    {
-        if (!FD) {
-            HostCode.NameRef = "NULL";
-            DeviceCode.NameRef = "NULL";
-            return;
-        }
-
-        if (!FD->getResultType()->isVoidType()) {
-            HostCode.NameRef = "NULL";
-            DeviceCode.NameRef = "NULL";
-            llvm::outs() << "Error: Function '" << FD->getNameAsString()
-                         << "' must have return type of void to define a task\n";
-            return;
-        }
-
-        DeviceCode.NameRef = FD->getNameAsString();
-        //DeviceCode.NameRef = getUniqueKernelName(Name);
-        raw_string_ostream OS(DeviceCode.Definition);
-        FD->print(OS,Context->getPrintingPolicy());
-        OS.str();
-
-        CreateInlineDeclaration();
-
-        HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
-        HostCode.Definition = "struct _kernel_struct " + HostCode.NameRef + " = {"
-            + ".UID = " + toString(getKernelUID(FD))
-            + ",.src = \"" + DeviceCodeInlineDeclaration + "\""
-            + ",.name = \"" + DeviceCode.NameRef + "\""
-            + ",.src_size = " + toString(DeviceCodeInlineDeclaration.size())
-            + ",.name_size = " + toString(DeviceCode.NameRef.size())
-            //+ ",.bin = NULL"
-            + ",.isCompiled = 0"
-            + "};";
+KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD)
+{
+    if (!FD) {
+        HostCode.NameRef = "NULL";
+        DeviceCode.NameRef = "NULL";
+        return;
     }
 
-    void CreateInlineDeclaration() {
-        assert(DeviceCode.Definition.size());
+    if (!FD->getResultType()->isVoidType()) {
+        HostCode.NameRef = "NULL";
+        DeviceCode.NameRef = "NULL";
+        llvm::outs() << "Error: Function '" << FD->getNameAsString()
+                     << "' must have return type of void to define a task\n";
+        return;
+    }
+
+    DeviceCode.NameRef = FD->getNameAsString();
+    //DeviceCode.NameRef = getUniqueKernelName(Name);
+    raw_string_ostream OS(DeviceCode.Definition);
+    FD->print(OS,Context->getPrintingPolicy());
+    OS.str();
+
+    CreateInlineDeclaration();
+
+    bool isCompiled = compile(DeviceCodeInlineDeclaration);
+    if (!isCompiled) {
+        llvm::outs() << BuildLog << "\n";
+    }
+
+    HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
+    HostCode.Definition = "struct _kernel_struct " + HostCode.NameRef + " = {"
+        + ".UID = " + toString(getKernelUID(FD))
+        + ",.src = \"" + DeviceCodeInlineDeclaration + "\""
+        + ",.name = \"" + DeviceCode.NameRef + "\""
+        + ",.src_size = " + toString(DeviceCodeInlineDeclaration.size())
+        + ",.name_size = " + toString(DeviceCode.NameRef.size())
+        + ",.bin = " + Binary
+        + ",.isCompiled = " + ((isCompiled) ? std::string("1") : std::string("0"))
+        + "};";
+}
+
+void KernelRefDef::CreateInlineDeclaration() {
+   assert(DeviceCode.Definition.size());
 #warning TODO: add user types
-        DeviceCodeInlineDeclaration = accll::OpenCLExtensions + DeviceCode.Definition;
-        ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\\","\\\\");
-        ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\r","");
-        ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\t","");
-        ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\"","\\\"");
-        ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\n","\\n");
-    }
+    DeviceCodeInlineDeclaration = accll::OpenCLExtensions + DeviceCode.Definition;
+    ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\\","\\\\");
+    ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\r","");
+    ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\t","");
+    ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\"","\\\"");
+    ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\n","\\n");
+}
 
-    size_t getKernelUID(FunctionDecl *FD) {
-        static size_t KUID = 0;
-        if (!FD)
-            return 0;
-        UIDKernelMap::const_iterator II = KernelUIDMap.find(FD);
-        if (II == KernelUIDMap.end())
-            KernelUIDMap[FD] = ++KUID;
-        return KernelUIDMap[FD];
-    }
-};
+size_t KernelRefDef::getKernelUID(FunctionDecl *FD) {
+    static size_t KUID = 0;
+    if (!FD)
+        return 0;
+    UIDKernelMap::const_iterator II = KernelUIDMap.find(FD);
+    if (II == KernelUIDMap.end())
+        KernelUIDMap[FD] = ++KUID;
+    return KernelUIDMap[FD];
+}
 
 struct KernelSrc : public ObjRefDef {
     clang::ASTContext *Context;
