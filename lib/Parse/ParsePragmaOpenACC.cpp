@@ -30,6 +30,20 @@ const unsigned DirectiveInfo::ValidDirective[DK_END] = {
         BITMASK(CK_ON) |
         BITMASK(CK_ENERGY_JOULE) |
         BITMASK(CK_RATIO),
+
+        //task_coord
+        BITMASK(CK_LABEL) |
+        BITMASK(CK_SIGNIFICANT) |
+        BITMASK(CK_IN) |
+        BITMASK(CK_OUT) |
+        BITMASK(CK_INOUT) |
+        BITMASK(CK_WORKERS) |
+        BITMASK(CK_GROUPS) |
+        BITMASK(CK_BIND) |
+        BITMASK(CK_SUGGEST),
+
+        //subtask
+        BITMASK(CK_APPROXFUN),
         };
 
 const std::string clang::openacc::ExtensionName = "acl";
@@ -37,6 +51,8 @@ const std::string clang::openacc::ExtensionName = "acl";
 const std::string DirectiveInfo::Name[DK_END] = {
     "task",
     "taskwait",
+    "task_coord",
+    "subtask",
 };
 
 const std::string ClauseInfo::Name[CK_END] = {
@@ -497,6 +513,16 @@ static bool isACCClause(const Token &Tok, ClauseKind &Kind) {
  Parser::ParseDirectiveTaskwait(DirectiveInfo *DI) {
      return ParseClauses(DI);
  }
+
+bool
+Parser::ParseDirectiveTask_coord(DirectiveInfo *DI) {
+    return ParseClauses(DI);
+}
+
+bool
+Parser::ParseDirectiveSubtask(DirectiveInfo *DI) {
+    return ParseClauses(DI);
+}
 
  void Parser::HandlePragmaOpenACC() {
      //FIXME: better use a helper function to clean up the eod

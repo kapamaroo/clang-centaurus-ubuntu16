@@ -241,6 +241,8 @@ OpenACC::OpenACC(Sema &s) : S(s), PendingDirective(0), Valid(false),
 
     isValidDirective[DK_TASK] =      &OpenACC::isValidDirectiveTask;
     isValidDirective[DK_TASKWAIT] =  &OpenACC::isValidDirectiveTaskwait;
+    isValidDirective[DK_TASK_COORD] =  &OpenACC::isValidDirectiveTask_coord;
+    isValidDirective[DK_SUBTASK] =  &OpenACC::isValidDirectiveSubtask;
 }
 
 void OpenACC::SetOpenCL(bool value) { S.getPreprocessor().SetOpenCL(value); }
@@ -605,6 +607,16 @@ OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
         return false;
     }
 
+    return true;
+}
+
+bool
+OpenACC::isValidDirectiveTask_coord(DirectiveInfo *DI) {
+    return true;
+}
+
+bool
+OpenACC::isValidDirectiveSubtask(DirectiveInfo *DI) {
     return true;
 }
 

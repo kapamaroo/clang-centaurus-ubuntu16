@@ -68,6 +68,8 @@ public:
 
     isValidDirectiveFn isValidDirectiveTask;
     isValidDirectiveFn isValidDirectiveTaskwait;
+    isValidDirectiveFn isValidDirectiveTask_coord;
+    isValidDirectiveFn isValidDirectiveSubtask;
 
     DirectiveInfo *getPendingDirectiveOrNull(enum DirectiveKind DK);
     StmtResult CreateRegion(DirectiveInfo *DI, Stmt *SubStmt = 0);

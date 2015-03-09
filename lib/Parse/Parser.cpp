@@ -543,6 +543,8 @@ void Parser::Initialize() {
 
       ParseDirective[DK_TASK] = &Parser::ParseDirectiveTask;
       ParseDirective[DK_TASKWAIT] = &Parser::ParseDirectiveTaskwait;
+      ParseDirective[DK_TASK_COORD] = &Parser::ParseDirectiveTask_coord;
+      ParseDirective[DK_SUBTASK] = &Parser::ParseDirectiveSubtask;
   }
 
   Actions.Initialize();
