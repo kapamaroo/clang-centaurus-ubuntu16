@@ -32,7 +32,11 @@ using namespace clang;
 //===----------------------------------------------------------------------===//
 
 namespace  {
-  bool PrintAccStmts = true;
+    enum PrintSubtaskType {
+        K_PRINT_ALL,
+        K_PRINT_ACCURATE_SUBTASK,
+        K_PRINT_APPROXIMATE_SUBTASK
+    };
 
   class StmtPrinter : public StmtVisitor<StmtPrinter> {
     raw_ostream &OS;
@@ -44,7 +48,13 @@ namespace  {
     StmtPrinter(raw_ostream &os, PrinterHelper* helper,
                 const PrintingPolicy &Policy,
                 unsigned Indentation = 0)
-      : OS(os), IndentLevel(Indentation), Helper(helper), Policy(Policy) {}
+      : OS(os), IndentLevel(Indentation), Helper(helper), Policy(Policy)
+      {
+          SubtaskPrintMode = K_PRINT_ALL;
+      }
+
+    enum PrintSubtaskType SubtaskPrintMode;
+    std::string AlternativeName;
 
     void PrintStmt(Stmt *S) {
       PrintStmt(S, Policy.Indentation);
@@ -589,11 +599,11 @@ void StmtPrinter::VisitSEHFinallyStmt(SEHFinallyStmt *Node) {
 void StmtPrinter::VisitAccStmt(AccStmt *Node) {
     openacc::DirectiveInfo *DI = Node->getDirective();
 
-    if (PrintAccStmts)
+    assert(isa<CallExpr>(Node->getSubStmt()));
+
+    if (SubtaskPrintMode == K_PRINT_ALL)
         OS << DI->getPrettyDirective(Policy);
 
-    assert(isa<CompoundStmt>(Node->getSubStmt())
-           || isa<CallExpr>(Node->getSubStmt()));
     PrintStmt(Node->getSubStmt());
 }
 
@@ -923,7 +933,10 @@ void StmtPrinter::PrintCallArgs(CallExpr *Call) {
 }
 
 void StmtPrinter::VisitCallExpr(CallExpr *Call) {
-  PrintExpr(Call->getCallee());
+    if (SubtaskPrintMode == K_PRINT_APPROXIMATE_SUBTASK && AlternativeName.size())
+        OS << AlternativeName;
+    else
+        PrintExpr(Call->getCallee());
   OS << "(";
   PrintCallArgs(Call);
   OS << ")";
@@ -1918,6 +1931,38 @@ void Stmt::printPretty(raw_ostream &OS,
   }
 
   StmtPrinter P(OS, Helper, Policy, Indentation);
+  P.Visit(const_cast<Stmt*>(this));
+}
+
+void Stmt::printPrettyAccurateVersion(raw_ostream &OS,
+                                      PrinterHelper *Helper,
+                                      const PrintingPolicy &Policy,
+                                      unsigned Indentation) const {
+  if (this == 0) {
+    OS << "<NULL>";
+    return;
+  }
+
+  StmtPrinter P(OS, Helper, Policy, Indentation);
+  P.SubtaskPrintMode = K_PRINT_ACCURATE_SUBTASK;
+  assert(isa<CompountStmt>(this) && "Not a function body");
+  P.Visit(const_cast<Stmt*>(this));
+}
+
+void Stmt::printPrettyApproximateVersion(raw_ostream &OS,
+                                         PrinterHelper *Helper,
+                                         const PrintingPolicy &Policy,
+                                         std::string AlternativeName,
+                                         unsigned Indentation) const {
+  if (this == 0) {
+    OS << "<NULL>";
+    return;
+  }
+
+  StmtPrinter P(OS, Helper, Policy, Indentation);
+  P.SubtaskPrintMode = K_PRINT_APPROXIMATE_SUBTASK;
+  P.AlternativeName = AlternativeName;
+  assert(isa<CompountStmt>(this) && "Not a function body");
   P.Visit(const_cast<Stmt*>(this));
 }
 

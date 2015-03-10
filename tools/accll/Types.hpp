@@ -43,6 +43,12 @@ private:
 };
 
 struct KernelRefDef {
+    enum PrintSubtaskType {
+        K_PRINT_ALL,
+        K_PRINT_ACCURATE_SUBTASK,
+        K_PRINT_APPROXIMATE_SUBTASK
+    };
+
     static UIDKernelMap KernelUIDMap;
 
     ObjRefDef HostCode;
@@ -56,7 +62,8 @@ struct KernelRefDef {
 
     bool compile(std::string inFile,const std::vector<std::string> &options = std::vector<std::string>());
 
-    KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD);
+    KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD,
+                 const enum PrintSubtaskType = K_PRINT_ALL);
 
     void CreateInlineDeclaration();
 

@@ -50,7 +50,7 @@ public:
     }
 };
 
-KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD)
+KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD, const enum PrintSubtaskType)
 {
     if (!FD) {
         HostCode.NameRef = "NULL";
@@ -227,8 +227,14 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI) {
         FunctionDecl *AccurateFun = CE->getDirectCallee();
         FunctionDecl *ApproxFun = getApproxFunctionDecl(DI);
 
-        AccurateKernel = KernelRefDef(Context,AccurateFun);
-        ApproximateKernel = KernelRefDef(Context,ApproxFun);
+        if (DI->getKind() == DK_TASK_COORD) {
+            AccurateKernel = KernelRefDef(Context,AccurateFun,K_PRINT_ACCURATE_SUBTASK);
+            ApproximateKernel = KernelRefDef(Context,AccurateFun,K_PRINT_APPROXIMATE_SUBTASK);
+        }
+        else {
+            AccurateKernel = KernelRefDef(Context,AccurateFun);
+            ApproximateKernel = KernelRefDef(Context,Approximate);
+        }
         return;
     }
 
@@ -1006,8 +1012,7 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
 
         std::string NewCode;
         if (ClauseOn) {
-#warning IMPLEMENT ME:  wait_on()
-            assert(0 && "Unsupported feature");
+            assert(0 && "Unsupported feature: IMPLEMENT ME:  wait_on()");
         }
         else if (ClauseLabel && ClauseRatio) {
             NewCode = "acl_taskwait_label_ratio(" + QLabel + "," + Ratio + ");";
@@ -1034,7 +1039,7 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
             applyReplacement(ReplacementPool,R);
         }
     }
-    else if (DI->getKind() == DK_TASK) {
+    else if (DI->getKind() == DK_TASK || DI->getKind() == DK_TASK_COORD) {
         llvm::outs() << "  -  Create Kernel\n";
 
         TaskSrc NewTask(Context,DI,Map,RStack,ReplacementPool);
@@ -1656,8 +1661,6 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
             llvm::outs() << "error: function arguments and in/out directive arguments mismatch\n";
             return;
         }
-
-#warning FIXME:  what about both in/out Args ?
 
         //gather function call args
         ClauseInfo TmpCI(CK_IN,DI);  //the clause type here is not important

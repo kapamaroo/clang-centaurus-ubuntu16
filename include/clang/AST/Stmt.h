@@ -391,6 +391,13 @@ public:
   void printPretty(raw_ostream &OS, PrinterHelper *Helper,
                    const PrintingPolicy &Policy,
                    unsigned Indentation = 0) const;
+  void printPrettyAccurateVersion(raw_ostream &OS, PrinterHelper *Helper,
+                                  const PrintingPolicy &Policy,
+                                  unsigned Indentation = 0) const;
+  void printPrettyApproximateVersion(raw_ostream &OS, PrinterHelper *Helper,
+                                     const PrintingPolicy &Policy,
+                                     std::string AlternativeName,
+                                     unsigned Indentation = 0) const;
 
   /// viewAST - Visualize an AST rooted at this Stmt* using GraphViz.  Only
   ///   works on systems with GraphViz (Mac OS X) or dot+gv installed.

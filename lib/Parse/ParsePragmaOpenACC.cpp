@@ -611,9 +611,8 @@ Parser::ParseClauseWrapper(DirectiveInfo *DI) {
     const DirectiveKind DK = DI->getKind();
     ClauseList &CList = DI->getClauseList();
 
-#warning FIXME: we do not have if and private clauses
     //early fail
-    if (Tok.isNot(tok::identifier) && Tok.isNot(tok::kw_if) && Tok.isNot(tok::kw_private)) {
+    if (Tok.isNot(tok::identifier)) {
         PP.Diag(Tok,diag::err_pragma_acc_unknown_clause);
         //consume bad token to avoid false errors afterwards
         ConsumeAnyToken();

@@ -25,7 +25,13 @@
 using namespace clang;
 
 namespace {
-  class DeclPrinter : public DeclVisitor<DeclPrinter> {
+    enum PrintSubtaskType {
+        K_PRINT_ALL,
+        K_PRINT_ACCURATE_SUBTASK,
+        K_PRINT_APPROXIMATE_SUBTASK
+    };
+
+    class DeclPrinter : public DeclVisitor<DeclPrinter> {
     raw_ostream &Out;
     PrintingPolicy Policy;
     unsigned Indentation;
@@ -41,7 +47,13 @@ namespace {
     DeclPrinter(raw_ostream &Out, const PrintingPolicy &Policy,
                 unsigned Indentation = 0, bool PrintInstantiation = false)
       : Out(Out), Policy(Policy), Indentation(Indentation),
-        PrintInstantiation(PrintInstantiation) { }
+        PrintInstantiation(PrintInstantiation)
+      {
+          SubtaskPrintMode = K_PRINT_ALL;
+      }
+
+    enum PrintSubtaskType SubtaskPrintMode;
+    std::string AlternativeName;
 
     void VisitDeclContext(DeclContext *DC, bool Indent = true);
 
@@ -98,6 +110,24 @@ void Decl::print(raw_ostream &Out, unsigned Indentation,
 void Decl::print(raw_ostream &Out, const PrintingPolicy &Policy,
                  unsigned Indentation, bool PrintInstantiation) const {
   DeclPrinter Printer(Out, Policy, Indentation, PrintInstantiation);
+  Printer.Visit(const_cast<Decl*>(this));
+}
+
+void Decl::printAccurateVersion(raw_ostream &Out, const PrintingPolicy &Policy,
+                                unsigned Indentation, bool PrintInstantiation) const {
+  assert(isa<FunctionDecl>(this));
+  DeclPrinter Printer(Out, Policy, Indentation, PrintInstantiation);
+  Printer.SubtaskPrintMode = K_PRINT_ACCURATE_SUBTASK;
+  Printer.Visit(const_cast<Decl*>(this));
+}
+
+void Decl::printApproximateVersion(raw_ostream &Out, const PrintingPolicy &Policy,
+                                   std::string AlternativeName,
+                                   unsigned Indentation, bool PrintInstantiation) const {
+  assert(isa<FunctionDecl>(this));
+  DeclPrinter Printer(Out, Policy, Indentation, PrintInstantiation);
+  Printer.SubtaskPrintMode = K_PRINT_APPROXIMATE_SUBTASK;
+  Printer.AlternativeName = AlternativeName;
   Printer.Visit(const_cast<Decl*>(this));
 }
 
@@ -436,6 +466,9 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
   SubPolicy.SuppressSpecifiers = false;
   std::string Proto = D->getNameInfo().getAsString();
 
+  if (SubtaskPrintMode == K_PRINT_APPROXIMATE_SUBTASK && AlternativeName.size())
+      Proto = AlternativeName;
+
   QualType Ty = D->getType();
   while (const ParenType *PT = dyn_cast<ParenType>(Ty)) {
     Proto = '(' + Proto + ')';
@@ -608,7 +641,18 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
     } else
       Out << ' ';
 
-    D->getBody()->printPretty(Out, 0, SubPolicy, Indentation);
+    Stmt *Body = D->getBody();
+    switch (SubtaskPrintMode) {
+    case K_PRINT_ALL:
+        Body->printPretty(Out, 0, SubPolicy, Indentation);
+        break;
+    case K_PRINT_ACCURATE_SUBTASK:
+        Body->printPrettyAccurateVersion(Out, 0, SubPolicy, Indentation);
+        break;
+    case K_PRINT_APPROXIMATE_SUBTASK:
+        Body->printPrettyApproximateVersion(Out, 0, SubPolicy, AlternativeName, Indentation);
+        break;
+    }
     Out << '\n';
   }
 }
