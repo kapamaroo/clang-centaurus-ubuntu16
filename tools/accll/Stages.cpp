@@ -233,7 +233,7 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI) {
         }
         else {
             AccurateKernel = KernelRefDef(Context,AccurateFun);
-            ApproximateKernel = KernelRefDef(Context,Approximate);
+            ApproximateKernel = KernelRefDef(Context,ApproxFun);
         }
         return;
     }

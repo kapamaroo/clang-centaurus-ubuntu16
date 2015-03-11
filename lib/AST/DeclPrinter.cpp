@@ -21,16 +21,11 @@
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/Basic/Module.h"
+#include "clang/Basic/OpenACC.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace clang;
 
 namespace {
-    enum PrintSubtaskType {
-        K_PRINT_ALL,
-        K_PRINT_ACCURATE_SUBTASK,
-        K_PRINT_APPROXIMATE_SUBTASK
-    };
-
     class DeclPrinter : public DeclVisitor<DeclPrinter> {
     raw_ostream &Out;
     PrintingPolicy Policy;
@@ -49,10 +44,10 @@ namespace {
       : Out(Out), Policy(Policy), Indentation(Indentation),
         PrintInstantiation(PrintInstantiation)
       {
-          SubtaskPrintMode = K_PRINT_ALL;
+          SubtaskPrintMode = openacc::K_PRINT_ALL;
       }
 
-    enum PrintSubtaskType SubtaskPrintMode;
+    enum openacc::PrintSubtaskType SubtaskPrintMode;
     std::string AlternativeName;
 
     void VisitDeclContext(DeclContext *DC, bool Indent = true);
@@ -117,7 +112,7 @@ void Decl::printAccurateVersion(raw_ostream &Out, const PrintingPolicy &Policy,
                                 unsigned Indentation, bool PrintInstantiation) const {
   assert(isa<FunctionDecl>(this));
   DeclPrinter Printer(Out, Policy, Indentation, PrintInstantiation);
-  Printer.SubtaskPrintMode = K_PRINT_ACCURATE_SUBTASK;
+  Printer.SubtaskPrintMode = openacc::K_PRINT_ACCURATE_SUBTASK;
   Printer.Visit(const_cast<Decl*>(this));
 }
 
@@ -126,7 +121,7 @@ void Decl::printApproximateVersion(raw_ostream &Out, const PrintingPolicy &Polic
                                    unsigned Indentation, bool PrintInstantiation) const {
   assert(isa<FunctionDecl>(this));
   DeclPrinter Printer(Out, Policy, Indentation, PrintInstantiation);
-  Printer.SubtaskPrintMode = K_PRINT_APPROXIMATE_SUBTASK;
+  Printer.SubtaskPrintMode = openacc::K_PRINT_APPROXIMATE_SUBTASK;
   Printer.AlternativeName = AlternativeName;
   Printer.Visit(const_cast<Decl*>(this));
 }
@@ -466,7 +461,7 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
   SubPolicy.SuppressSpecifiers = false;
   std::string Proto = D->getNameInfo().getAsString();
 
-  if (SubtaskPrintMode == K_PRINT_APPROXIMATE_SUBTASK && AlternativeName.size())
+  if (SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK && AlternativeName.size())
       Proto = AlternativeName;
 
   QualType Ty = D->getType();
@@ -643,13 +638,13 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
 
     Stmt *Body = D->getBody();
     switch (SubtaskPrintMode) {
-    case K_PRINT_ALL:
+    case openacc::K_PRINT_ALL:
         Body->printPretty(Out, 0, SubPolicy, Indentation);
         break;
-    case K_PRINT_ACCURATE_SUBTASK:
+    case openacc::K_PRINT_ACCURATE_SUBTASK:
         Body->printPrettyAccurateVersion(Out, 0, SubPolicy, Indentation);
         break;
-    case K_PRINT_APPROXIMATE_SUBTASK:
+    case openacc::K_PRINT_APPROXIMATE_SUBTASK:
         Body->printPrettyApproximateVersion(Out, 0, SubPolicy, AlternativeName, Indentation);
         break;
     }

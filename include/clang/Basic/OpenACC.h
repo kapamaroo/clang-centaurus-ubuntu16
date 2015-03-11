@@ -18,6 +18,12 @@ class ASTContext;
 
 namespace openacc {
 
+enum PrintSubtaskType {
+    K_PRINT_ALL,
+    K_PRINT_ACCURATE_SUBTASK,
+    K_PRINT_APPROXIMATE_SUBTASK
+};
+
 extern const std::string ExtensionName;
 
 enum DirectiveKind {

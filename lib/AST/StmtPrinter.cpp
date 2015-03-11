@@ -32,12 +32,6 @@ using namespace clang;
 //===----------------------------------------------------------------------===//
 
 namespace  {
-    enum PrintSubtaskType {
-        K_PRINT_ALL,
-        K_PRINT_ACCURATE_SUBTASK,
-        K_PRINT_APPROXIMATE_SUBTASK
-    };
-
   class StmtPrinter : public StmtVisitor<StmtPrinter> {
     raw_ostream &OS;
     unsigned IndentLevel;
@@ -50,10 +44,10 @@ namespace  {
                 unsigned Indentation = 0)
       : OS(os), IndentLevel(Indentation), Helper(helper), Policy(Policy)
       {
-          SubtaskPrintMode = K_PRINT_ALL;
+          SubtaskPrintMode = openacc::K_PRINT_ALL;
       }
 
-    enum PrintSubtaskType SubtaskPrintMode;
+    enum openacc::PrintSubtaskType SubtaskPrintMode;
     std::string AlternativeName;
 
     void PrintStmt(Stmt *S) {
@@ -601,7 +595,7 @@ void StmtPrinter::VisitAccStmt(AccStmt *Node) {
 
     assert(isa<CallExpr>(Node->getSubStmt()));
 
-    if (SubtaskPrintMode == K_PRINT_ALL)
+    if (SubtaskPrintMode == openacc::K_PRINT_ALL)
         OS << DI->getPrettyDirective(Policy);
 
     PrintStmt(Node->getSubStmt());
@@ -933,7 +927,7 @@ void StmtPrinter::PrintCallArgs(CallExpr *Call) {
 }
 
 void StmtPrinter::VisitCallExpr(CallExpr *Call) {
-    if (SubtaskPrintMode == K_PRINT_APPROXIMATE_SUBTASK && AlternativeName.size())
+    if (SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK && AlternativeName.size())
         OS << AlternativeName;
     else
         PrintExpr(Call->getCallee());
@@ -1944,7 +1938,7 @@ void Stmt::printPrettyAccurateVersion(raw_ostream &OS,
   }
 
   StmtPrinter P(OS, Helper, Policy, Indentation);
-  P.SubtaskPrintMode = K_PRINT_ACCURATE_SUBTASK;
+  P.SubtaskPrintMode = openacc::K_PRINT_ACCURATE_SUBTASK;
   assert(isa<CompountStmt>(this) && "Not a function body");
   P.Visit(const_cast<Stmt*>(this));
 }
@@ -1960,7 +1954,7 @@ void Stmt::printPrettyApproximateVersion(raw_ostream &OS,
   }
 
   StmtPrinter P(OS, Helper, Policy, Indentation);
-  P.SubtaskPrintMode = K_PRINT_APPROXIMATE_SUBTASK;
+  P.SubtaskPrintMode = openacc::K_PRINT_APPROXIMATE_SUBTASK;
   P.AlternativeName = AlternativeName;
   assert(isa<CompountStmt>(this) && "Not a function body");
   P.Visit(const_cast<Stmt*>(this));
