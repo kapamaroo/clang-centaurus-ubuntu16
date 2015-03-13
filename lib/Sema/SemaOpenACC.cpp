@@ -241,7 +241,6 @@ OpenACC::OpenACC(Sema &s) : S(s), PendingDirective(0), Valid(false),
 
     isValidDirective[DK_TASK] =      &OpenACC::isValidDirectiveTask;
     isValidDirective[DK_TASKWAIT] =  &OpenACC::isValidDirectiveTaskwait;
-    isValidDirective[DK_TASK_COORD] =  &OpenACC::isValidDirectiveTask_coord;
     isValidDirective[DK_SUBTASK] =  &OpenACC::isValidDirectiveSubtask;
 }
 
@@ -463,6 +462,10 @@ bool
 OpenACC::isValidDirectiveWrapper(DirectiveInfo *DI) {
 //http://www.parashift.com/c++-faq-lite/pointers-to-members.html
 #define ACC_CALL(method) ((*this).*(method))
+    if (DI->getKind() == DK_SUBTASK && !S.getLangOpts().OpenCL) {
+        WarnOnDirective(DI);
+        return false;
+    }
 
     if (PendingDirective)
         DiscardAndWarn();
@@ -611,11 +614,6 @@ OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
 }
 
 bool
-OpenACC::isValidDirectiveTask_coord(DirectiveInfo *DI) {
-    return true;
-}
-
-bool
 OpenACC::isValidDirectiveSubtask(DirectiveInfo *DI) {
     return true;
 }
@@ -669,24 +667,25 @@ OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
 
     AccStmt *ACC = DI->getAccStmt();
 
-    if (DI->getKind() == DK_TASK) {
+    switch (DI->getKind()) {
+    case DK_TASK:
+    case DK_SUBTASK:
         assert(SubStmt);
         if (!SubStmt)
             return StmtEmpty();
 
         if (isa<CallExpr>(SubStmt))
             ACC->setSubStmt(SubStmt);
-        else if (isa<CompoundStmt>(SubStmt))
-            ACC->setSubStmt(SubStmt);
         else {
             WarnOnDirective(DI);
             return StmtEmpty();
         }
-    }
-    else if (DI->getKind() == DK_TASKWAIT) {
+        break;
+    case DK_TASKWAIT:
         assert(!SubStmt);
         if (SubStmt)
             return StmtEmpty();
+        break;
     }
 
     return S.Owned(ACC);

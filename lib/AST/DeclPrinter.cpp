@@ -645,7 +645,7 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
         Body->printPrettyAccurateVersion(Out, 0, SubPolicy, Indentation);
         break;
     case openacc::K_PRINT_APPROXIMATE_SUBTASK:
-        Body->printPrettyApproximateVersion(Out, 0, SubPolicy, AlternativeName, Indentation);
+        Body->printPrettyApproximateVersion(Out, 0, SubPolicy, Indentation);
         break;
     }
     Out << '\n';

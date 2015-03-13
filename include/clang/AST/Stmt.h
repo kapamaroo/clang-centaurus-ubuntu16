@@ -396,7 +396,6 @@ public:
                                   unsigned Indentation = 0) const;
   void printPrettyApproximateVersion(raw_ostream &OS, PrinterHelper *Helper,
                                      const PrintingPolicy &Policy,
-                                     std::string AlternativeName,
                                      unsigned Indentation = 0) const;
 
   /// viewAST - Visualize an AST rooted at this Stmt* using GraphViz.  Only

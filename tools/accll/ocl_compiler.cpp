@@ -87,7 +87,7 @@ std::string ocltLogBuildInfo(cl_program cpProgram, cl_device_id cdDevice)
 
 namespace accll {
 
-bool
+size_t
 KernelRefDef::compile(std::string src, const std::vector<std::string> &options) {
     cl_context       clGPUContext;
     cl_program       clProgram;
@@ -95,8 +95,6 @@ KernelRefDef::compile(std::string src, const std::vector<std::string> &options) 
     size_t           dataBytes;
     size_t           srcLength = src.size();
     cl_int           errcode;
-
-    Binary = "NULL";
 
     std::string platform;
     // Declare the supported options.
@@ -166,7 +164,7 @@ KernelRefDef::compile(std::string src, const std::vector<std::string> &options) 
     // debug a failed .cl build
     BuildLog = ocltLogBuildInfo(clProgram, cdDevices[0]);
     if(errcode != CL_SUCCESS) {
-        return false;
+        return 0;
     }
 
     // Store the binary in the file system
@@ -183,7 +181,7 @@ KernelRefDef::compile(std::string src, const std::vector<std::string> &options) 
 
     Binary = std::string(binary,binaryLength);
 
-    return true;
+    return binaryLength;
 }
 
 }

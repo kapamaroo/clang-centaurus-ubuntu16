@@ -6,6 +6,7 @@
 namespace clang {
 class Sema;
 class ForStmt;
+class FunctionDecl;
 namespace openacc {
 
 typedef SmallVector<unsigned,64> UVec;
@@ -68,7 +69,6 @@ public:
 
     isValidDirectiveFn isValidDirectiveTask;
     isValidDirectiveFn isValidDirectiveTaskwait;
-    isValidDirectiveFn isValidDirectiveTask_coord;
     isValidDirectiveFn isValidDirectiveSubtask;
 
     DirectiveInfo *getPendingDirectiveOrNull(enum DirectiveKind DK);

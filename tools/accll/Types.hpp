@@ -3,6 +3,7 @@
 
 #include "clang/Basic/OpenACC.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/StringMap.h"
 
 namespace clang {
     class FunctionDecl;
@@ -16,7 +17,7 @@ namespace clang {
 }
 
 namespace accll {
-typedef llvm::DenseMap<clang::FunctionDecl*,size_t> UIDKernelMap;
+typedef llvm::StringMap<size_t> UIDKernelMap;
 typedef std::pair<std::string, std::string> ArgNames;
 typedef llvm::DenseMap<clang::openacc::Arg*,ArgNames> NameMap;
 
@@ -55,14 +56,15 @@ struct KernelRefDef {
 
     KernelRefDef() {}
 
-    bool compile(std::string inFile,const std::vector<std::string> &options = std::vector<std::string>());
+    //return the size of the compiled kernel in bytes, 0 if cannot compile
+    size_t compile(std::string inFile,const std::vector<std::string> &options = std::vector<std::string>());
 
     KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD,
                  const enum clang::openacc::PrintSubtaskType = clang::openacc::K_PRINT_ALL);
 
     void CreateInlineDeclaration();
 
-    size_t getKernelUID(clang::FunctionDecl *FD);
+    size_t getKernelUID(std::string Name);
 };
 
 }

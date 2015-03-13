@@ -811,6 +811,7 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
       // Parse any pragmas at the beginning of the compound statement.
       ParseCompoundStatementLeadingPragmas();
 
+#warning FIXME: first directive inside compound statement
       StmtResult LeadingWaitDI = StmtEmpty();
       //get any pending wait directive
       if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASK))
@@ -875,6 +876,13 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
             R = ParseStatementOrDeclaration(Stmts, false);
             Actions.getACCInfo()->getRegionStack().ExitRegion(DI);
             R = Actions.getACCInfo()->CreateRegion(DI,R.get());
+        }
+        else if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_SUBTASK)) {
+            Actions.getACCInfo()->getRegionStack().EnterRegion(DI);
+            R = ParseStatementOrDeclaration(Stmts, false);
+            Actions.getACCInfo()->getRegionStack().ExitRegion(DI);
+            R = Actions.getACCInfo()->CreateRegion(DI,R.get());
+            Actions.getASTContext().AddKernelWithSubtasks(Actions.getCurFunctionDecl()->getNameAsString());
         }
         else if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASKWAIT)) {
             R = Actions.getACCInfo()->CreateRegion(DI);

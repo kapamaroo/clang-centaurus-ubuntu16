@@ -492,7 +492,6 @@ private:
 
     ParseDirectiveFn ParseDirectiveTask;
     ParseDirectiveFn ParseDirectiveTaskwait;
-    ParseDirectiveFn ParseDirectiveTask_coord;
     ParseDirectiveFn ParseDirectiveSubtask;
 
     ////////////////////////////////////////////////////////////////////////////////

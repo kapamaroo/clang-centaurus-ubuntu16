@@ -31,6 +31,17 @@ static std::string toString(const T &x) {
     return out;
 }
 
+static std::string ToHex(const std::string src) {
+    std::string out;
+    llvm::raw_string_ostream OS(out);
+    for (size_t i=0; i<src.size(); ++i) {
+        if (i)
+            OS << ",";
+        OS << "0x" << (unsigned char)src[i];
+    }
+    return OS.str();
+}
+
 static std::string getUniqueKernelName(const std::string Base) {
     static int UID = 0;  //unique kernel identifier
     std::string ID;
@@ -50,7 +61,7 @@ public:
     }
 };
 
-KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD, const enum PrintSubtaskType)
+KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD, const enum PrintSubtaskType SubtaskPrintMode)
 {
     if (!FD) {
         HostCode.NameRef = "NULL";
@@ -69,25 +80,44 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD, const en
     DeviceCode.NameRef = FD->getNameAsString();
     //DeviceCode.NameRef = getUniqueKernelName(Name);
     raw_string_ostream OS(DeviceCode.Definition);
-    FD->print(OS,Context->getPrintingPolicy());
+    switch (SubtaskPrintMode) {
+    case K_PRINT_ALL:
+        FD->print(OS,Context->getPrintingPolicy());
+        break;
+    case K_PRINT_ACCURATE_SUBTASK:
+        FD->printAccurateVersion(OS,Context->getPrintingPolicy());
+        break;
+    case K_PRINT_APPROXIMATE_SUBTASK:
+        std::string AlternativeName = FD->getNameAsString() + std::string("__approx__");
+        DeviceCode.NameRef = AlternativeName;
+        FD->printApproximateVersion(OS,Context->getPrintingPolicy(),AlternativeName);
+        break;
+    }
     OS.str();
 
     CreateInlineDeclaration();
 
-    bool isCompiled = compile(DeviceCodeInlineDeclaration);
-    if (!isCompiled) {
+    Binary = "NULL";
+    size_t BinarySize = 0;
+#if 0
+    BinarySize = compile(DeviceCodeInlineDeclaration);
+#endif
+
+    if (!BinarySize) {
         llvm::outs() << BuildLog << "\n";
     }
+    else
+        Binary = "[" + ToHex(Binary) + "]";
 
     HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
     HostCode.Definition = "struct _kernel_struct " + HostCode.NameRef + " = {"
-        + ".UID = " + toString(getKernelUID(FD))
-        + ",.src = \"" + DeviceCodeInlineDeclaration + "\""
+        + ".UID = " + toString(getKernelUID(DeviceCode.NameRef))
         + ",.name = \"" + DeviceCode.NameRef + "\""
-        + ",.src_size = " + toString(DeviceCodeInlineDeclaration.size())
         + ",.name_size = " + toString(DeviceCode.NameRef.size())
-        + ",.bin = " + Binary
-        + ",.isCompiled = " + ((isCompiled) ? std::string("1") : std::string("0"))
+        + ",.src = \"" + DeviceCodeInlineDeclaration + "\""
+        + ",.src_size = " + toString(DeviceCodeInlineDeclaration.size())
+        + ",.__bin = " + Binary
+        + ",.__bin_size = " + toString(BinarySize)
         + "};";
 }
 
@@ -102,14 +132,27 @@ void KernelRefDef::CreateInlineDeclaration() {
     ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\n","\\n");
 }
 
-size_t KernelRefDef::getKernelUID(FunctionDecl *FD) {
+size_t KernelRefDef::getKernelUID(std::string Name) {
     static size_t KUID = 0;
-    if (!FD)
+    if (!Name.size())
         return 0;
-    UIDKernelMap::const_iterator II = KernelUIDMap.find(FD);
-    if (II == KernelUIDMap.end())
-        KernelUIDMap[FD] = ++KUID;
-    return KernelUIDMap[FD];
+    UIDKernelMap::const_iterator II = KernelUIDMap.find(Name);
+    if (II == KernelUIDMap.end()) {
+        KernelUIDMap[Name] = ++KUID;
+        return KUID;
+    }
+    return II->getValue();
+}
+
+static FunctionDecl *getApproxFunctionDecl(DirectiveInfo *DI) {
+    ClauseList &CList = DI->getClauseList();
+    for (ClauseList::iterator
+             II = CList.begin(), EE = CList.end(); II != EE; ++II)
+        if ((*II)->getKind() == CK_APPROXFUN) {
+            FunctionArg *FA = dyn_cast<FunctionArg>((*II)->getArg());
+            return FA->getFunctionDecl();
+        }
+    return 0;
 }
 
 struct KernelSrc : public ObjRefDef {
@@ -148,18 +191,6 @@ private:
                                  std::string Kernel, int &ArgPos,
                                  std::string &CleanupCode);
     std::string MakeBody(clang::openacc::DirectiveInfo *DI, clang::Stmt *SubStmt);
-
-
-    FunctionDecl *getApproxFunctionDecl(DirectiveInfo *DI) {
-        ClauseList &CList = DI->getClauseList();
-        for (ClauseList::iterator
-                 II = CList.begin(), EE = CList.end(); II != EE; ++II)
-            if ((*II)->getKind() == CK_APPROXFUN) {
-                FunctionArg *FA = dyn_cast<FunctionArg>((*II)->getArg());
-                return FA->getFunctionDecl();
-            }
-        return 0;
-    }
 
     std::string ref(std::string Name) const {
         if (Name.compare("NULL") == 0 || Name.compare("0") == 0)
@@ -227,7 +258,15 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI) {
         FunctionDecl *AccurateFun = CE->getDirectCallee();
         FunctionDecl *ApproxFun = getApproxFunctionDecl(DI);
 
-        if (DI->getKind() == DK_TASK_COORD) {
+        assert(AccurateFun);
+
+        std::string Name = AccurateFun->getNameAsString();
+        llvm::outs() << Name << "\n";
+
+        if (Context->isKernelWithSubtasks(Name)) {
+            assert(!ApproxFun);
+
+            llvm::outs() << "Kernel '" << AccurateFun->getNameAsString() << "' has subtasks\n";
             AccurateKernel = KernelRefDef(Context,AccurateFun,K_PRINT_ACCURATE_SUBTASK);
             ApproximateKernel = KernelRefDef(Context,AccurateFun,K_PRINT_APPROXIMATE_SUBTASK);
         }
@@ -237,6 +276,8 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI) {
         }
         return;
     }
+
+    return;
 
     assert(isa<CompoundStmt>(SubStmt));
     int ArgNum = 0;
@@ -1039,8 +1080,21 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
             applyReplacement(ReplacementPool,R);
         }
     }
-    else if (DI->getKind() == DK_TASK || DI->getKind() == DK_TASK_COORD) {
+    else if (DI->getKind() == DK_TASK) {
         llvm::outs() << "  -  Create Kernel\n";
+
+        //extra semantic checking
+        CallExpr *CE = dyn_cast<CallExpr>(SubStmt);
+        FunctionDecl *AccurateFun = CE->getDirectCallee();
+        FunctionDecl *ApproxFun = getApproxFunctionDecl(DI);
+        std::string Name = AccurateFun->getNameAsString();
+        if (Context->isKernelWithSubtasks(Name) && ApproxFun) {
+            llvm::outs() << "error: Kernel with subtasks '"
+                         << AccurateFun->getNameAsString()
+                         << "' cannot have direct approximate version\n";
+            return true;
+        }
+        /////////////////////////
 
         TaskSrc NewTask(Context,DI,Map,RStack,ReplacementPool);
 
@@ -1368,9 +1422,12 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, 
                      << "' in Clause '" << A->getParent()->getAsClause()->getAsString() << "'\n";
         return ObjRefDef();
     }
+#if 0
+#error we do not have inter-region memory buffers, the runtime handles them
     else
         //FIXME: some of the Args may already exist because of previous regions
         RStack.InterRegionMemBuffers.push_back(A);
+#endif
 
 #if 0
     //get type as string

@@ -590,6 +590,18 @@ void StmtPrinter::VisitSEHFinallyStmt(SEHFinallyStmt *Node) {
 //  OpenACC printing methods.
 //===----------------------------------------------------------------------===//
 
+inline static std::string getApproxFunctionName(openacc::DirectiveInfo *DI) {
+    assert(DI->getKind() == DK_SUBTASK);
+    openacc::ClauseList &CList = DI->getClauseList();
+    for (openacc::ClauseList::iterator
+             II = CList.begin(), EE = CList.end(); II != EE; ++II)
+        if ((*II)->getKind() == openacc::CK_APPROXFUN) {
+            openacc::FunctionArg *FA = dyn_cast<openacc::FunctionArg>((*II)->getArg());
+            return FA->getFunctionDecl()->getNameAsString();
+        }
+    return std::string();
+}
+
 void StmtPrinter::VisitAccStmt(AccStmt *Node) {
     openacc::DirectiveInfo *DI = Node->getDirective();
 
@@ -597,8 +609,13 @@ void StmtPrinter::VisitAccStmt(AccStmt *Node) {
 
     if (SubtaskPrintMode == openacc::K_PRINT_ALL)
         OS << DI->getPrettyDirective(Policy);
-
-    PrintStmt(Node->getSubStmt());
+    else if (SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK) {
+        AlternativeName = getApproxFunctionName(DI);
+        PrintStmt(Node->getSubStmt());
+        AlternativeName = std::string();
+    }
+    else
+        PrintStmt(Node->getSubStmt());
 }
 
 //===----------------------------------------------------------------------===//
@@ -1946,7 +1963,6 @@ void Stmt::printPrettyAccurateVersion(raw_ostream &OS,
 void Stmt::printPrettyApproximateVersion(raw_ostream &OS,
                                          PrinterHelper *Helper,
                                          const PrintingPolicy &Policy,
-                                         std::string AlternativeName,
                                          unsigned Indentation) const {
   if (this == 0) {
     OS << "<NULL>";
@@ -1955,7 +1971,6 @@ void Stmt::printPrettyApproximateVersion(raw_ostream &OS,
 
   StmtPrinter P(OS, Helper, Policy, Indentation);
   P.SubtaskPrintMode = openacc::K_PRINT_APPROXIMATE_SUBTASK;
-  P.AlternativeName = AlternativeName;
   assert(isa<CompountStmt>(this) && "Not a function body");
   P.Visit(const_cast<Stmt*>(this));
 }
