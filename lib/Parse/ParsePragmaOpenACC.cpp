@@ -17,9 +17,13 @@ const unsigned DirectiveInfo::ValidDirective[DK_END] = {
     BITMASK(CK_LABEL) |
         BITMASK(CK_SIGNIFICANT) |
         BITMASK(CK_APPROXFUN) |
+        BITMASK(CK_BUFFER) |
         BITMASK(CK_IN) |
         BITMASK(CK_OUT) |
         BITMASK(CK_INOUT) |
+        BITMASK(CK_DEVICE_IN) |
+        BITMASK(CK_DEVICE_OUT) |
+        BITMASK(CK_DEVICE_INOUT) |
         BITMASK(CK_WORKERS) |
         BITMASK(CK_GROUPS) |
         BITMASK(CK_BIND) |
@@ -47,9 +51,13 @@ const std::string ClauseInfo::Name[CK_END] = {
     "label",
     "significant",
     "approxfun",
+    "buffer",
     "in",
     "out",
     "inout",
+    "device_in",
+    "device_out",
+    "device_inout",
     "on",
     "workers",
     "groups",
@@ -156,7 +164,7 @@ std::string DirectiveInfo::getPrettyDirective(const PrintingPolicy &Policy, cons
 }
 
 static bool isACCDirective(const Token &Tok, DirectiveKind &Kind) {
-    for (unsigned i=0; i<DK_END; ++i) {
+    for (unsigned i=DK_START; i<DK_END; ++i) {
         enum DirectiveKind DK = (enum DirectiveKind)i;
         if (Tok.getIdentifierInfo()->getName().equals(DirectiveInfo::Name[DK])) {
             Kind = DK;
@@ -167,7 +175,7 @@ static bool isACCDirective(const Token &Tok, DirectiveKind &Kind) {
 }
 
 static bool isACCClause(const Token &Tok, ClauseKind &Kind) {
-    for (unsigned i=0; i<CK_END; ++i) {
+    for (unsigned i=CK_START; i<CK_END; ++i) {
         enum ClauseKind CK = (enum ClauseKind)i;
         if (Tok.getIdentifierInfo()->getName().equals(ClauseInfo::Name[CK])) {
             Kind = CK;
@@ -343,6 +351,16 @@ Parser::ParseClauseApproxfun(DirectiveKind DK, ClauseInfo *CI) {
 }
 
 bool
+Parser::ParseClauseBuffer(DirectiveKind DK, ClauseInfo *CI) {
+    if (!ParseArgList(DK,CI))
+        return false;
+    bool status = true;
+    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
+        status = false;
+    return status;
+}
+
+bool
 Parser::ParseClauseIn(DirectiveKind DK, ClauseInfo *CI) {
     if (!ParseArgList(DK,CI))
         return false;
@@ -364,6 +382,36 @@ Parser::ParseClauseOut(DirectiveKind DK, ClauseInfo *CI) {
 
 bool
 Parser::ParseClauseInout(DirectiveKind DK, ClauseInfo *CI) {
+    if (!ParseArgList(DK,CI))
+        return false;
+    bool status = true;
+    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
+        status = false;
+    return status;
+}
+
+bool
+Parser::ParseClauseDevice_in(DirectiveKind DK, ClauseInfo *CI) {
+    if (!ParseArgList(DK,CI))
+        return false;
+    bool status = true;
+    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
+        status = false;
+    return status;
+}
+
+bool
+Parser::ParseClauseDevice_out(DirectiveKind DK, ClauseInfo *CI) {
+    if (!ParseArgList(DK,CI))
+        return false;
+    bool status = true;
+    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
+        status = false;
+    return status;
+}
+
+bool
+Parser::ParseClauseDevice_inout(DirectiveKind DK, ClauseInfo *CI) {
     if (!ParseArgList(DK,CI))
         return false;
     bool status = true;

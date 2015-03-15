@@ -39,9 +39,13 @@ enum ClauseKind {
     CK_LABEL = 0,
     CK_SIGNIFICANT,
     CK_APPROXFUN,
+    CK_BUFFER,
     CK_IN,
     CK_OUT,
     CK_INOUT,
+    CK_DEVICE_IN,
+    CK_DEVICE_OUT,
+    CK_DEVICE_INOUT,
     CK_ON,
     CK_WORKERS,
     CK_GROUPS,
@@ -308,9 +312,13 @@ public:
     }
     bool hasArgList() const {
         switch (CK) {
+        case CK_BUFFER:
         case CK_IN:
         case CK_OUT:
         case CK_INOUT:
+        case CK_DEVICE_IN:
+        case CK_DEVICE_OUT:
+        case CK_DEVICE_INOUT:
         case CK_ON:
         case CK_GROUPS:
             return true;
@@ -320,9 +328,13 @@ public:
     }
     bool isDataClause() const {
         switch (CK) {
+        case CK_BUFFER:
         case CK_IN:
         case CK_OUT:
         case CK_INOUT:
+        case CK_DEVICE_IN:
+        case CK_DEVICE_OUT:
+        case CK_DEVICE_INOUT:
         case CK_ON:
             return true;
         default:

@@ -477,9 +477,13 @@ private:
     ParseClauseFn ParseClauseLabel;
     ParseClauseFn ParseClauseSignificant;
     ParseClauseFn ParseClauseApproxfun;
+    ParseClauseFn ParseClauseBuffer;
     ParseClauseFn ParseClauseIn;
     ParseClauseFn ParseClauseOut;
     ParseClauseFn ParseClauseInout;
+    ParseClauseFn ParseClauseDevice_in;
+    ParseClauseFn ParseClauseDevice_out;
+    ParseClauseFn ParseClauseDevice_inout;
     ParseClauseFn ParseClauseOn;
     ParseClauseFn ParseClauseWorkers;
     ParseClauseFn ParseClauseGroups;

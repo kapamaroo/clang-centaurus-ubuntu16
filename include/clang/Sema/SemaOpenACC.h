@@ -53,9 +53,13 @@ public:
     isValidClauseFn isValidClauseLabel;
     isValidClauseFn isValidClauseSignificant;
     isValidClauseFn isValidClauseApproxfun;
+    isValidClauseFn isValidClauseBuffer;
     isValidClauseFn isValidClauseIn;
     isValidClauseFn isValidClauseOut;
     isValidClauseFn isValidClauseInout;
+    isValidClauseFn isValidClauseDevice_in;
+    isValidClauseFn isValidClauseDevice_out;
+    isValidClauseFn isValidClauseDevice_inout;
     isValidClauseFn isValidClauseOn;
     isValidClauseFn isValidClauseWorkers;
     isValidClauseFn isValidClauseGroups;

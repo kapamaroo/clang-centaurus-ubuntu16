@@ -195,7 +195,7 @@ Arg::Contains(Arg *Target) {
         }
         case A_SubArray:      return false;
         case A_Label:
-        case A_Function:
+       case A_Function:
             llvm_unreachable("bad call");
         }
     }
@@ -228,9 +228,13 @@ OpenACC::OpenACC(Sema &s) : S(s), PendingDirective(0), Valid(false),
     isValidClause[CK_LABEL] =        &OpenACC::isValidClauseLabel;
     isValidClause[CK_SIGNIFICANT] =  &OpenACC::isValidClauseSignificant;
     isValidClause[CK_APPROXFUN] =    &OpenACC::isValidClauseApproxfun;
+    isValidClause[CK_BUFFER] =       &OpenACC::isValidClauseBuffer;
     isValidClause[CK_IN] =           &OpenACC::isValidClauseIn;
     isValidClause[CK_OUT] =          &OpenACC::isValidClauseOut;
     isValidClause[CK_INOUT] =        &OpenACC::isValidClauseInout;
+    isValidClause[CK_DEVICE_IN] =    &OpenACC::isValidClauseIn;
+    isValidClause[CK_DEVICE_OUT] =   &OpenACC::isValidClauseOut;
+    isValidClause[CK_DEVICE_INOUT] = &OpenACC::isValidClauseInout;
     isValidClause[CK_ON] =           &OpenACC::isValidClauseOn;
     isValidClause[CK_WORKERS] =      &OpenACC::isValidClauseWorkers;
     isValidClause[CK_GROUPS] =       &OpenACC::isValidClauseGroups;
@@ -503,6 +507,11 @@ OpenACC::isValidClauseApproxfun(DirectiveKind DK, ClauseInfo *CI) {
 }
 
 bool
+OpenACC::isValidClauseBuffer(DirectiveKind DK, ClauseInfo *CI) {
+    return true;
+}
+
+bool
 OpenACC::isValidClauseIn(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
@@ -514,6 +523,21 @@ OpenACC::isValidClauseOut(DirectiveKind DK, ClauseInfo *CI) {
 
 bool
 OpenACC::isValidClauseInout(DirectiveKind DK, ClauseInfo *CI) {
+    return true;
+}
+
+bool
+OpenACC::isValidClauseDevice_in(DirectiveKind DK, ClauseInfo *CI) {
+    return true;
+}
+
+bool
+OpenACC::isValidClauseDevice_out(DirectiveKind DK, ClauseInfo *CI) {
+    return true;
+}
+
+bool
+OpenACC::isValidClauseDevice_inout(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 

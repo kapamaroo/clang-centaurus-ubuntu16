@@ -530,9 +530,13 @@ void Parser::Initialize() {
       ParseClause[CK_LABEL] = &Parser::ParseClauseLabel;
       ParseClause[CK_SIGNIFICANT] = &Parser::ParseClauseSignificant;
       ParseClause[CK_APPROXFUN] = &Parser::ParseClauseApproxfun;
+      ParseClause[CK_BUFFER] = &Parser::ParseClauseBuffer;
       ParseClause[CK_IN] = &Parser::ParseClauseIn;
       ParseClause[CK_OUT] = &Parser::ParseClauseOut;
       ParseClause[CK_INOUT] = &Parser::ParseClauseInout;
+      ParseClause[CK_DEVICE_IN] = &Parser::ParseClauseDevice_in;
+      ParseClause[CK_DEVICE_OUT] = &Parser::ParseClauseDevice_out;
+      ParseClause[CK_DEVICE_INOUT] = &Parser::ParseClauseDevice_inout;
       ParseClause[CK_ON] = &Parser::ParseClauseOn;
       ParseClause[CK_WORKERS] = &Parser::ParseClauseWorkers;
       ParseClause[CK_GROUPS] = &Parser::ParseClauseGroups;
