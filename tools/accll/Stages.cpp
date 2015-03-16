@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <iomanip>
 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
@@ -39,7 +40,8 @@ static std::string ToHex(const std::string src) {
     for (size_t i=0; i<src.size(); ++i) {
         if (i)
             OS << ",";
-        OS << "0x" << std::hex << (unsigned int)src[i];
+        OS << "0x" << std::setfill('0') << std::setw(2)
+           << std::hex << (unsigned int)src[i];
     }
     return OS.str();
 }
