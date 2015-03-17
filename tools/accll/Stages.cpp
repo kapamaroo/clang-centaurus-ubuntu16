@@ -22,6 +22,12 @@ using namespace clang::tooling;
 using namespace clang::openacc;
 using namespace accll;
 
+namespace {
+    std::vector<ObjRefDef> KernelBinaryPool;
+    std::vector<ObjRefDef> KernelSrcPool;
+    std::vector<FunctionDecl *> LegacyUserFunctionDecls;
+}
+
 ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, RegionStack &RStack, const int Index);
 
 template <typename T>
@@ -65,7 +71,9 @@ public:
     }
 };
 
-KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD, const enum PrintSubtaskType SubtaskPrintMode)
+KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
+                           std::string &Extensions, std::string &UserTypes,
+                           const enum PrintSubtaskType SubtaskPrintMode)
 {
     if (!FD) {
         HostCode.NameRef = "NULL";
@@ -83,6 +91,8 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD, const en
 
     DeviceCode.NameRef = FD->getNameAsString();
     //DeviceCode.NameRef = getUniqueKernelName(Name);
+
+    assert(DeviceCode.Definition.size() == 0);
     raw_string_ostream OS(DeviceCode.Definition);
     switch (SubtaskPrintMode) {
     case K_PRINT_ALL:
@@ -99,44 +109,50 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD, const en
     }
     OS.str();
 
-    CreateInlineDeclaration();
+    std::string __inline_definition = CreateInlineDefinition(Extensions,UserTypes);
+    InlineDeviceCode.NameRef = "__accll__inline__" + DeviceCode.NameRef;
+    InlineDeviceCode.Definition = "const char " + InlineDeviceCode.NameRef
+        + "[" + toString(__inline_definition.size()) + "] = \"" + __inline_definition + "\";";
 
-    Binary = "NULL";
-    size_t BinarySize = 0;
-#if 1
-    BinarySize = compile(DeviceCodeInlineDeclaration);
-#endif
-
-    if (!BinarySize) {
-        llvm::outs() << BuildLog << "\n";
+    Binary.NameRef = "__binArray_" + DeviceCode.NameRef;
+    std::string BinArray = compile(__inline_definition);
+    if (BinArray.size()) {
+        std::string HexBinArray = ToHex(BinArray);
+        Binary.Definition = "const unsigned char " + Binary.NameRef
+            + "[" + toString(BinArray.size()) + "] = " + "{" + HexBinArray + "};";
     }
-    //else
-    //    Binary = "{" + ToHex(Binary) + "}";
+    else {
+        Binary.Definition = "NULL";
+    }
 
-    std::string BinArrayName = "__binArray_" + DeviceCode.NameRef;
-    std::string BinArray = "const unsigned char " + BinArrayName + "[" + toString(BinarySize) + "] = " + "{" + ToHex(Binary) + "};";
+    // On Linux the driver caches compiled kernels in ~/.nv/ComputeCache.
+    // Deleting this folder forces a recompile.
+    llvm::outs() << "########    Build Log    ########\n";
+    llvm::outs() << BuildLog << "\n";
+    llvm::outs() << "#################################\n";
 
     HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
-    HostCode.Definition = BinArray + "struct _kernel_struct " + HostCode.NameRef + " = {"
+    HostCode.Definition = InlineDeviceCode.Definition + Binary.Definition
+        + "struct _kernel_struct " + HostCode.NameRef + " = {"
         + ".UID = " + toString(getKernelUID(DeviceCode.NameRef))
         + ",.name = \"" + DeviceCode.NameRef + "\""
         + ",.name_size = " + toString(DeviceCode.NameRef.size())
-        + ",.src = \"" + DeviceCodeInlineDeclaration + "\""
-        + ",.src_size = " + toString(DeviceCodeInlineDeclaration.size())
-        + ",.__bin = " + BinArrayName
-        + ",.__bin_size = " + toString(BinarySize)
+        + ",.src = " + InlineDeviceCode.NameRef
+        + ",.src_size = " + toString(__inline_definition.size())
+        + ",.__bin = " + Binary.NameRef
+        + ",.__bin_size = " + toString(BinArray.size())
         + "};";
 }
 
-void KernelRefDef::CreateInlineDeclaration() {
+std::string KernelRefDef::CreateInlineDefinition(std::string &Extensions, std::string &UserTypes) {
    assert(DeviceCode.Definition.size());
-#warning TODO: add user types
-    DeviceCodeInlineDeclaration = accll::OpenCLExtensions + DeviceCode.Definition;
-    ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\\","\\\\");
-    ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\r","");
-    ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\t","");
-    ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\"","\\\"");
-    ReplaceStringInPlace(DeviceCodeInlineDeclaration,"\n","\\n");
+   std::string out = Extensions + UserTypes + DeviceCode.Definition;
+   ReplaceStringInPlace(out,"\\","\\\\");
+   ReplaceStringInPlace(out,"\r","");
+   ReplaceStringInPlace(out,"\t","");
+   ReplaceStringInPlace(out,"\"","\\\"");
+   ReplaceStringInPlace(out,"\n","\\n");
+   return out;
 }
 
 size_t KernelRefDef::getKernelUID(std::string Name) {
@@ -171,12 +187,13 @@ struct KernelSrc : public ObjRefDef {
 
     KernelSrc(clang::ASTContext *Context,
               clang::openacc::RegionStack &RStack,
-              DirectiveInfo *DI, int TaskUID) :
+              DirectiveInfo *DI, int TaskUID,
+              std::string &Extensions, std::string &UserTypes) :
         Context(Context),
         RStack(RStack),
         AccurateKernel(), ApproximateKernel()
     {
-        CreateKernel(Context,DI);
+        CreateKernel(Context,DI,Extensions,UserTypes);
 
         NameRef = "__accll_task_exe";
         Definition = AccurateKernel.HostCode.Definition
@@ -190,7 +207,8 @@ struct KernelSrc : public ObjRefDef {
 
 private:
     void CreateKernel(clang::ASTContext *Context,
-                      clang::openacc::DirectiveInfo *DI);
+                      clang::openacc::DirectiveInfo *DI,
+                      std::string &Extensions, std::string &UserTypes);
     std::string MakeParams(clang::openacc::DirectiveInfo *DI,
                            bool MakeDefinition, std::string Kernels,
                            std::string &CleanupCode, int &ArgNum);
@@ -219,12 +237,13 @@ struct TaskSrc {
 
     TaskSrc(clang::ASTContext *Context, DirectiveInfo *DI,
             NameMap &Map, clang::openacc::RegionStack &RStack,
-            clang::tooling::Replacements &ReplacementPool) :
+            clang::tooling::Replacements &ReplacementPool,
+            std::string &Extensions, std::string &UserTypes) :
         Label(getTaskLabel(DI)),
         Approx(getTaskApprox(Context,DI)),
         MemObjInfo(Context,DI,Map,RStack),
         Geometry(DI,Context),
-        OpenCLCode(Context,RStack,DI,++TaskUID)
+        OpenCLCode(Context,RStack,DI,++TaskUID,Extensions,UserTypes)
     {}
 
     std::string HostCall();
@@ -256,7 +275,8 @@ std::string TaskSrc::runtime_call = "acl_create_task";
 UIDKernelMap KernelRefDef::KernelUIDMap;
 
 void
-KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI) {
+KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI,
+                        std::string &Extensions, std::string &UserTypes) {
     Stmt *SubStmt = DI->getAccStmt()->getSubStmt();
     assert(SubStmt && "Null SubStmt");
 
@@ -273,12 +293,18 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI) {
             assert(!ApproxFun);
 
             llvm::outs() << "Kernel '" << AccurateFun->getNameAsString() << "' has subtasks\n";
-            AccurateKernel = KernelRefDef(Context,AccurateFun,K_PRINT_ACCURATE_SUBTASK);
-            ApproximateKernel = KernelRefDef(Context,AccurateFun,K_PRINT_APPROXIMATE_SUBTASK);
+            AccurateKernel = KernelRefDef(Context,AccurateFun,
+                                          Extensions,UserTypes,
+                                          K_PRINT_ACCURATE_SUBTASK);
+            ApproximateKernel = KernelRefDef(Context,AccurateFun,
+                                             Extensions,UserTypes,
+                                             K_PRINT_APPROXIMATE_SUBTASK);
         }
         else {
-            AccurateKernel = KernelRefDef(Context,AccurateFun);
-            ApproximateKernel = KernelRefDef(Context,ApproxFun);
+            AccurateKernel = KernelRefDef(Context,AccurateFun,
+                                          Extensions,UserTypes);
+            ApproximateKernel = KernelRefDef(Context,ApproxFun,
+                                             Extensions,UserTypes);
         }
         return;
     }
@@ -387,7 +413,7 @@ static bool isRuntimeCall(const std::string Name) {
 }
 
 #warning FIXME: autodetect double extensions
-std::string accll::OpenCLExtensions = "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n\n";
+std::string accll::OpenCLExtensions = "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n#pragma cl_nv_compiler_options\n\n";
 #if 1
 std::string accll::KernelHeader =
     "/* Generated by accll */\n\n\n";
@@ -1102,7 +1128,12 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         }
         /////////////////////////
 
-        TaskSrc NewTask(Context,DI,Map,RStack,ReplacementPool);
+        TaskSrc NewTask(Context,DI,Map,RStack,ReplacementPool,
+                        accll::OpenCLExtensions,UserTypes);
+
+        EraseFunctionDeclPool.insert(CE->getDirectCallee());
+        if (FunctionDecl *ApproxFun = getApproxFunctionDecl(DI))
+            EraseFunctionDeclPool.insert(ApproxFun);
 
         Replacement Kernel(getCurrentKernelFile(),getCurrentKernelFileEndOffset(),0,NewTask.KernelCode());
         applyReplacement(ReplacementPool,Kernel);
@@ -1777,6 +1808,13 @@ Stage1_ASTVisitor::Finish() {
                   getCurrentKernelFileStartOffset()-1,0,NewCode);
     applyReplacement(ReplacementPool,R);
     CurrentKernelFileIterator++;
+
+    for (SmallPtrSet<FunctionDecl*,32>::iterator
+             II = EraseFunctionDeclPool.begin(),
+             EE = EraseFunctionDeclPool.end(); II != EE; ++II) {
+        Replacement R(Context->getSourceManager(),*II,std::string());
+        applyReplacement(ReplacementPool,R);
+    }
 }
 
 #if 0
@@ -2223,8 +2261,8 @@ struct UniqueArgVector : ArgVector {
 };
 
 std::string KernelSrc::MakeParams(DirectiveInfo *DI,
-                                bool MakeDefinition, std::string Kernel,
-                                std::string &CleanupCode, int &ArgNum) {
+                                  bool MakeDefinition, std::string Kernel,
+                                  std::string &CleanupCode, int &ArgNum) {
     std::string Params;
 
     ClauseList DataClauses;

@@ -74,9 +74,22 @@ void getProgBinary(cl_program cpProgram, cl_device_id cdDevice, char** binary, s
 ////////////////////////////////////////////////////////////////////////////////
 std::string ocltLogBuildInfo(cl_program cpProgram, cl_device_id cdDevice)
 {
-    char buildLog[10240];
-    clGetProgramBuildInfo(cpProgram, cdDevice, CL_PROGRAM_BUILD_LOG, sizeof(buildLog), buildLog, NULL);
-    return std::string(buildLog,10240);
+    cl_int errcode;
+    size_t log_size;
+    errcode = clGetProgramBuildInfo(cpProgram, cdDevice, CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
+    checkError(errcode, CL_SUCCESS);
+
+    char *buildLog = (char*)malloc((log_size+1));
+    if (!buildLog)
+        return std::string();
+
+    errcode = clGetProgramBuildInfo(cpProgram, cdDevice, CL_PROGRAM_BUILD_LOG, log_size, buildLog, NULL);
+    checkError(errcode, CL_SUCCESS);
+
+    buildLog[log_size] = '\0';
+    std::string out(buildLog,log_size);
+    free(buildLog);
+    return out;
 }
 
 }
@@ -87,8 +100,8 @@ std::string ocltLogBuildInfo(cl_program cpProgram, cl_device_id cdDevice)
 
 namespace accll {
 
-size_t
-KernelRefDef::compile(std::string src, const std::vector<std::string> &options) {
+std::string
+KernelRefDef::compile(std::string src, const std::string &platform, const std::vector<std::string> &options) {
     cl_context       clGPUContext;
     cl_program       clProgram;
 
@@ -96,7 +109,6 @@ KernelRefDef::compile(std::string src, const std::vector<std::string> &options) 
     size_t           srcLength = src.size();
     cl_int           errcode;
 
-    std::string platform;
     // Declare the supported options.
     /*
         ("includes,I",po::value<std::vector<std::string > >( ), "Directories to search for headers.\n")
@@ -133,12 +145,12 @@ KernelRefDef::compile(std::string src, const std::vector<std::string> &options) 
 
     BuildOptions = definesStr;
     BuildOptions += includesStr;
+    BuildOptions += "-cl-nv-verbose ";
 
     cl_platform_id   cpPlatform;
     cl_device_id     cdDevice;
 
-    errcode = ocltGetPlatformID(&cpPlatform, platform.c_str());
-    checkError(errcode, CL_SUCCESS);
+    ocltGetPlatformID(&cpPlatform, platform.c_str());
 
     // Get a GPU device
     errcode = clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_GPU, 1, &cdDevice, NULL);
@@ -164,7 +176,7 @@ KernelRefDef::compile(std::string src, const std::vector<std::string> &options) 
     // debug a failed .cl build
     BuildLog = ocltLogBuildInfo(clProgram, cdDevices[0]);
     if(errcode != CL_SUCCESS) {
-        return 0;
+        return std::string();
     }
 
     // Store the binary in the file system
@@ -179,9 +191,10 @@ KernelRefDef::compile(std::string src, const std::vector<std::string> &options) 
 
     free(cdDevices);
 
-    Binary = std::string(binary,binaryLength);
 
-    return binaryLength;
+    std::string Binary = std::string(binary,binaryLength);
+
+    return Binary;
 }
 
 }

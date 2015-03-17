@@ -49,20 +49,24 @@ struct KernelRefDef {
 
     ObjRefDef HostCode;
     ObjRefDef DeviceCode;
-    std::string DeviceCodeInlineDeclaration;
-    std::string Binary;
+    ObjRefDef InlineDeviceCode;
+    ObjRefDef Binary;
+
     std::string BuildOptions;
     std::string BuildLog;
 
     KernelRefDef() {}
 
     //return the size of the compiled kernel in bytes, 0 if cannot compile
-    size_t compile(std::string inFile,const std::vector<std::string> &options = std::vector<std::string>());
+    std::string compile(std::string inFile,
+                        const std::string &platform = std::string("NVIDIA"),
+                        const std::vector<std::string> &options = std::vector<std::string>());
 
     KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD,
+                 std::string &Extensions, std::string &UserTypes,
                  const enum clang::openacc::PrintSubtaskType = clang::openacc::K_PRINT_ALL);
 
-    void CreateInlineDeclaration();
+    std::string CreateInlineDefinition(std::string &Extensions, std::string &UserTypes);
 
     size_t getKernelUID(std::string Name);
 };

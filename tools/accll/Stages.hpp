@@ -8,6 +8,7 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 
+#include "llvm/ADT/SmallPtrSet.h"
 #include "Types.hpp"
 
 //copy from RecursiveASTVisitor.h
@@ -131,6 +132,7 @@ private:
     std::vector<std::string> &KernelFiles;
     clang::ASTContext *Context;
     std::vector<std::string>::iterator CurrentKernelFileIterator;
+    llvm::SmallPtrSet<clang::FunctionDecl *,32> EraseFunctionDeclPool;
 
     NameMap Map;
 
