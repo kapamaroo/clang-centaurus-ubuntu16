@@ -28,7 +28,9 @@ namespace {
     std::vector<FunctionDecl *> LegacyUserFunctionDecls;
 }
 
-ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, RegionStack &RStack, const int Index);
+ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
+                              SmallVector<Arg*,8> &PragmaArgs,
+                              NameMap &Map, RegionStack &RStack, const int Index);
 
 template <typename T>
 static std::string toString(const T &x) {
@@ -681,32 +683,26 @@ static std::string getPrettyExpr(clang::ASTContext *Context, Expr *E) {
 
 Arg*
 Stage1_ASTVisitor::EmitImplicitDataMoveCodeFor(Expr *E) {
+#if 0
     assert(E && "expected expression");
 
     ClauseKind CK = CK_IN;
-#if 0
+
     if (E->getType()->isAggregateType() ||
         Context->getAsArrayType(E->getType()))
         CK = CK_IN;
-#endif
 
     DirectiveInfo *DI = RStack.back();
     assert(DI);
 
-    ClauseInfo *CI = new ClauseInfo(CK,DI);
-    Arg *A = CreateNewArgFrom(E,CI,Context);
-
-    //next time we find it through FindVisibleCopyInRegionStack()
-    //and we just replace the new name, without reemitting this code
-    CI->setArg(A);
-    DI->getClauseList().push_back(CI);
-
     SmallVector<ObjRefDef,8> init_list;
 #warning FIXME: implement me
     int Index = 0;
-    ObjRefDef CreateMem = addVarDeclForDevice(Context,A,Map,RStack,Index);
+    SmallVector<Arg*,8> PragmaArgs;
+    ObjRefDef CreateMem = addVarDeclForDevice(Context,E,PragmaArgs,Map,RStack,Index);
     init_list.push_back(CreateMem);
-    return A;
+#endif
+    return 0;
 }
 
 bool
@@ -1448,34 +1444,48 @@ Stage1_ASTVisitor::VisitReturnStmt(ReturnStmt *S) {
     return true;
 }
 
-ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, RegionStack &RStack, const int Index) {
+static Arg *getMatchedArg(Arg *A, SmallVector<Arg*,8> &Pool) {
+    for (SmallVector<Arg*,8>::iterator
+             AI = Pool.begin(), AE = Pool.end(); AI != AE; ++AI)
+        if (A->Matches(*AI))
+            return *AI;
+    return 0;
+}
+
+ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
+                              SmallVector<Arg*,8> &PragmaArgs,
+                              NameMap &Map, RegionStack &RStack, const int Index) {
     //declare a new var here for the accelerator
 
-    if (Arg *AMemObj = RStack.FindBufferObjectInRegionStack(A)) {
-        (void)AMemObj;
-        //abort creation of device buffer, we created it previously
-        llvm::outs() << "abort new buffer (use existing) for '"
-                     << A->getPrettyArg(Context->getPrintingPolicy())
-                     << "' in Clause '" << A->getParent()->getAsClause()->getAsString() << "'\n";
-        return ObjRefDef();
-    }
+    ClauseInfo TmpCI(CK_IN,RStack.back());  //the clause type here is not important
+    Arg *TmpA = CreateNewArgFrom(E,&TmpCI,Context);
+    TmpCI.setArg(TmpA);
+
+    Arg *A = getMatchedArg(TmpA,PragmaArgs);
+    if (!A)
+        //not in data clause, therefore not a dependency (pass by value)
+        A = TmpA;
+    else {
+        delete TmpA;
+
+        if (RStack.FindBufferObjectInRegionStack(A)) {
+            assert(0 && "Unexpected nesting");
+            //abort creation of device buffer, we created it previously
+            llvm::outs() << "abort new buffer (use existing) for '"
+                         << A->getPrettyArg(Context->getPrintingPolicy())
+                         << "' in Clause '" << A->getParent()->getAsClause()->getAsString() << "'\n";
+            return ObjRefDef();
+        }
 #if 0
 #error we do not have inter-region memory buffers, the runtime handles them
-    else
-        //FIXME: some of the Args may already exist because of previous regions
-        RStack.InterRegionMemBuffers.push_back(A);
+        else
+            //FIXME: some of the Args may already exist because of previous regions
+            RStack.InterRegionMemBuffers.push_back(A);
 #endif
-
-#if 0
-    //get type as string
-    QualType Ty = A->getExpr()->getType();
-    if (const ArrayType *ATy = Context->getAsArrayType(Ty))
-        Ty = ATy->getElementType();
-    std::string type = Ty.getAsString(Context->getPrintingPolicy());
-#endif
+    }
 
     std::string OrigName = getOrigNameFor(Context,A);
-    std::string NewName = CreateNewNameFor(Context,A);
+    std::string NewName = "__accll_arg_" + toString(Index);
     Map[A] = ArgNames(OrigName,NewName);
     //llvm::outs() << "orig name: " << OrigName << "  new name: " << NewName << "\n";
 
@@ -1486,6 +1496,22 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, 
 
     QualType Ty = A->getExpr()->getType();
     std::string SizeExpr;
+    std::string Prologue;
+    std::string Address = OrigName;
+
+    std::string DataDepType;
+    ClauseKind CK = A->getParent()->getAsClause()->getKind();
+    switch (CK) {
+    case CK_BUFFER:        DataDepType = "D_BUFFER";        break;
+    case CK_IN:            DataDepType = "D_IN";            break;
+    case CK_OUT:           DataDepType = "D_OUT";           break;
+    case CK_INOUT:         DataDepType = "D_INOUT";         break;
+    case CK_DEVICE_IN:     DataDepType = "D_DEVICE_IN";     break;
+    case CK_DEVICE_OUT:    DataDepType = "D_DEVICE_OUT";    break;
+    case CK_DEVICE_INOUT:  DataDepType = "D_DEVICE_INOUT";  break;
+    default:
+        DataDepType = "D_PASS_BY_VALUE";
+    }
 
     if (SubArrayArg *SA = dyn_cast<SubArrayArg>(A)) {
         SizeExpr = "sizeof(" + SA->getExpr()->getType().getAsString()
@@ -1499,39 +1525,23 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Arg *A, NameMap &Map, 
             SizeExpr = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
         }
     }
-    else {
+    else if (isa<ArrayArg>(A)) {
         SizeExpr = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
     }
-
-    std::string Address = OrigName;
-    std::string PassByValue = "0";
-    if (!isa<ArrayArg>(A) && !isa<SubArrayArg>(A) && !Ty->isPointerType()) {
-        Address = "&" + OrigName;
-        PassByValue = "1";
+    else {
+        SizeExpr = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
+        DataDepType = "D_PASS_BY_VALUE";
+        std::string HiddenName = NewName + "__hidden__";
+        Prologue = A->getExpr()->getType().getAsString() + " "
+            + HiddenName + " = " + getPrettyExpr(Context,A->getExpr()) + ";";
+        Address = "&" + HiddenName;
     }
 
-    std::string DataDepType;
-    ClauseKind CK = A->getParent()->getAsClause()->getKind();
-    switch (CK) {
-    case CK_IN:
-        DataDepType = "D_IN";
-        break;
-    case CK_OUT:
-        DataDepType = "D_OUT";
-        break;
-    case CK_INOUT:
-        DataDepType = "D_INOUT";
-        break;
-    default:
-        DataDepType = "D_UNDEF";
-    }
-
-    std::string NewCode = "struct _memory_object " + NewName + " = {"
+    std::string NewCode = Prologue + "struct _memory_object " + NewName + " = {"
         + ".index = " + toString(Index)
         + ",.dependency = " + DataDepType
         + ",.host_ptr = (void*)" + Address
         + ",.size = " + SizeExpr
-        + ",.pass_by_value = " + PassByValue
         + "};";
 
     return ObjRefDef(NewName,NewCode);
@@ -1713,84 +1723,68 @@ SourceLocation getLocAfterDecl(FunctionDecl *CurrentFunction, VarDecl *VD, std::
     return SourceLocation();
 }
 
-static Arg *getMatchedArg(Arg *A, SmallVector<Arg*,8> &Pool) {
-    for (SmallVector<Arg*,8>::iterator
-             AI = Pool.begin(), AE = Pool.end(); AI != AE; ++AI)
-        if (A->Matches(*AI))
-            return *AI;
-    return 0;
-}
-
 void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
                      NameMap &Map, RegionStack &RStack) {
     Stmt *SubStmt = DI->getAccStmt()->getSubStmt();
 
-    if (CallExpr *CE = dyn_cast<CallExpr>(SubStmt)) {
-        if (CE->getNumArgs() == 0) {
-            NameRef = "NULL";
-            //Definition = "";
-            NumArgs = "0";
-            return;
-        }
+    CallExpr *CE = dyn_cast<CallExpr>(SubStmt);
+    assert(CE);
+    if (!CE)
+        return;
 
-        //gather in() out() directive args
-        SmallVector<Arg*,8> PragmaArgs;
-        ClauseList &CList = DI->getClauseList();
-        for (ClauseList::iterator
-                 II = CList.begin(), EE = CList.end(); II != EE; ++II) {
-            ClauseInfo *CI = *II;
-            if (!CI->isDataClause())
-                continue;
-            for (ArgVector::iterator
-                     AI = CI->getArgs().begin(), AE = CI->getArgs().end(); AI != AE; ++AI) {
-                Arg *A = *AI;
-                PragmaArgs.push_back(A);
-            }
-        }
-
-        if (CE->getNumArgs() != PragmaArgs.size()) {
-            NameRef = "NULL";
-            //Definition = "";
-            NumArgs = "0";
-            llvm::outs() << "error: function arguments and in/out directive arguments mismatch\n";
-            return;
-        }
-
-        //gather function call args
-        ClauseInfo TmpCI(CK_IN,DI);  //the clause type here is not important
-        SmallVector<Arg*,8> FnCallArgs;
-        for (CallExpr::arg_iterator II(CE->arg_begin()),EE(CE->arg_end()); II != EE; ++II) {
-            Expr *ArgExpr = *II;
-            Arg *A = CreateNewArgFrom(ArgExpr,&TmpCI,Context);
-            TmpCI.getArgs().push_back(A);
-            FnCallArgs.push_back(A);
-        }
-
-        //generate code
-        NumArgs = toString(FnCallArgs.size());
-        std::string Prologue;
-        std::string InitList;
-
-        int Index = 0;
-        for (SmallVector<Arg*,8>::iterator
-                 II(FnCallArgs.begin()),EE(FnCallArgs.end()); II != EE; ++II) {
-            Arg *PragmaMatched = getMatchedArg(*II,PragmaArgs);
-            assert(PragmaMatched);
-            ObjRefDef MemObj = addVarDeclForDevice(Context,PragmaMatched,Map,RStack,Index++);
-            Prologue += MemObj.Definition;
-            InitList += MemObj.NameRef;
-            if (II != &FnCallArgs.back())
-                InitList += ",";
-            delete *II;
-        }
-
-        NameRef = "__accll_kernel_args";
-        Definition = Prologue
-            + "struct _memory_object " + NameRef + "[" + NumArgs + "] = {" + InitList + "};";
+    if (CE->getNumArgs() == 0) {
+        NameRef = "NULL";
+        //Definition = "";
+        NumArgs = "0";
+        return;
     }
-    else {
-        assert(0 && "Unsupported feature");
+
+    //gather data clause arguments
+    SmallVector<Arg*,8> PragmaArgs;
+    ClauseList &CList = DI->getClauseList();
+    for (ClauseList::iterator
+             II = CList.begin(), EE = CList.end(); II != EE; ++II) {
+        ClauseInfo *CI = *II;
+        if (!CI->isDataClause())
+            continue;
+        for (ArgVector::iterator
+                 AI = CI->getArgs().begin(), AE = CI->getArgs().end(); AI != AE; ++AI) {
+            Arg *A = *AI;
+            PragmaArgs.push_back(A);
+        }
     }
+
+    SmallVector<Expr*,8> PtrArgs;
+    for (CallExpr::arg_iterator II = CE->arg_begin(), EE = CE->arg_end(); II != EE; ++II)
+        if ((*II)->getType()->isPointerType())
+            PtrArgs.push_back(*II);
+    if (PtrArgs.size() != PragmaArgs.size()) {
+        NameRef = "NULL";
+        //Definition = "";
+        NumArgs = "0";
+        llvm::outs() << "error: function arguments (" << PtrArgs.size()
+                     << ") and data clause arguments (" << PragmaArgs.size()
+                     << ") mismatch\n";
+        return;
+    }
+
+    //generate code
+    NumArgs = toString(CE->getNumArgs());
+    std::string Prologue;
+    std::string InitList;
+
+    int Index = 0;
+    for (CallExpr::arg_iterator II(CE->arg_begin()),EE(CE->arg_end()); II != EE; ++II) {
+        ObjRefDef MemObj = addVarDeclForDevice(Context,*II,PragmaArgs,Map,RStack,Index++);
+        Prologue += MemObj.Definition;
+        if (II != CE->arg_begin())
+            InitList += ",";
+        InitList += MemObj.NameRef;
+    }
+
+    NameRef = "__accll_kernel_args";
+    Definition = Prologue
+        + "struct _memory_object " + NameRef + "[" + NumArgs + "] = {" + InitList + "};";
 }
 
 void Stage1_ASTVisitor::Init(ASTContext *C) {
