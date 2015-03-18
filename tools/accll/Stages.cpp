@@ -1807,7 +1807,7 @@ Stage1_ASTVisitor::Finish() {
     if (!TaskSrc::TaskUID)
         return;
 
-    std::string NewCode = UserTypes;
+    std::string NewCode;
 
     Replacement R(getCurrentKernelFile(),
                   getCurrentKernelFileStartOffset()-1,0,NewCode);
