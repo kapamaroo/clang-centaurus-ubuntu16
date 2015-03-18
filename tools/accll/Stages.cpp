@@ -149,14 +149,14 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
 }
 
 std::string KernelRefDef::CreateInlineDefinition(std::string &Extensions, std::string &UserTypes) {
-   assert(DeviceCode.Definition.size());
-   std::string out = Extensions + UserTypes + DeviceCode.Definition;
-   ReplaceStringInPlace(out,"\\","\\\\");
-   ReplaceStringInPlace(out,"\r","");
-   ReplaceStringInPlace(out,"\t","");
-   ReplaceStringInPlace(out,"\"","\\\"");
-   ReplaceStringInPlace(out,"\n","\\n");
-   return out;
+    std::string out = Extensions + UserTypes + DeviceCode.Definition;
+    assert(DeviceCode.Definition.size());
+    ReplaceStringInPlace(out,"\\","\\\\");
+    ReplaceStringInPlace(out,"\r","");
+    ReplaceStringInPlace(out,"\t","");
+    ReplaceStringInPlace(out,"\"","\\\"");
+    ReplaceStringInPlace(out,"\n","\\n");
+    return out;
 }
 
 size_t KernelRefDef::getKernelUID(std::string Name) {
