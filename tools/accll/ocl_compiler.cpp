@@ -139,13 +139,17 @@ KernelRefDef::compile(std::string src, const std::string &platform, const std::v
         ("Werror",                           "Turn warnings into errors.\n");
     */
 
-    std::string includesStr;
-    std::string definesStr;
     std::string BuildOptions;
 
-    BuildOptions = definesStr;
+    for (std::vector<std::string>::const_iterator
+             II = options.begin(), EE = options.end(); II != EE; ++II)
+        BuildOptions += *II + " ";
+
+    std::string includesStr;
+    std::string definesStr;
+
+    BuildOptions += definesStr;
     BuildOptions += includesStr;
-    BuildOptions += "-cl-nv-verbose ";
 
     cl_platform_id   cpPlatform;
     cl_device_id     cdDevice;

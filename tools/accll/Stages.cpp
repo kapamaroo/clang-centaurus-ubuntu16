@@ -117,7 +117,9 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
         + "[" + toString(__inline_definition.size()) + "] = \"" + __inline_definition + "\";";
 
     Binary.NameRef = "__binArray_" + DeviceCode.NameRef;
-    std::string BinArray = compile(__inline_definition);
+    std::vector<std::string> options;
+    options.push_back("-cl-nv-verbose");
+    std::string BinArray = compile(__inline_definition,"NVIDIA",options);
     if (BinArray.size()) {
         std::string HexBinArray = ToHex(BinArray);
         Binary.Definition = "const unsigned char " + Binary.NameRef
@@ -1754,6 +1756,14 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
         }
     }
 
+    for (SmallVector<Arg*,8>::iterator
+             II = PragmaArgs.begin(), EE = PragmaArgs.end(); II != EE; ++II)
+        if (!isa<SubArrayArg>(*II) && !isa<ArrayArg>(*II))
+            llvm::outs() << "warning: ignore invalid '" << (*II)->getParent()->getAsClause()->getAsString()
+                         << "' data dependency for pass-by-value argument '"
+                         << (*II)->getPrettyArg(PrintingPolicy(Context->getLangOpts())) << "'\n";
+
+#if 0
     SmallVector<Expr*,8> PtrArgs;
     for (CallExpr::arg_iterator II = CE->arg_begin(), EE = CE->arg_end(); II != EE; ++II)
         if ((*II)->getType()->isPointerType())
@@ -1762,11 +1772,12 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
         NameRef = "NULL";
         //Definition = "";
         NumArgs = "0";
-        llvm::outs() << "error: function arguments (" << PtrArgs.size()
-                     << ") and data clause arguments (" << PragmaArgs.size()
+        llvm::outs() << "error: number of pass-by-reference function arguments (" << PtrArgs.size()
+                     << ") and dependency data clause arguments (" << PragmaArgs.size()
                      << ") mismatch\n";
         return;
     }
+#endif
 
     //generate code
     NumArgs = toString(CE->getNumArgs());
