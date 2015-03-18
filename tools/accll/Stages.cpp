@@ -123,7 +123,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
     std::string BinArray = compile(__offline,"NVIDIA",options);
     if (BinArray.size()) {
         std::string HexBinArray = ToHex(BinArray);
-        Binary.Definition = "const unsigned char " + Binary.NameRef
+        Binary.Definition = "static const unsigned char " + Binary.NameRef
             + "[" + toString(BinArray.size()) + "] = " + "{" + HexBinArray + "};";
     }
     else {
