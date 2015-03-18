@@ -111,6 +111,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
     }
     OS.str();
 
+    std::string __offline = Extensions + UserTypes + DeviceCode.Definition;
     std::string __inline_definition = CreateInlineDefinition(Extensions,UserTypes);
     InlineDeviceCode.NameRef = "__accll__inline__" + DeviceCode.NameRef;
     InlineDeviceCode.Definition = "const char " + InlineDeviceCode.NameRef
@@ -119,7 +120,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
     Binary.NameRef = "__binArray_" + DeviceCode.NameRef;
     std::vector<std::string> options;
     options.push_back("-cl-nv-verbose");
-    std::string BinArray = compile(__inline_definition,"NVIDIA",options);
+    std::string BinArray = compile(__offline,"NVIDIA",options);
     if (BinArray.size()) {
         std::string HexBinArray = ToHex(BinArray);
         Binary.Definition = "const unsigned char " + Binary.NameRef
