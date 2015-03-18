@@ -30,24 +30,30 @@ namespace {
 
 void getProgBinary(cl_program cpProgram, cl_device_id cdDevice, char** binary, size_t* length)
 {
+    cl_int errcode;
+
     // Grab the number of devices associated witht the program
     cl_uint num_devices;
-    clGetProgramInfo(cpProgram, CL_PROGRAM_NUM_DEVICES, sizeof(cl_uint), &num_devices, NULL);
+    errcode = clGetProgramInfo(cpProgram, CL_PROGRAM_NUM_DEVICES, sizeof(cl_uint), &num_devices, NULL);
+    checkError(errcode, CL_SUCCESS);
 
     // Grab the device ids
     cl_device_id* devices = (cl_device_id*) malloc(num_devices * sizeof(cl_device_id));
-    clGetProgramInfo(cpProgram, CL_PROGRAM_DEVICES, num_devices * sizeof(cl_device_id), devices, 0);
+    errcode = clGetProgramInfo(cpProgram, CL_PROGRAM_DEVICES, num_devices * sizeof(cl_device_id), devices, 0);
+    checkError(errcode, CL_SUCCESS);
 
     // Grab the sizes of the binaries
     size_t* binary_sizes = (size_t*)malloc(num_devices * sizeof(size_t));
-    clGetProgramInfo(cpProgram, CL_PROGRAM_BINARY_SIZES, num_devices * sizeof(size_t), binary_sizes, NULL);
+    errcode = clGetProgramInfo(cpProgram, CL_PROGRAM_BINARY_SIZES, num_devices * sizeof(size_t), binary_sizes, NULL);
+    checkError(errcode, CL_SUCCESS);
 
     // Now get the binaries
     char** ptx_code = (char**) malloc(num_devices * sizeof(char*));
     for( unsigned int i=0; i<num_devices; ++i) {
         ptx_code[i]= (char*)malloc(binary_sizes[i]);
     }
-    clGetProgramInfo(cpProgram, CL_PROGRAM_BINARIES, 0, ptx_code, NULL);
+    errcode = clGetProgramInfo(cpProgram, CL_PROGRAM_BINARIES, 0, ptx_code, NULL);
+    checkError(errcode, CL_SUCCESS);
 
     // Find the index of the device of interest
     unsigned int idx = 0;
@@ -193,11 +199,10 @@ KernelRefDef::compile(std::string src, const std::string &platform, const std::v
     errcode |= clReleaseContext(clGPUContext);
     checkError(errcode, CL_SUCCESS);
 
-    free(cdDevices);
-
-
     std::string Binary = std::string(binary,binaryLength);
 
+    free(cdDevices);
+    free(binary);
     return Binary;
 }
 
