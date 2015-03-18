@@ -114,7 +114,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
     std::string __offline = Extensions + UserTypes + DeviceCode.Definition;
     std::string __inline_definition = CreateInlineDefinition(Extensions,UserTypes);
     InlineDeviceCode.NameRef = "__accll__inline__" + DeviceCode.NameRef;
-    InlineDeviceCode.Definition = "const char " + InlineDeviceCode.NameRef
+    InlineDeviceCode.Definition = "static const char " + InlineDeviceCode.NameRef
         + "[" + toString(__inline_definition.size()) + "] = \"" + __inline_definition + "\";";
 
     Binary.NameRef = "__binArray_" + DeviceCode.NameRef;
