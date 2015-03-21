@@ -22,15 +22,24 @@ typedef std::pair<std::string, std::string> ArgNames;
 typedef llvm::DenseMap<clang::openacc::Arg*,ArgNames> NameMap;
 
 struct ObjRefDef {
+#if 1
     std::string NameRef;
     std::string Definition;
+    std::string HeaderDecl;
+#else
+    std::string NameType;
+    std::string NameRef;
+    std::string NameInit;
+#endif
 
-    ObjRefDef(std::string NameRef, std::string Definition) :
-        NameRef(NameRef), Definition(Definition) {}
+    ObjRefDef(std::string NameRef, std::string Definition, std::string HeaderDecl = std::string()) :
+        NameRef(NameRef), Definition(Definition), HeaderDecl(HeaderDecl) {}
     ObjRefDef() {}
 };
 
-struct DataIOSrc : public ObjRefDef {
+struct DataIOSrc {
+    std::string NameRef;
+    std::string Definition;
     std::string NumArgs;
 
     DataIOSrc(clang::ASTContext *Context,clang::openacc::DirectiveInfo *DI,
@@ -52,7 +61,7 @@ struct KernelRefDef {
     ObjRefDef InlineDeviceCode;
     ObjRefDef Binary;
 
-    std::string BuildOptions;
+    std::vector<std::string> BuildOptions;
     std::string BuildLog;
 
     KernelRefDef() {}

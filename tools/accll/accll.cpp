@@ -57,6 +57,7 @@ int main(int argc, const char **argv) {
 
     //After Stage0, proccess only the files that contain OpenACC Directives
     std::vector<std::string> InputFiles;
+    std::vector<std::string> LibOCLFiles;
     std::vector<std::string> KernelFiles;
 
     llvm::outs() << "\n\n#######     Stage0     #######\n\n";
@@ -76,7 +77,7 @@ int main(int argc, const char **argv) {
     llvm::outs() << "\n\n#######     Stage1     #######\n\n";
     llvm::outs() << "Generate new scopes, data moves, renaming ...\n";
     RefactoringTool Tool1(OptionsParser.getCompilations(), InputFiles);
-    Stage1_ConsumerFactory Stage1(Tool1.getReplacements(),KernelFiles);
+    Stage1_ConsumerFactory Stage1(Tool1.getReplacements(),LibOCLFiles,KernelFiles);
     if (Tool1.runAndSave(newFrontendActionFactory(&Stage1))) {
         llvm::errs() << "Stage1 failed - exit.\n";
         return 1;
@@ -110,6 +111,11 @@ int main(int argc, const char **argv) {
         status += clang_format_main(*II,Style);
 
     for (std::vector<std::string>::iterator
+             II = LibOCLFiles.begin(),
+             EE = LibOCLFiles.end(); II != EE; ++II)
+        status += clang_format_main(*II,Style);
+
+    for (std::vector<std::string>::iterator
              II = RealKernelFiles.begin(),
              EE = RealKernelFiles.end(); II != EE; ++II)
         status += clang_format_main(*II,Style);
@@ -120,6 +126,12 @@ int main(int argc, const char **argv) {
     ClangTool Tool5(OptionsParser.getCompilations(),InputFiles);
     if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
         llvm::errs() << "FATAL: __internal_error__: illegal host code  -  Exit.\n";
+        return 1;
+    }
+
+    ClangTool Tool7(OptionsParser.getCompilations(),LibOCLFiles);
+    if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
+        llvm::errs() << "FATAL: __internal_error__: illegal libocl code  -  Exit.\n";
         return 1;
     }
 

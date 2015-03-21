@@ -10,10 +10,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 
-typedef llvm::StringMap<std::string> DynamicSizeMap;
-
 namespace accll {
-    DynamicSizeMap DynSizeMap;
 }
 
 using namespace llvm;
@@ -23,9 +20,10 @@ using namespace clang::openacc;
 using namespace accll;
 
 namespace {
-    std::vector<ObjRefDef> KernelBinaryPool;
-    std::vector<ObjRefDef> KernelSrcPool;
-    std::vector<FunctionDecl *> LegacyUserFunctionDecls;
+    llvm::StringMap<std::string> DynSizeMap;
+    llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelAccuratePool;
+    llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelApproximatePool;
+    llvm::SmallPtrSet<FunctionDecl *,32> EraseFunctionDeclPool;
 }
 
 ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
@@ -54,6 +52,7 @@ static std::string ToHex(const std::string src) {
     return OS.str();
 }
 
+#if 0
 static std::string getUniqueKernelName(const std::string Base) {
     static int UID = 0;  //unique kernel identifier
     std::string ID;
@@ -62,6 +61,7 @@ static std::string getUniqueKernelName(const std::string Base) {
     UID++;
     return OS.str();
 }
+#endif
 
 struct GeometrySrc : ObjRefDef {
 private:
@@ -91,8 +91,11 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
         return;
     }
 
+#if 1
     DeviceCode.NameRef = FD->getNameAsString();
-    //DeviceCode.NameRef = getUniqueKernelName(Name);
+#else
+    DeviceCode.NameRef = getUniqueKernelName(Name);
+#endif
 
     assert(DeviceCode.Definition.size() == 0);
     raw_string_ostream OS(DeviceCode.Definition);
@@ -113,18 +116,25 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
 
     std::string __offline = Extensions + UserTypes + DeviceCode.Definition;
     std::string __inline_definition = CreateInlineDefinition(Extensions,UserTypes);
-    InlineDeviceCode.NameRef = "__accll__inline__" + DeviceCode.NameRef;
-    InlineDeviceCode.Definition = "static const char " + InlineDeviceCode.NameRef
-        + "[" + toString(__inline_definition.size()) + "] = \"" + __inline_definition + "\";";
+    InlineDeviceCode.NameRef = "__src_inline__" + DeviceCode.NameRef;
+    InlineDeviceCode.HeaderDecl = "extern const char " + InlineDeviceCode.NameRef
+        + "[" + toString(__inline_definition.size()) + "];";
+    InlineDeviceCode.Definition = "const char " + InlineDeviceCode.NameRef
+        + "[" + toString(__inline_definition.size()) + "]"
+        + " = "
+        + "\"" + __inline_definition + "\";";
 
     Binary.NameRef = "__binArray_" + DeviceCode.NameRef;
-    std::vector<std::string> options;
-    options.push_back("-cl-nv-verbose");
-    std::string BinArray = compile(__offline,"NVIDIA",options);
+    BuildOptions.push_back("-cl-nv-verbose");
+    std::string BinArray = compile(__offline,"NVIDIA",BuildOptions);
     if (BinArray.size()) {
         std::string HexBinArray = ToHex(BinArray);
-        Binary.Definition = "static const unsigned char " + Binary.NameRef
-            + "[" + toString(BinArray.size()) + "] = " + "{" + HexBinArray + "};";
+        Binary.HeaderDecl = "extern const unsigned char " + Binary.NameRef
+            + "[" + toString(BinArray.size()) + "];";
+        Binary.Definition = "const unsigned char " + Binary.NameRef
+            + "[" + toString(BinArray.size()) + "]"
+            +" = "
+            + "{" + HexBinArray + "};";
     }
     else {
         Binary.Definition = "NULL";
@@ -137,8 +147,8 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
     llvm::outs() << "#################################\n";
 
     HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
-    HostCode.Definition = InlineDeviceCode.Definition + Binary.Definition
-        + "struct _kernel_struct " + HostCode.NameRef + " = {"
+    HostCode.Definition = "struct _kernel_struct " + HostCode.NameRef
+        + " = {"
         + ".UID = " + toString(getKernelUID(DeviceCode.NameRef))
         + ",.name = \"" + DeviceCode.NameRef + "\""
         + ",.name_size = " + toString(DeviceCode.NameRef.size())
@@ -183,12 +193,15 @@ static FunctionDecl *getApproxFunctionDecl(DirectiveInfo *DI) {
     return 0;
 }
 
-struct KernelSrc : public ObjRefDef {
+struct KernelSrc {
+    std::string NameRef;
+    std::string Definition;
+
     clang::ASTContext *Context;
     clang::openacc::RegionStack &RStack;
 
-    KernelRefDef AccurateKernel;
-    KernelRefDef ApproximateKernel;
+    KernelRefDef *AccurateKernel;
+    KernelRefDef *ApproximateKernel;
 
     KernelSrc(clang::ASTContext *Context,
               clang::openacc::RegionStack &RStack,
@@ -196,17 +209,17 @@ struct KernelSrc : public ObjRefDef {
               std::string &Extensions, std::string &UserTypes) :
         Context(Context),
         RStack(RStack),
-        AccurateKernel(), ApproximateKernel()
+        AccurateKernel(0), ApproximateKernel(0)
     {
         CreateKernel(Context,DI,Extensions,UserTypes);
 
         NameRef = "__accll_task_exe";
-        Definition = AccurateKernel.HostCode.Definition
-            + ApproximateKernel.HostCode.Definition
+        Definition = AccurateKernel->HostCode.Definition
+            + ApproximateKernel->HostCode.Definition
             + "struct _task_executable " + NameRef + " = {"
             //+ ".UID = " + toString(TaskUID)
-            + ".kernel_accurate = " + ref(AccurateKernel.HostCode.NameRef)
-            + ",.kernel_approximate = " + ref(ApproximateKernel.HostCode.NameRef)
+            + ".kernel_accurate = " + ref(AccurateKernel->HostCode.NameRef)
+            + ",.kernel_approximate = " + ref(ApproximateKernel->HostCode.NameRef)
             + "};";
     }
 
@@ -292,30 +305,57 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI,
 
         assert(AccurateFun);
 
+        llvm::DenseMap<FunctionDecl *, KernelRefDef *>::iterator Kref;
         std::string Name = AccurateFun->getNameAsString();
 
         if (Context->isKernelWithSubtasks(Name)) {
             assert(!ApproxFun);
 
             llvm::outs() << "Kernel '" << AccurateFun->getNameAsString() << "' has subtasks\n";
-            AccurateKernel = KernelRefDef(Context,AccurateFun,
-                                          Extensions,UserTypes,
-                                          K_PRINT_ACCURATE_SUBTASK);
-            ApproximateKernel = KernelRefDef(Context,AccurateFun,
-                                             Extensions,UserTypes,
-                                             K_PRINT_APPROXIMATE_SUBTASK);
+
+            Kref = KernelAccuratePool.find(AccurateFun);
+            if (Kref != KernelAccuratePool.end())
+                AccurateKernel = Kref->second;
+            else {
+                AccurateKernel = new KernelRefDef(Context,AccurateFun,
+                                                  Extensions,UserTypes,
+                                                  K_PRINT_ACCURATE_SUBTASK);
+                KernelAccuratePool[AccurateFun] = AccurateKernel;
+            }
+
+            Kref = KernelApproximatePool.find(AccurateFun);
+            if (Kref != KernelApproximatePool.end())
+                ApproximateKernel = Kref->second;
+            else {
+                ApproximateKernel = new KernelRefDef(Context,AccurateFun,
+                                                     Extensions,UserTypes,
+                                                     K_PRINT_APPROXIMATE_SUBTASK);
+                KernelApproximatePool[AccurateFun] = ApproximateKernel;
+            }
         }
         else {
-            AccurateKernel = KernelRefDef(Context,AccurateFun,
-                                          Extensions,UserTypes);
-            ApproximateKernel = KernelRefDef(Context,ApproxFun,
-                                             Extensions,UserTypes);
+            Kref = KernelAccuratePool.find(AccurateFun);
+            if (Kref != KernelAccuratePool.end())
+                AccurateKernel = Kref->second;
+            else {
+                AccurateKernel = new KernelRefDef(Context,AccurateFun,
+                                                  Extensions,UserTypes);
+                KernelAccuratePool[AccurateFun] = AccurateKernel;
+            }
+            Kref = KernelApproximatePool.find(ApproxFun);
+            if (Kref != KernelApproximatePool.end())
+                ApproximateKernel = Kref->second;
+            else {
+                ApproximateKernel = new KernelRefDef(Context,ApproxFun,
+                                                     Extensions,UserTypes);
+                KernelApproximatePool[ApproxFun] = ApproximateKernel;
+            }
         }
+
         return;
     }
 
-    return;
-
+#if 0
     assert(isa<CompoundStmt>(SubStmt));
     int ArgNum = 0;
 
@@ -335,7 +375,6 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI,
 
     assert(CleanupCode.empty() && "only the host code needs cleanup");
 
-#if 0
     //create host code
     int ArgNum = 0;
     std::string StrArgList = MakeParams(DI,/*MakeDefinition=*/false,UName,CleanupCode,ArgNum);
@@ -354,8 +393,8 @@ std::string TaskSrc::HostCall() {
 }
 
 std::string TaskSrc::KernelCode() {
-    return OpenCLCode.AccurateKernel.DeviceCode.Definition
-        + OpenCLCode.ApproximateKernel.DeviceCode.Definition;
+    return OpenCLCode.AccurateKernel->DeviceCode.Definition
+        + OpenCLCode.ApproximateKernel->DeviceCode.Definition;
 }
 
 void GeometrySrc::init(DirectiveInfo *DI, clang::ASTContext *Context) {
@@ -419,6 +458,8 @@ static bool isRuntimeCall(const std::string Name) {
 
 #warning FIXME: autodetect double extensions
 std::string accll::OpenCLExtensions = "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n#pragma cl_nv_compiler_options\n\n";
+std::string accll::NewFileHeader = "/* Generated by accll */\n\n#include <centaurus_common.h>\n\n";
+
 #if 1
 std::string accll::KernelHeader =
     "/* Generated by accll */\n\n\n";
@@ -485,20 +526,6 @@ accll::CreateNewArgFrom(Expr *E, ClauseInfo *ImplicitCI, ASTContext *Context) {
 ///////////////////////////////////////////////////////////////////////////////
 //                        Stage0
 ///////////////////////////////////////////////////////////////////////////////
-std::string
-Stage0_ASTVisitor::RemoveDotExtension(const std::string &filename) {
-    size_t lastdot = filename.find_last_of(".");
-    if (lastdot == std::string::npos) return filename;
-    return filename.substr(0, lastdot);
-}
-
-std::string
-Stage0_ASTVisitor::GetDotExtension(const std::string &filename) {
-    size_t lastdot = filename.find_last_of(".");
-    if (lastdot == std::string::npos) return "";
-    return filename.substr(lastdot,std::string::npos-1);
-}
-
 bool
 Stage0_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
     hasDirectives = true;
@@ -540,50 +567,25 @@ Stage0_ASTVisitor::Finish(ASTContext *Context) {
 
     std::string Suffix("_accll");
     std::string Ext = GetDotExtension(FileName);
-    std::string NewFile = RemoveDotExtension(FileName);
-    NewFile += Suffix;
-    NewFile += Ext;
+    std::string NewFile = RemoveDotExtension(FileName) + Suffix + Ext;
 
     //Create new C file
 
-#if 1
-    std::string NewFileHeader =
-        "/* Generated by accll */\n\n#include <centaurus_common.h>\n\n";
-#else
-    std::string NewFileHeader =
-        "/* Generated by accll */\n\n";
-#endif
-
     std::ifstream src(FileName.c_str());
     std::ofstream dst(NewFile.c_str());
-    dst << NewFileHeader.c_str();
+    dst << accll::NewFileHeader.c_str();
+    {
+#warning FIXME: pass this name to next stage somehow
+        std::string NewHeader = RemoveDotExtension(FileName) + Suffix + "_ocl.h";
+        std::ofstream __header__(NewHeader.c_str());
+        __header__.flush();
+        dst << "#include \"" << NewHeader << "\"\n";
+    }
     dst << src.rdbuf();
     dst.flush();
 
     InputFiles.push_back(NewFile);
     llvm::outs() << "Rewrite to              : '" << NewFile << "'  -  new file\n";
-
-    if (!hasDeviceCode) {
-        llvm::outs() << "No OpenCL Kernels found : skip creation of '*.cl' file\n";
-        std::string Empty;
-        KernelFiles.push_back(Empty);
-        return;
-    }
-
-    //Create new OpenCL file ("*.cl")
-
-    size_t lastdot = FileName.find_last_of(".");
-    assert(lastdot != std::string::npos && "unexpected filepath");
-    std::string NewKernels = FileName.substr(0,lastdot) + Suffix + ".cl";
-
-    //create a new empty file to write the OpenCL kernels
-    std::ofstream NewKernelDst(NewKernels.c_str());
-    NewKernelDst << KernelHeader.c_str() << OpenCLExtensions.c_str();
-    NewKernelDst.flush();
-
-    KernelFiles.push_back(NewKernels);
-    llvm::outs() << "Write OpenCL kernels to : '" << NewKernels
-                 << "'  -  new file\n";
 }
 
 static std::string CreateNewNameFor(clang::ASTContext *Context, Arg *A) {
@@ -1133,9 +1135,6 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         EraseFunctionDeclPool.insert(CE->getDirectCallee());
         if (FunctionDecl *ApproxFun = getApproxFunctionDecl(DI))
             EraseFunctionDeclPool.insert(ApproxFun);
-
-        Replacement Kernel(getCurrentKernelFile(),getCurrentKernelFileEndOffset(),0,NewTask.KernelCode());
-        applyReplacement(ReplacementPool,Kernel);
 
         std::string DirectiveSrc =
             DI->getPrettyDirective(Context->getPrintingPolicy(),false);
@@ -1808,12 +1807,80 @@ Stage1_ASTVisitor::Finish() {
     if (!TaskSrc::TaskUID)
         return;
 
-    std::string NewCode;
+    SourceManager &SM = Context->getSourceManager();
+    std::string FileName = SM.getFileEntryForID(SM.getMainFileID())->getName();
+    std::string Suffix("_ocl");
 
-    Replacement R(getCurrentKernelFile(),
-                  getCurrentKernelFileStartOffset()-1,0,NewCode);
-    applyReplacement(ReplacementPool,R);
-    CurrentKernelFileIterator++;
+    std::string NewHeader = RemoveDotExtension(FileName) + Suffix + ".h";
+    {
+        std::ofstream dst(NewHeader.c_str());
+        dst << accll::NewFileHeader.c_str();
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
+            dst << (*II).second->InlineDeviceCode.HeaderDecl;
+            dst << (*II).second->Binary.HeaderDecl;
+        }
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
+            dst << (*II).second->InlineDeviceCode.HeaderDecl;
+            dst << (*II).second->Binary.HeaderDecl;
+        }
+        dst << "\n";
+        dst.flush();
+    }
+    InputFiles.push_back(NewHeader);
+    llvm::outs() << "Create header           : '" << NewHeader << "'  -  new file\n";
+
+    std::string NewImpl = RemoveDotExtension(FileName) + Suffix + ".c";
+    {
+        std::ofstream dst(NewImpl.c_str());
+        dst << accll::NewFileHeader.c_str();
+        //dst << "#include \"" << NewHeader << "\"\n";
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
+            dst << (*II).second->InlineDeviceCode.Definition;
+            dst << (*II).second->Binary.Definition;
+        }
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
+            dst << (*II).second->InlineDeviceCode.Definition;
+            dst << (*II).second->Binary.Definition;
+        }
+        dst << "\n";
+        dst.flush();
+    }
+    InputFiles.push_back(NewImpl);
+    llvm::outs() << "Create kernel src/bin   : '" << NewImpl << "'  -  new file\n";
+
+    std::string NewDeviceImpl = RemoveDotExtension(FileName) + Suffix + ".cl";
+    {
+        std::ofstream dst(NewDeviceImpl.c_str());
+        dst << KernelHeader << OpenCLExtensions << UserTypes;
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
+            dst << (*II).second->DeviceCode.Definition;
+        }
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
+            dst << (*II).second->DeviceCode.Definition;
+        }
+        dst.flush();
+    }
+    KernelFiles.push_back(NewDeviceImpl);
+    llvm::outs() << "Write OpenCL kernels to : '" << NewDeviceImpl << "'  -  new file\n";
+
+    {
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
+            delete (*II).second;
+        }
+        KernelAccuratePool.clear();
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
+            delete (*II).second;
+        }
+        KernelApproximatePool.clear();
+    }
 
     for (SmallPtrSet<FunctionDecl*,32>::iterator
              II = EraseFunctionDeclPool.begin(),
@@ -1821,6 +1888,7 @@ Stage1_ASTVisitor::Finish() {
         Replacement R(Context->getSourceManager(),*II,std::string());
         applyReplacement(ReplacementPool,R);
     }
+    EraseFunctionDeclPool.clear();
 }
 
 #if 0

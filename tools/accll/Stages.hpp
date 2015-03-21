@@ -10,6 +10,7 @@
 
 #include "llvm/ADT/SmallPtrSet.h"
 #include "Types.hpp"
+#include "Common.hpp"
 
 //copy from RecursiveASTVisitor.h
 #define TRY_TO(CALL_EXPR)                                       \
@@ -22,6 +23,7 @@ namespace accll {
 
 extern std::string KernelHeader;
 extern std::string OpenCLExtensions;
+extern std::string NewFileHeader;
 
 std::pair<std::string,std::string>
 getGeometry(clang::openacc::DirectiveInfo *DI);
@@ -45,10 +47,6 @@ private:
     bool hasRuntimeCalls;
 
 public:
-
-    std::string RemoveDotExtension(const std::string &filename);
-    std::string GetDotExtension(const std::string &filename);
-
     void Finish(clang::ASTContext *Context);
 
     explicit Stage0_ASTVisitor(std::vector<std::string> &InputFiles,
@@ -73,7 +71,7 @@ public:
     virtual void HandleTranslationUnit(clang::ASTContext &Context) {
         clang::SourceManager &SM = Context.getSourceManager();
         std::string FileName = SM.getFileEntryForID(SM.getMainFileID())->getName();
-        std::string Ext = Visitor.GetDotExtension(FileName);
+        std::string Ext = GetDotExtension(FileName);
         if (Ext.compare(".c")) {
             llvm::outs() << "skip invalid input file: '" << FileName << "'\n";
             return;
@@ -129,10 +127,9 @@ public:
 class Stage1_ASTVisitor : public clang::RecursiveASTVisitor<Stage1_ASTVisitor> {
 private:
     clang::tooling::Replacements &ReplacementPool;
+    std::vector<std::string> &InputFiles;
     std::vector<std::string> &KernelFiles;
     clang::ASTContext *Context;
-    std::vector<std::string>::iterator CurrentKernelFileIterator;
-    llvm::SmallPtrSet<clang::FunctionDecl *,32> EraseFunctionDeclPool;
 
     NameMap Map;
 
@@ -164,27 +161,17 @@ private:
 
     bool Stage1_TraverseTemplateArgumentLocsHelper(const clang::TemplateArgumentLoc *TAL,unsigned Count);
 
-    std::string getCurrentKernelFile() const { return *CurrentKernelFileIterator; }
-    unsigned getCurrentKernelFileStartOffset() const {
-        return KernelHeader.size() + OpenCLExtensions.size();
-    }
-    unsigned getCurrentKernelFileEndOffset() const {
-        clang::SourceManager &SM = Context->getSourceManager();
-        const clang::FileEntry *KernelEntry =
-            SM.getFileManager().getFile(getCurrentKernelFile());
-        assert(KernelEntry);
-        return KernelEntry->getSize();
-    }
-
 public:
 
     void Init(clang::ASTContext *C);
     void Finish();
 
     explicit Stage1_ASTVisitor(clang::tooling::Replacements &ReplacementPool,
+                               std::vector<std::string> &InputFiles,
                                std::vector<std::string> &KernelFiles) :
-        ReplacementPool(ReplacementPool), KernelFiles(KernelFiles), Context(0),
-        CurrentKernelFileIterator(KernelFiles.begin()),
+        ReplacementPool(ReplacementPool),
+        InputFiles(InputFiles), KernelFiles(KernelFiles),
+        Context(0),
         IgnoreVars(0)
         /*, DeviceOnlyVisibleVars(0)*/ {}
 
@@ -214,8 +201,9 @@ private:
 
 public:
     explicit Stage1_ASTConsumer(clang::tooling::Replacements &ReplacementPool,
+                                std::vector<std::string> &InputFiles,
                                 std::vector<std::string> &KernelFiles) :
-        Visitor(ReplacementPool,KernelFiles) {}
+        Visitor(ReplacementPool,InputFiles,KernelFiles) {}
 
     virtual void HandleTranslationUnit(clang::ASTContext &Context) {
         clang::TranslationUnitDecl *TU = Context.getTranslationUnitDecl();
@@ -230,14 +218,17 @@ public:
 class Stage1_ConsumerFactory {
 private:
     clang::tooling::Replacements &ReplacementPool;
+    std::vector<std::string> &InputFiles;
     std::vector<std::string> &KernelFiles;
 
 public:
     Stage1_ConsumerFactory(clang::tooling::Replacements &ReplacementPool,
+                           std::vector<std::string> &InputFiles,
                            std::vector<std::string> &KernelFiles) :
-        ReplacementPool(ReplacementPool), KernelFiles(KernelFiles) {}
+        ReplacementPool(ReplacementPool),
+        InputFiles(InputFiles), KernelFiles(KernelFiles) {}
     clang::ASTConsumer *newASTConsumer() {
-        return new Stage1_ASTConsumer(ReplacementPool,KernelFiles);
+        return new Stage1_ASTConsumer(ReplacementPool,InputFiles,KernelFiles);
     }
 };
 
