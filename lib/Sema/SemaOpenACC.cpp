@@ -466,10 +466,12 @@ bool
 OpenACC::isValidDirectiveWrapper(DirectiveInfo *DI) {
 //http://www.parashift.com/c++-faq-lite/pointers-to-members.html
 #define ACC_CALL(method) ((*this).*(method))
+#if 0
     if (DI->getKind() == DK_SUBTASK && !S.getLangOpts().OpenCL) {
         WarnOnDirective(DI);
         return false;
     }
+#endif
 
     if (PendingDirective)
         DiscardAndWarn();
@@ -692,19 +694,41 @@ OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
     AccStmt *ACC = DI->getAccStmt();
 
     switch (DI->getKind()) {
-    case DK_TASK:
-    case DK_SUBTASK:
+    case DK_TASK: {
         assert(SubStmt);
         if (!SubStmt)
             return StmtEmpty();
 
-        if (isa<CallExpr>(SubStmt))
-            ACC->setSubStmt(SubStmt);
-        else {
+        CallExpr *CE = dyn_cast<CallExpr>(SubStmt);
+        if (!CE) {
             WarnOnDirective(DI);
             return StmtEmpty();
         }
+
+        if (!S.getASTContext().isOpenCLKernel(CE->getDirectCallee()))
+            return StmtEmpty();
+
+        ACC->setSubStmt(SubStmt);
         break;
+    }
+    case DK_SUBTASK: {
+        assert(SubStmt);
+        if (!SubStmt)
+            return StmtEmpty();
+
+        CallExpr *CE = dyn_cast<CallExpr>(SubStmt);
+        if (!CE) {
+            WarnOnDirective(DI);
+            return StmtEmpty();
+        }
+
+        if (S.getASTContext().isOpenCLKernel(CE->getDirectCallee()))
+            return StmtEmpty();
+
+        ACC->setSubStmt(SubStmt);
+        S.getASTContext().markAsFunctionWithSubtasks(S.getCurFunctionDecl());
+        break;
+    }
     case DK_TASKWAIT:
         assert(!SubStmt);
         if (SubStmt)

@@ -882,7 +882,6 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
             R = ParseStatementOrDeclaration(Stmts, false);
             Actions.getACCInfo()->getRegionStack().ExitRegion(DI);
             R = Actions.getACCInfo()->CreateRegion(DI,R.get());
-            Actions.getASTContext().AddKernelWithSubtasks(Actions.getCurFunctionDecl()->getNameAsString());
         }
         else if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASKWAIT)) {
             R = Actions.getACCInfo()->CreateRegion(DI);

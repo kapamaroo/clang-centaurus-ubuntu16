@@ -8,6 +8,8 @@
 #include "clang/AST/ASTConsumer.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 
+#include "clang/Analysis/CallGraph.h"
+
 #include "llvm/ADT/SmallPtrSet.h"
 #include "Types.hpp"
 #include "Common.hpp"
@@ -130,6 +132,7 @@ private:
     std::vector<std::string> &InputFiles;
     std::vector<std::string> &KernelFiles;
     clang::ASTContext *Context;
+    clang::CallGraph *CG;
 
     NameMap Map;
 
@@ -161,9 +164,10 @@ private:
 
     bool Stage1_TraverseTemplateArgumentLocsHelper(const clang::TemplateArgumentLoc *TAL,unsigned Count);
 
+    bool UpdateDynamicSize(std::string key, clang::Expr *E);
 public:
 
-    void Init(clang::ASTContext *C);
+    void Init(clang::ASTContext *C, clang::CallGraph *_CG);
     void Finish();
 
     explicit Stage1_ASTVisitor(clang::tooling::Replacements &ReplacementPool,
@@ -171,7 +175,7 @@ public:
                                std::vector<std::string> &KernelFiles) :
         ReplacementPool(ReplacementPool),
         InputFiles(InputFiles), KernelFiles(KernelFiles),
-        Context(0),
+        Context(0), CG(0),
         IgnoreVars(0)
         /*, DeviceOnlyVisibleVars(0)*/ {}
 
@@ -183,6 +187,7 @@ public:
     bool TraverseFunctionDecl(clang::FunctionDecl *FD);
 
     bool VisitAccStmt(clang::AccStmt *ACC);
+    bool VisitDeclStmt(clang::DeclStmt *DS);
     bool VisitVarDecl(clang::VarDecl *VD);
     bool VisitDeclRefExpr(clang::DeclRefExpr *DRE);
     bool VisitMemberExpr(clang::MemberExpr *ME);
@@ -207,7 +212,11 @@ public:
 
     virtual void HandleTranslationUnit(clang::ASTContext &Context) {
         clang::TranslationUnitDecl *TU = Context.getTranslationUnitDecl();
-        Visitor.Init(&Context);
+
+        clang::CallGraph CG;
+        CG.addToCallGraph(TU);
+
+        Visitor.Init(&Context,&CG);
         Visitor.TraverseDecl(TU);
         Visitor.Finish();
     }

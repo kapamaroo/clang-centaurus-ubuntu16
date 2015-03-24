@@ -1621,8 +1621,8 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
 
         Decl *TheDecl =
           ParseFunctionDefinition(D, ParsedTemplateInfo(), &LateParsedAttrs);
-        if (getLangOpts().OpenACC)
-            PP.SetOpenCL(false);
+        if (getLangOpts().OpenACC && getLangOpts().OpenCL)
+                PP.SetOpenCL(false);
         return Actions.ConvertDeclToDeclGroup(TheDecl);
       }
 

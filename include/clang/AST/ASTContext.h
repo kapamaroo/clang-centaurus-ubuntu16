@@ -2287,29 +2287,18 @@ private:
   llvm::OwningPtr<ParentMap> AllParents;
 
 private:
-    std::vector<std::string> KernelsWithSubtasks;
+    llvm::SmallPtrSet<clang::FunctionDecl *, 32> KernelFD;
+    llvm::SmallPtrSet<clang::FunctionDecl *, 32> FDS;
 
 public:
-    std::vector<std::string> &getKernelsWithSubtasks() { return KernelsWithSubtasks; }
+    llvm::SmallPtrSet<clang::FunctionDecl *, 32> &getKernelFunctions() { return KernelFD; }
+    llvm::SmallPtrSet<clang::FunctionDecl *, 32> &getFunctionsWithSubtasks() { return FDS; }
 
-    void AddKernelWithSubtasks(std::string Name) {
-        //do not insert twice
-        for (std::vector<std::string>::iterator
-                 II = KernelsWithSubtasks.begin(),
-                 EE = KernelsWithSubtasks.end(); II != EE; ++II)
-            if (Name.compare(*II) == 0)
-                return;
-        KernelsWithSubtasks.push_back(Name);
-    }
+    void markAsOpenCLKernel(clang::FunctionDecl *FD) { KernelFD.insert(FD); }
+    void markAsFunctionWithSubtasks(clang::FunctionDecl *FD) {FDS.insert(FD); }
 
-    bool isKernelWithSubtasks(std::string Name) {
-        for (std::vector<std::string>::iterator
-                 II = KernelsWithSubtasks.begin(),
-                 EE = KernelsWithSubtasks.end(); II != EE; ++II)
-            if (Name.compare(*II) == 0)
-                return true;
-        return false;
-    }
+    bool isOpenCLKernel(clang::FunctionDecl *FD) { return KernelFD.count(FD) ? true : false; }
+    bool isFunctionWithSubtasks(clang::FunctionDecl *FD) { return FDS.count(FD) ? true : false; }
 };
 
 /// \brief Utility function for constructing a nullary selector.

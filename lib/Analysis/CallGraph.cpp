@@ -68,7 +68,7 @@ public:
   void VisitObjCMessageExpr(ObjCMessageExpr *ME) {
     if (ObjCInterfaceDecl *IDecl = ME->getReceiverInterface()) {
       Selector Sel = ME->getSelector();
-      
+
       // Find the callee definition within the same translation unit.
       Decl *D = 0;
       if (ME->isInstanceMessage())
@@ -129,6 +129,13 @@ bool CallGraph::includeInGraph(const Decl *D) {
     IdentifierInfo *II = FD->getIdentifier();
     if (II && II->getName().startswith("__inline"))
       return false;
+
+    const ASTContext &Context = D->getDeclContext()->getParentASTContext();
+    if (Context.getLangOpts().OpenACC) {
+        const SourceManager &SM = Context.getSourceManager();
+        if (SM.isInSystemHeader(FD->getSourceRange().getBegin()))
+            return false;
+    }
   }
 
   if (const ObjCMethodDecl *ID = dyn_cast<ObjCMethodDecl>(D)) {
