@@ -591,7 +591,6 @@ void StmtPrinter::VisitSEHFinallyStmt(SEHFinallyStmt *Node) {
 //===----------------------------------------------------------------------===//
 
 inline static std::string getApproxFunctionName(openacc::DirectiveInfo *DI) {
-    assert(DI->getKind() == DK_SUBTASK);
     openacc::ClauseList &CList = DI->getClauseList();
     for (openacc::ClauseList::iterator
              II = CList.begin(), EE = CList.end(); II != EE; ++II)
@@ -605,12 +604,29 @@ inline static std::string getApproxFunctionName(openacc::DirectiveInfo *DI) {
 void StmtPrinter::VisitAccStmt(AccStmt *Node) {
     openacc::DirectiveInfo *DI = Node->getDirective();
 
-    assert(isa<CallExpr>(Node->getSubStmt()));
-
     if (SubtaskPrintMode == openacc::K_PRINT_ALL)
         OS << DI->getPrettyDirective(Policy);
     else if (SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK) {
+        assert(DI->getKind() == DK_SUBTASK);
         AlternativeName = getApproxFunctionName(DI);
+#warning IMPLEMENT ME: special case if the substmt is a declaration
+        if (!AlternativeName.size())
+            return;
+        PrintStmt(Node->getSubStmt());
+        AlternativeName = std::string();
+    }
+    else if (SubtaskPrintMode == openacc::K_PRINT_ACCURATE_SUBTASK) {
+        assert(DI->getKind() == DK_SUBTASK);
+        if (CallExpr *CE = dyn_cast<CallExpr>(Node->getSubStmt())) {
+            AlternativeName = CE->getDirectCallee()->getNameAsString();  // + "__accurate__";
+        }
+        else if (BinaryOperator *BO = dyn_cast<BinaryOperator>(Node->getSubStmt())) {
+            Expr *RHS = BO->getRHS()->IgnoreParenCasts();
+            CallExpr *CE = dyn_cast<CallExpr>(RHS);
+            assert(CE);
+            AlternativeName = CE->getDirectCallee()->getNameAsString();  // + "__accurate__";
+        }
+
         PrintStmt(Node->getSubStmt());
         AlternativeName = std::string();
     }
@@ -944,7 +960,8 @@ void StmtPrinter::PrintCallArgs(CallExpr *Call) {
 }
 
 void StmtPrinter::VisitCallExpr(CallExpr *Call) {
-    if (SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK && AlternativeName.size())
+    if ((SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK ||
+         SubtaskPrintMode == openacc::K_PRINT_ACCURATE_SUBTASK) && AlternativeName.size())
         OS << AlternativeName;
     else
         PrintExpr(Call->getCallee());

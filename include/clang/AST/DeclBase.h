@@ -870,6 +870,7 @@ public:
   void print(raw_ostream &Out, const PrintingPolicy &Policy,
              unsigned Indentation = 0, bool PrintInstantiation = false) const;
   void printAccurateVersion(raw_ostream &Out, const PrintingPolicy &Policy,
+                            std::string AlternativeName,
                             unsigned Indentation = 0, bool PrintInstantiation = false) const;
   void printApproximateVersion(raw_ostream &Out, const PrintingPolicy &Policy,
                                std::string AlternativeName,

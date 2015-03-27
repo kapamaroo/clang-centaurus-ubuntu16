@@ -109,10 +109,12 @@ void Decl::print(raw_ostream &Out, const PrintingPolicy &Policy,
 }
 
 void Decl::printAccurateVersion(raw_ostream &Out, const PrintingPolicy &Policy,
+                                std::string AlternativeName,
                                 unsigned Indentation, bool PrintInstantiation) const {
   assert(isa<FunctionDecl>(this));
   DeclPrinter Printer(Out, Policy, Indentation, PrintInstantiation);
   Printer.SubtaskPrintMode = openacc::K_PRINT_ACCURATE_SUBTASK;
+  Printer.AlternativeName = AlternativeName;
   Printer.Visit(const_cast<Decl*>(this));
 }
 
@@ -461,7 +463,10 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
   SubPolicy.SuppressSpecifiers = false;
   std::string Proto = D->getNameInfo().getAsString();
 
-  if (SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK && AlternativeName.size())
+  //overwrite function call name
+  if (AlternativeName.size() &&
+      (SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK ||
+       SubtaskPrintMode == openacc::K_PRINT_ACCURATE_SUBTASK))
       Proto = AlternativeName;
 
   QualType Ty = D->getType();

@@ -10,9 +10,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 
-namespace accll {
-}
-
 using namespace llvm;
 using namespace clang;
 using namespace clang::tooling;
@@ -20,10 +17,13 @@ using namespace clang::openacc;
 using namespace accll;
 
 namespace {
+    const std::string APIHeader = "centaurus_common.h";
+
     llvm::StringMap<std::string> DynSizeMap;
     llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelAccuratePool;
     llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelApproximatePool;
     llvm::SmallPtrSet<FunctionDecl *,32> EraseFunctionDeclPool;
+    llvm::StringMap<bool> DepHeaders;
 }
 
 ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
@@ -101,21 +101,39 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
     raw_string_ostream OS(DeviceCode.Definition);
     switch (SubtaskPrintMode) {
     case K_PRINT_ALL:
-        FD->print(OS,Context->getPrintingPolicy());
+        if (Context->getSourceManager().isFromMainFile(FD->getLocStart()))
+            FD->print(OS,Context->getPrintingPolicy());
         break;
-    case K_PRINT_ACCURATE_SUBTASK:
-        FD->printAccurateVersion(OS,Context->getPrintingPolicy());
+    case K_PRINT_ACCURATE_SUBTASK: {
+        //always print the accurate version
+        std::string AlternativeName = FD->getNameAsString() + std::string("__accurate__");
+        DeviceCode.NameRef = AlternativeName;
+        FD->printAccurateVersion(OS,Context->getPrintingPolicy(),AlternativeName);
         break;
-    case K_PRINT_APPROXIMATE_SUBTASK:
+    }
+    case K_PRINT_APPROXIMATE_SUBTASK: {
+        //always print the approximate version
         std::string AlternativeName = FD->getNameAsString() + std::string("__approx__");
         DeviceCode.NameRef = AlternativeName;
         FD->printApproximateVersion(OS,Context->getPrintingPolicy(),AlternativeName);
         break;
     }
+    }
     OS.str();
 
-    std::string __offline = Extensions + UserTypes + DeviceCode.Definition;
-    std::string __inline_definition = CreateInlineDefinition(Extensions,UserTypes);
+    std::string __offline = Extensions;
+    for (StringMap<bool>::iterator
+             II = DepHeaders.begin(), EE = DepHeaders.end(); II != EE; ++II) {
+        __offline += "#include \"" + II->getKey().str() + "\"\n";
+    }
+    __offline += UserTypes + DeviceCode.Definition;
+    std::string __inline_definition = __offline;
+    ReplaceStringInPlace(__inline_definition,"\\","\\\\");
+    ReplaceStringInPlace(__inline_definition,"\r","");
+    ReplaceStringInPlace(__inline_definition,"\t","");
+    ReplaceStringInPlace(__inline_definition,"\"","\\\"");
+    ReplaceStringInPlace(__inline_definition,"\n","\\n");
+
     InlineDeviceCode.NameRef = "__src_inline__" + DeviceCode.NameRef;
     InlineDeviceCode.HeaderDecl = "extern const char " + InlineDeviceCode.NameRef
         + "[" + toString(__inline_definition.size()) + "];";
@@ -124,11 +142,15 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
         + " = "
         + "\"" + __inline_definition + "\";";
 
-    Binary.NameRef = "__binArray_" + DeviceCode.NameRef;
     BuildOptions.push_back("-cl-nv-verbose");
     std::string BinArray = compile(__offline,"NVIDIA",BuildOptions);
     if (BinArray.size()) {
+        Binary.NameRef = "__binArray_" + DeviceCode.NameRef;
+#if 0
         std::string HexBinArray = ToHex(BinArray);
+#else
+        std::string HexBinArray;
+#endif
         Binary.HeaderDecl = "extern const unsigned char " + Binary.NameRef
             + "[" + toString(BinArray.size()) + "];";
         Binary.Definition = "const unsigned char " + Binary.NameRef
@@ -137,7 +159,8 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
             + "{" + HexBinArray + "};";
     }
     else {
-        Binary.Definition = "NULL";
+        Binary.NameRef = "NULL";
+        //Binary.Definition = "NULL";
     }
 
     // On Linux the driver caches compiled kernels in ~/.nv/ComputeCache.
@@ -157,17 +180,6 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
         + ",.__bin = " + Binary.NameRef
         + ",.__bin_size = " + toString(BinArray.size())
         + "};";
-}
-
-std::string KernelRefDef::CreateInlineDefinition(std::string &Extensions, std::string &UserTypes) {
-    std::string out = Extensions + UserTypes + DeviceCode.Definition;
-    assert(DeviceCode.Definition.size());
-    ReplaceStringInPlace(out,"\\","\\\\");
-    ReplaceStringInPlace(out,"\r","");
-    ReplaceStringInPlace(out,"\t","");
-    ReplaceStringInPlace(out,"\"","\\\"");
-    ReplaceStringInPlace(out,"\n","\\n");
-    return out;
 }
 
 size_t KernelRefDef::getKernelUID(std::string Name) {
@@ -213,13 +225,15 @@ struct KernelSrc {
     {
         CreateKernel(Context,DI,Extensions,UserTypes);
 
+        std::string ApproxName = ApproximateKernel ? std::string("&" + ApproximateKernel->HostCode.NameRef) : "NULL";
         NameRef = "__accll_task_exe";
-        Definition = AccurateKernel->HostCode.Definition
-            + ApproximateKernel->HostCode.Definition
-            + "struct _task_executable " + NameRef + " = {"
+        Definition = AccurateKernel->HostCode.Definition;
+        if (ApproximateKernel)
+            Definition += ApproximateKernel->HostCode.Definition;
+        Definition += "struct _task_executable " + NameRef + " = {"
             //+ ".UID = " + toString(TaskUID)
-            + ".kernel_accurate = " + ref(AccurateKernel->HostCode.NameRef)
-            + ",.kernel_approximate = " + ref(ApproximateKernel->HostCode.NameRef)
+            + ".kernel_accurate = &" + AccurateKernel->HostCode.NameRef
+            + ",.kernel_approximate = " + ApproxName
             + "};";
     }
 
@@ -341,13 +355,15 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI,
                                                   Extensions,UserTypes);
                 KernelAccuratePool[AccurateFun] = AccurateKernel;
             }
-            Kref = KernelApproximatePool.find(ApproxFun);
-            if (Kref != KernelApproximatePool.end())
-                ApproximateKernel = Kref->second;
-            else {
-                ApproximateKernel = new KernelRefDef(Context,ApproxFun,
-                                                     Extensions,UserTypes);
-                KernelApproximatePool[ApproxFun] = ApproximateKernel;
+            if (ApproxFun) {
+                Kref = KernelApproximatePool.find(ApproxFun);
+                if (Kref != KernelApproximatePool.end())
+                    ApproximateKernel = Kref->second;
+                else {
+                    ApproximateKernel = new KernelRefDef(Context,ApproxFun,
+                                                         Extensions,UserTypes);
+                    KernelApproximatePool[ApproxFun] = ApproximateKernel;
+                }
             }
         }
 
@@ -1311,22 +1327,22 @@ Stage1_ASTVisitor::VisitDeclRefExpr(DeclRefExpr *DRE) {
     if (isa<CallExpr>(RStack.back()->getAccStmt()->getSubStmt()))
         return true;
 
+#if 0
     llvm::outs() << "DEBUG: " << getPrettyExpr(Context,DRE) << "\n";
 
-#if 0
     if (RStack.CurrentRegionIs(DK_TASK)) {
         //FIXME: maybe this should be a warning?
         llvm::outs() << "debug: use host's '"
                      << VD->getName() << "'" << "\n";
         return true;
     }
-#endif
     if (IgnoreVars->has(VD)) {
         llvm::outs() << "debug: skip rename '"
                      << VD->getName() << "' (device resident)" << "\n";
     }
     else
         Rename(dyn_cast<Expr>(DRE));
+#endif
     return true;
 }
 
@@ -1353,7 +1369,6 @@ Stage1_ASTVisitor::VisitMemberExpr(MemberExpr *ME) {
                      << "'" << "\n";
         return true;
     }
-#endif
 
     Expr *BaseExpr = ME->getBase()->IgnoreParenCasts();
     while (MemberExpr *NewME = dyn_cast<MemberExpr>(BaseExpr->IgnoreParenImpCasts())) {
@@ -1371,6 +1386,7 @@ Stage1_ASTVisitor::VisitMemberExpr(MemberExpr *ME) {
             }
 
     Rename(dyn_cast<Expr>(ME));
+#endif
 
     return true;
 }
@@ -1400,7 +1416,6 @@ Stage1_ASTVisitor::VisitArraySubscriptExpr(clang::ArraySubscriptExpr *ASE) {
                      << "'" << "\n";
         return true;
     }
-#endif
 
     Expr *BaseExpr = ASE->getBase()->IgnoreParenCasts();
     while (MemberExpr *NewME = dyn_cast<MemberExpr>(BaseExpr->IgnoreParenImpCasts())) {
@@ -1418,6 +1433,7 @@ Stage1_ASTVisitor::VisitArraySubscriptExpr(clang::ArraySubscriptExpr *ASE) {
             }
 
     Rename(dyn_cast<Expr>(ASE));
+#endif
 
     return true;
 }
@@ -1763,10 +1779,11 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
 
     for (SmallVector<Arg*,8>::iterator
              II = PragmaArgs.begin(), EE = PragmaArgs.end(); II != EE; ++II)
-        if (!isa<SubArrayArg>(*II) && !isa<ArrayArg>(*II))
+        if (!isa<SubArrayArg>(*II) && !isa<ArrayArg>(*II) &&
+            !isa<VarArg>(*II) && !(*II)->getExpr()->getType()->isPointerType())
             llvm::outs() << "warning: ignore invalid '" << (*II)->getParent()->getAsClause()->getAsString()
                          << "' data dependency for pass-by-value argument '"
-                         << (*II)->getPrettyArg(PrintingPolicy(Context->getLangOpts())) << "'\n";
+                         << (*II)->getPrettyArg(PrintingPolicy(Context->getLangOpts())) << "' (" << (*II)->getKindAsString() << ")\n";
 
 #if 0
     SmallVector<Expr*,8> PtrArgs;
@@ -1885,13 +1902,20 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
      std::string NewDeviceImpl = RemoveDotExtension(FileName) + Suffix + ".cl";
      {
          std::ofstream dst(NewDeviceImpl.c_str());
-         dst << KernelHeader << OpenCLExtensions << UserTypes;
-         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+         dst << KernelHeader << OpenCLExtensions;
+         for (StringMap<bool>::iterator
+                  II = DepHeaders.begin(), EE = DepHeaders.end(); II != EE; ++II) {
+             dst << "#include \"" + II->getKey().str() + "\"\n";
+         }
+         dst << UserTypes;
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
                   II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
-             dst << (*II).second->DeviceCode.Definition;
+            //if (SM.isFromMainFile((*II).first->getLocStart()))
+            dst << (*II).second->DeviceCode.Definition;
          }
          for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
                   II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
+             //if (SM.isFromMainFile((*II).first->getLocStart()))
              dst << (*II).second->DeviceCode.Definition;
          }
          dst.flush();
@@ -1926,7 +1950,9 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
      }
      EraseFunctionDeclPool.clear();
 
-     CG->dump();
+     DepHeaders.clear();
+
+     //CG->dump();
  }
 
  #if 0
@@ -2007,11 +2033,16 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
      if (SM.isInSystemHeader(Loc))
          return true;
 
-     //maybe the implementiation headers are not in system directories
-     if (!SM.isFromMainFile(Loc))
-         return true;
+     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
+     llvm::outs() << "debug: user defined record '" << R->getNameAsString() << "' from file :"
+                << DefFile << "\n";
 
-     llvm::outs() << "found user defined record\n";
+     //maybe the implementation headers are not in system directories
+     if (!SM.isFromMainFile(Loc)) {
+         if (DefFile.find(APIHeader) == std::string::npos)
+             DepHeaders[DefFile] = true;
+         return true;
+     }
 
      std::string Tmp;
      raw_string_ostream OS(Tmp);
@@ -2030,11 +2061,16 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
      if (SM.isInSystemHeader(Loc))
          return true;
 
-     //maybe the implementiation headers are not in system directories
-     if (!SM.isFromMainFile(Loc))
-         return true;
+     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
+     llvm::outs() << "debug: user defined enum '" << E->getNameAsString() << "' from file :"
+                << DefFile << "\n";
 
-     llvm::outs() << "found user defined enum\n";
+     //maybe the implementation headers are not in system directories
+     if (!SM.isFromMainFile(Loc)) {
+         if (DefFile.find(APIHeader) == std::string::npos)
+             DepHeaders[DefFile] = true;
+         return true;
+     }
 
      std::string Tmp;
      raw_string_ostream OS(Tmp);
@@ -2056,11 +2092,16 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
      if (SM.isInSystemHeader(Loc))
          return true;
 
-     //maybe the implementiation headers are not in system directories
-     if (!SM.isFromMainFile(Loc))
-         return true;
+     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
+     llvm::outs() << "debug: user defined typedef '" << T->getNameAsString() << "' from file :"
+                << DefFile << "\n";
 
-     llvm::outs() << "found user defined typedef\n";
+     //maybe the implementation headers are not in system directories
+     if (!SM.isFromMainFile(Loc)) {
+         if (DefFile.find(APIHeader) == std::string::npos)
+             DepHeaders[DefFile] = true;
+         return true;
+     }
 
      std::string Tmp;
      raw_string_ostream OS(Tmp);

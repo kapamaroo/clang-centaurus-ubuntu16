@@ -716,14 +716,22 @@ OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
         if (!SubStmt)
             return StmtEmpty();
 
-        CallExpr *CE = dyn_cast<CallExpr>(SubStmt);
-        if (!CE) {
-            WarnOnDirective(DI);
-            return StmtEmpty();
+        //allow any statement that contains a CallExpr
+#warning check if SubStmt contains a CallExpr
+        if (CallExpr *CE = dyn_cast<CallExpr>(SubStmt)) {
+            if (S.getASTContext().isOpenCLKernel(CE->getDirectCallee()))
+#warning FIXME: add error message
+                return StmtEmpty();
         }
-
-        if (S.getASTContext().isOpenCLKernel(CE->getDirectCallee()))
-            return StmtEmpty();
+        else if (BinaryOperator *BO = dyn_cast<BinaryOperator>(SubStmt)) {
+            Expr *RHS = BO->getRHS()->IgnoreParenCasts();
+            if (CallExpr *CE = dyn_cast<CallExpr>(RHS))
+                (void)CE;  //ok
+            else {
+#warning FIXME: add error message
+                return StmtEmpty();
+            }
+        }
 
         ACC->setSubStmt(SubStmt);
         S.getASTContext().markAsFunctionWithSubtasks(S.getCurFunctionDecl());

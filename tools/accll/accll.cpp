@@ -38,7 +38,7 @@ int main(int argc, const char **argv) {
     conf.push_back("--");
     conf.push_back("-fopenacc");
     conf.push_back("-I.");
-    conf.push_back("-Wno-implicit-function-declaration");
+    conf.push_back("-Wno-implicit-function-declaration");  //suppress missing opencl builtins
     //conf.push_back("-x");
     //conf.push_back("cl");
     //conf.push_back("-w");
@@ -95,30 +95,30 @@ int main(int argc, const char **argv) {
     }
 #endif
 
-    std::vector<std::string> RealKernelFiles;
-    for (std::vector<std::string>::iterator
-             II = KernelFiles.begin(), EE = KernelFiles.end(); II != EE; ++II)
-        if (!(*II).empty())
-            RealKernelFiles.push_back(*II);
-
     //format new files
     int status = 0;
 
     std::string Style = "LLVM";
     for (std::vector<std::string>::iterator
              II = InputFiles.begin(),
-             EE = InputFiles.end(); II != EE; ++II)
+             EE = InputFiles.end(); II != EE; ++II) {
+        //llvm::outs() << *II << "\n";
         status += clang_format_main(*II,Style);
+    }
 
     for (std::vector<std::string>::iterator
              II = LibOCLFiles.begin(),
-             EE = LibOCLFiles.end(); II != EE; ++II)
+             EE = LibOCLFiles.end(); II != EE; ++II) {
+        //llvm::outs() << *II << "\n";
         status += clang_format_main(*II,Style);
+    }
 
     for (std::vector<std::string>::iterator
-             II = RealKernelFiles.begin(),
-             EE = RealKernelFiles.end(); II != EE; ++II)
+             II = KernelFiles.begin(),
+             EE = KernelFiles.end(); II != EE; ++II) {
+        //llvm::outs() << *II << "\n";
         status += clang_format_main(*II,Style);
+    }
 
     llvm::outs() << "\n\n#######     Stage5     #######\n\n";
     llvm::outs() << "Check new generated host files ...\n";
@@ -135,7 +135,10 @@ int main(int argc, const char **argv) {
         return 1;
     }
 
-    if (!RealKernelFiles.empty()) {
+#if 0
+     // Clang does not like the keyword 'static' for function declarations.
+     // The underlying OpenCL compiler is happy with it.
+    if (!KernelFiles.empty()) {
         std::vector<std::string> kernel_conf;
         /* clang
           -S
@@ -160,25 +163,26 @@ int main(int argc, const char **argv) {
         kernel_conf.push_back("cl");
         //kernel_conf.push_back("-w");
 
-        int KernelARGC = 1 + RealKernelFiles.size() + kernel_conf.size();
-        const char **KernelARGV = new const char*[1 + RealKernelFiles.size() + kernel_conf.size()];
+        int KernelARGC = 1 + KernelFiles.size() + kernel_conf.size();
+        const char **KernelARGV = new const char*[1 + KernelFiles.size() + kernel_conf.size()];
 
         KernelARGV[0] = argv[0];
         int i = 1;
-        for (std::vector<std::string>::iterator II = RealKernelFiles.begin(),
-                 EE = RealKernelFiles.end(); II != EE; ++II,++i)
+        for (std::vector<std::string>::iterator II = KernelFiles.begin(),
+                 EE = KernelFiles.end(); II != EE; ++II,++i)
             KernelARGV[i] = (*II).c_str();
         for (std::vector<std::string>::size_type i=0; i<kernel_conf.size(); ++i)
-            KernelARGV[1 + RealKernelFiles.size() + i] = kernel_conf[i].c_str();
+            KernelARGV[1 + KernelFiles.size() + i] = kernel_conf[i].c_str();
 
         llvm::outs() << "Check new generated device files ...\n";
         CommonOptionsParser KernelOptionsParser(KernelARGC, KernelARGV);
-        ClangTool Tool6(KernelOptionsParser.getCompilations(),RealKernelFiles);
+        ClangTool Tool6(KernelOptionsParser.getCompilations(),KernelFiles);
         if (Tool6.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
             llvm::errs() << "FATAL: __internal_error__: illegal device code  -  Exit.\n";
             return 1;
         }
     }
+#endif
 
     llvm::outs() << "\n\n##############################\n\n";
     llvm::outs() << "New files are valid\n" << "Success!\n\n";

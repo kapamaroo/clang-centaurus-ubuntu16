@@ -75,8 +75,6 @@ struct KernelRefDef {
                  std::string &Extensions, std::string &UserTypes,
                  const enum clang::openacc::PrintSubtaskType = clang::openacc::K_PRINT_ALL);
 
-    std::string CreateInlineDefinition(std::string &Extensions, std::string &UserTypes);
-
     size_t getKernelUID(std::string Name);
 };
 
