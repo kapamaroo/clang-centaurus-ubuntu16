@@ -1,13 +1,16 @@
 #ifndef __ACCLL_TYPES_H__
 #define __ACCLL_TYPES_H__
 
-#include "clang/Basic/OpenACC.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/ADT/SetVector.h"
+
+#include "clang/Basic/OpenACC.h"
 
 namespace clang {
     class FunctionDecl;
     class ASTContext;
+    class CallGraph;
 
     namespace openacc {
         class Arg;
@@ -66,12 +69,15 @@ struct KernelRefDef {
 
     KernelRefDef() {}
 
+    void findCallDeps(clang::FunctionDecl *StartFD, clang::CallGraph *CG,
+                      llvm::SmallSetVector<clang::FunctionDecl *,sizeof(clang::FunctionDecl *)> &Deps);
+
     //return the size of the compiled kernel in bytes, 0 if cannot compile
     std::string compile(std::string inFile,
                         const std::string &platform = std::string("NVIDIA"),
                         const std::vector<std::string> &options = std::vector<std::string>());
 
-    KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD,
+    KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, clang::CallGraph *CG,
                  std::string &Extensions, std::string &UserTypes,
                  const enum clang::openacc::PrintSubtaskType = clang::openacc::K_PRINT_ALL);
 

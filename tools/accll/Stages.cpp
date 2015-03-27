@@ -8,7 +8,6 @@
 #include <iomanip>
 
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringMap.h"
 
 using namespace llvm;
 using namespace clang;
@@ -22,6 +21,7 @@ namespace {
     llvm::StringMap<std::string> DynSizeMap;
     llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelAccuratePool;
     llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelApproximatePool;
+    llvm::DenseMap<FunctionDecl *,std::string> CommonFunctionsPool;
     llvm::SmallPtrSet<FunctionDecl *,32> EraseFunctionDeclPool;
     llvm::StringMap<bool> DepHeaders;
 }
@@ -73,7 +73,43 @@ public:
     }
 };
 
-KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
+static
+ObjRefDef printFunction(clang::FunctionDecl *FD, clang::ASTContext *Context,
+                        std::string AlternativeName,
+                        const enum PrintSubtaskType SubtaskPrintMode)
+{
+    std::string Ref;
+    std::string Def;
+    raw_string_ostream OS(Def);
+    switch (SubtaskPrintMode) {
+    case K_PRINT_ALL:
+#if 1
+        Ref = FD->getNameAsString();
+#else
+        Ref = getUniqueKernelName(FD->getNameAsString());
+#endif
+       if (Context->getSourceManager().isFromMainFile(FD->getLocStart()))
+            FD->print(OS,Context->getPrintingPolicy());
+        break;
+    case K_PRINT_ACCURATE_SUBTASK: {
+        //always print the accurate version
+        Ref = AlternativeName;
+        FD->printAccurateVersion(OS,Context->getPrintingPolicy(),AlternativeName);
+        break;
+    }
+    case K_PRINT_APPROXIMATE_SUBTASK: {
+        //always print the approximate version
+        Ref = AlternativeName;
+        FD->printApproximateVersion(OS,Context->getPrintingPolicy(),AlternativeName);
+        break;
+    }
+    default:
+        assert(0);
+    }
+    return ObjRefDef(Ref,OS.str());
+}
+
+KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, clang::CallGraph *CG,
                            std::string &Extensions, std::string &UserTypes,
                            const enum PrintSubtaskType SubtaskPrintMode)
 {
@@ -91,42 +127,76 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
         return;
     }
 
-#if 1
-    DeviceCode.NameRef = FD->getNameAsString();
-#else
-    DeviceCode.NameRef = getUniqueKernelName(Name);
-#endif
+    assert(SubtaskPrintMode != K_PRINT_ALL);
 
-    assert(DeviceCode.Definition.size() == 0);
-    raw_string_ostream OS(DeviceCode.Definition);
-    switch (SubtaskPrintMode) {
-    case K_PRINT_ALL:
-        if (Context->getSourceManager().isFromMainFile(FD->getLocStart()))
-            FD->print(OS,Context->getPrintingPolicy());
-        break;
-    case K_PRINT_ACCURATE_SUBTASK: {
-        //always print the accurate version
-        std::string AlternativeName = FD->getNameAsString() + std::string("__accurate__");
+    // always set the AlternativeName for the top level kernel function
+    std::string AlternativeName = FD->getNameAsString();
+    if (Context->isFunctionWithSubtasks(FD)) {
+        if (SubtaskPrintMode == K_PRINT_ACCURATE_SUBTASK)
+            AlternativeName += "__accurate__";
+        else if (SubtaskPrintMode == K_PRINT_APPROXIMATE_SUBTASK)
+            AlternativeName += "__approx__";
+        // always write a new version if kernel has subtasks
+        DeviceCode = printFunction(FD,Context,AlternativeName,SubtaskPrintMode);
+    }
+    else if (Context->getSourceManager().isFromMainFile(FD->getLocStart())) {
+        // if kernel has no subtasks write it on the new file only if it cannot
+        // be found through headers
+        DeviceCode = printFunction(FD,Context,AlternativeName,SubtaskPrintMode);
+    }
+    else {
+        // exists on header, just set the NameRef
+        //llvm::outs() << "debug: " << FD->getNameAsString() << "-------------------kernel function from header\n";
         DeviceCode.NameRef = AlternativeName;
-        FD->printAccurateVersion(OS,Context->getPrintingPolicy(),AlternativeName);
-        break;
     }
-    case K_PRINT_APPROXIMATE_SUBTASK: {
-        //always print the approximate version
-        std::string AlternativeName = FD->getNameAsString() + std::string("__approx__");
-        DeviceCode.NameRef = AlternativeName;
-        FD->printApproximateVersion(OS,Context->getPrintingPolicy(),AlternativeName);
-        break;
-    }
-    }
-    OS.str();
 
     std::string __offline = Extensions;
+    std::string PreDef = Extensions;
     for (StringMap<bool>::iterator
              II = DepHeaders.begin(), EE = DepHeaders.end(); II != EE; ++II) {
         __offline += "#include \"" + II->getKey().str() + "\"\n";
+        PreDef += "#include \"" + II->getKey().str() + "\"\n";
     }
-    __offline += UserTypes + DeviceCode.Definition;
+    __offline += UserTypes;
+    PreDef += UserTypes;
+
+    llvm::SmallSetVector<clang::FunctionDecl *,sizeof(clang::FunctionDecl *)> Deps;
+    findCallDeps(FD,CG,Deps);
+
+    //reverse visit to satisfy dependencies
+    while (Deps.size()) {
+        FunctionDecl *DepFD = Deps.pop_back_val();
+
+        ObjRefDef Src;
+
+        // leave AnternativeName empty if there are no subtasks
+        std::string AlternativeName;
+        if (Context->isFunctionWithSubtasks(DepFD)) {
+            if (SubtaskPrintMode == K_PRINT_ACCURATE_SUBTASK)
+                AlternativeName = DepFD->getNameAsString() + "__accurate__";
+            else if (SubtaskPrintMode == K_PRINT_APPROXIMATE_SUBTASK)
+                AlternativeName = DepFD->getNameAsString() + "__approx__";
+            Src = printFunction(DepFD,Context,AlternativeName,SubtaskPrintMode);
+            //has two versions which we add independently in the final *.cl file
+            __offline += Src.Definition;
+            PreDef += Src.Definition;
+        }
+        else if (Context->getSourceManager().isFromMainFile(DepFD->getLocStart())) {
+            Src = printFunction(DepFD,Context,AlternativeName,SubtaskPrintMode);
+            // it appears as it is, in both accurate and approximate
+            // version (if exists), add it only once in the final *.cl file
+            CommonFunctionsPool[DepFD] = Src.Definition;
+            __offline += Src.Definition;
+        }
+        else {
+            // exists on header
+            //llvm::outs() << "debug: " << DepFD->getNameAsString() << "-------------------function dep from header\n";
+            continue;
+        }
+    }
+    __offline += DeviceCode.Definition;
+    DeviceCode.Definition = PreDef + DeviceCode.Definition;
+
     std::string __inline_definition = __offline;
     ReplaceStringInPlace(__inline_definition,"\\","\\\\");
     ReplaceStringInPlace(__inline_definition,"\r","");
@@ -165,7 +235,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,FunctionDecl *FD,
 
     // On Linux the driver caches compiled kernels in ~/.nv/ComputeCache.
     // Deleting this folder forces a recompile.
-    llvm::outs() << "########    Build Log    ########\n";
+    llvm::outs() << "########    Build Log (" << DeviceCode.NameRef << ")   ########\n";
     llvm::outs() << BuildLog << "\n";
     llvm::outs() << "#################################\n";
 
@@ -215,7 +285,7 @@ struct KernelSrc {
     KernelRefDef *AccurateKernel;
     KernelRefDef *ApproximateKernel;
 
-    KernelSrc(clang::ASTContext *Context,
+    KernelSrc(clang::ASTContext *Context, clang::CallGraph *CG,
               clang::openacc::RegionStack &RStack,
               DirectiveInfo *DI, int TaskUID,
               std::string &Extensions, std::string &UserTypes) :
@@ -223,7 +293,7 @@ struct KernelSrc {
         RStack(RStack),
         AccurateKernel(0), ApproximateKernel(0)
     {
-        CreateKernel(Context,DI,Extensions,UserTypes);
+        CreateKernel(Context,CG,DI,Extensions,UserTypes);
 
         std::string ApproxName = ApproximateKernel ? std::string("&" + ApproximateKernel->HostCode.NameRef) : "NULL";
         NameRef = "__accll_task_exe";
@@ -238,7 +308,7 @@ struct KernelSrc {
     }
 
 private:
-    void CreateKernel(clang::ASTContext *Context,
+    void CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG,
                       clang::openacc::DirectiveInfo *DI,
                       std::string &Extensions, std::string &UserTypes);
     std::string MakeParams(clang::openacc::DirectiveInfo *DI,
@@ -267,7 +337,7 @@ struct TaskSrc {
     GeometrySrc Geometry;
     KernelSrc OpenCLCode;
 
-    TaskSrc(clang::ASTContext *Context, DirectiveInfo *DI,
+    TaskSrc(clang::ASTContext *Context, clang::CallGraph *CG, DirectiveInfo *DI,
             NameMap &Map, clang::openacc::RegionStack &RStack,
             clang::tooling::Replacements &ReplacementPool,
             std::string &Extensions, std::string &UserTypes) :
@@ -275,7 +345,7 @@ struct TaskSrc {
         Approx(getTaskApprox(Context,DI)),
         MemObjInfo(Context,DI,Map,RStack),
         Geometry(DI,Context),
-        OpenCLCode(Context,RStack,DI,++TaskUID,Extensions,UserTypes)
+        OpenCLCode(Context,CG,RStack,DI,++TaskUID,Extensions,UserTypes)
     {}
 
     std::string HostCall();
@@ -307,7 +377,7 @@ std::string TaskSrc::runtime_call = "acl_create_task";
 UIDKernelMap KernelRefDef::KernelUIDMap;
 
 void
-KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI,
+KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, DirectiveInfo *DI,
                         std::string &Extensions, std::string &UserTypes) {
     Stmt *SubStmt = DI->getAccStmt()->getSubStmt();
     assert(SubStmt && "Null SubStmt");
@@ -321,6 +391,7 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI,
 
         llvm::DenseMap<FunctionDecl *, KernelRefDef *>::iterator Kref;
 
+        //top level kernel call
         if (Context->isFunctionWithSubtasks(AccurateFun)) {
             assert(!ApproxFun);
 
@@ -330,7 +401,7 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI,
             if (Kref != KernelAccuratePool.end())
                 AccurateKernel = Kref->second;
             else {
-                AccurateKernel = new KernelRefDef(Context,AccurateFun,
+                AccurateKernel = new KernelRefDef(Context,AccurateFun,CG,
                                                   Extensions,UserTypes,
                                                   K_PRINT_ACCURATE_SUBTASK);
                 KernelAccuratePool[AccurateFun] = AccurateKernel;
@@ -340,7 +411,7 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI,
             if (Kref != KernelApproximatePool.end())
                 ApproximateKernel = Kref->second;
             else {
-                ApproximateKernel = new KernelRefDef(Context,AccurateFun,
+                ApproximateKernel = new KernelRefDef(Context,AccurateFun,CG,
                                                      Extensions,UserTypes,
                                                      K_PRINT_APPROXIMATE_SUBTASK);
                 KernelApproximatePool[AccurateFun] = ApproximateKernel;
@@ -351,8 +422,9 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI,
             if (Kref != KernelAccuratePool.end())
                 AccurateKernel = Kref->second;
             else {
-                AccurateKernel = new KernelRefDef(Context,AccurateFun,
-                                                  Extensions,UserTypes);
+                AccurateKernel = new KernelRefDef(Context,AccurateFun,CG,
+                                                  Extensions,UserTypes,
+                                                  K_PRINT_ACCURATE_SUBTASK);
                 KernelAccuratePool[AccurateFun] = AccurateKernel;
             }
             if (ApproxFun) {
@@ -360,8 +432,9 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, DirectiveInfo *DI,
                 if (Kref != KernelApproximatePool.end())
                     ApproximateKernel = Kref->second;
                 else {
-                    ApproximateKernel = new KernelRefDef(Context,ApproxFun,
-                                                         Extensions,UserTypes);
+                    ApproximateKernel = new KernelRefDef(Context,ApproxFun,CG,
+                                                         Extensions,UserTypes,
+                                                         K_PRINT_APPROXIMATE_SUBTASK);
                     KernelApproximatePool[ApproxFun] = ApproximateKernel;
                 }
             }
@@ -1150,7 +1223,7 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         }
         /////////////////////////
 
-        TaskSrc NewTask(Context,DI,Map,RStack,ReplacementPool,
+        TaskSrc NewTask(Context,CG,DI,Map,RStack,ReplacementPool,
                         accll::OpenCLExtensions,UserTypes);
 
         EraseFunctionDeclPool.insert(CE->getDirectCallee());
@@ -1834,19 +1907,30 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
              EE = Context->getFunctionsWithSubtasks().end(); II != EE; ++II) {
         llvm::outs() << (*II)->getNameAsString() << " <-- has subtasks\n";
     }
+}
 
-    for (llvm::SmallPtrSet<clang::FunctionDecl *, 32>::iterator
-             II = Context->getKernelFunctions().begin(),
-             EE = Context->getKernelFunctions().end(); II != EE; ++II) {
-        CallGraphNode *Node = CG->getNode(*II);
-        if (!Node)
+void KernelRefDef::findCallDeps(FunctionDecl *StartFD, CallGraph *CG,
+                                llvm::SmallSetVector<clang::FunctionDecl *,sizeof(clang::FunctionDecl *)> &Deps) {
+    llvm::SmallPtrSet<clang::FunctionDecl *,8> WorkList;
+    llvm::SmallPtrSet<clang::FunctionDecl *,8> VisitedList;
+
+    WorkList.insert(StartFD);
+
+    while (WorkList.size()) {
+        FunctionDecl *CurrentFD = *WorkList.begin();
+        WorkList.erase(CurrentFD);
+        VisitedList.insert(CurrentFD);
+        CallGraphNode *CurrentNode = CG->getNode(CurrentFD);
+        if (!CurrentNode)
             continue;
         for (CallGraphNode::iterator
-                 NI = Node->begin(), NE = Node->end(); NI != NE; ++NI) {
-
-        }
+                 NI = CurrentNode->begin(), NE = CurrentNode->end(); NI != NE; ++NI)
+            if (FunctionDecl *NewFD = dyn_cast<FunctionDecl>((*NI)->getDecl()))
+                if (!VisitedList.count(NewFD) && NewFD != CurrentFD) {
+                    Deps.insert(NewFD);
+                    WorkList.insert(NewFD);
+                }
     }
-
 }
 
 void
@@ -1908,15 +1992,24 @@ Stage1_ASTVisitor::Finish() {
             dst << "#include \"" + II->getKey().str() + "\"\n";
         }
         dst << UserTypes;
+        //dst << "//#############################\n";
+        for (llvm::DenseMap<FunctionDecl *, std::string>::iterator
+                 II = CommonFunctionsPool.begin(), EE = CommonFunctionsPool.end(); II != EE; ++II) {
+            if (SM.isFromMainFile((*II).first->getLocStart()))
+                dst << (*II).second;
+        }
+        //dst << "//#############################\n";
         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
                  II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
-            //if (SM.isFromMainFile((*II).first->getLocStart()))
-            dst << (*II).second->DeviceCode.Definition;
+            if (Context->isFunctionWithSubtasks((*II).first) ||
+                 SM.isFromMainFile((*II).first->getLocStart()))
+                dst << (*II).second->DeviceCode.Definition;
         }
         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
                  II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
-            //if (SM.isFromMainFile((*II).first->getLocStart()))
-            dst << (*II).second->DeviceCode.Definition;
+            if (Context->isFunctionWithSubtasks((*II).first) ||
+                 SM.isFromMainFile((*II).first->getLocStart()))
+                dst << (*II).second->DeviceCode.Definition;
         }
         dst.flush();
     }
@@ -1950,6 +2043,7 @@ Stage1_ASTVisitor::Finish() {
     }
     EraseFunctionDeclPool.clear();
 
+    CommonFunctionsPool.clear();
     DepHeaders.clear();
 
     //CG->dump();
@@ -2034,8 +2128,7 @@ Stage1_ASTVisitor::VisitRecordDecl(RecordDecl *R) {
         return true;
 
     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
-    llvm::outs() << "debug: user defined record '" << R->getNameAsString() << "' from file :"
-                 << DefFile << "\n";
+    //llvm::outs() << "debug: user defined record '" << R->getNameAsString() << "' from file :" << DefFile << "\n";
 
     //maybe the implementation headers are not in system directories
     if (!SM.isFromMainFile(Loc)) {
@@ -2062,8 +2155,7 @@ Stage1_ASTVisitor::VisitEnumDecl(EnumDecl *E) {
         return true;
 
     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
-    llvm::outs() << "debug: user defined enum '" << E->getNameAsString() << "' from file :"
-                 << DefFile << "\n";
+    //llvm::outs() << "debug: user defined enum '" << E->getNameAsString() << "' from file :" << DefFile << "\n";
 
     //maybe the implementation headers are not in system directories
     if (!SM.isFromMainFile(Loc)) {
@@ -2093,8 +2185,7 @@ Stage1_ASTVisitor::VisitTypedefDecl(TypedefDecl *T) {
         return true;
 
     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
-    llvm::outs() << "debug: user defined typedef '" << T->getNameAsString() << "' from file :"
-                 << DefFile << "\n";
+    //llvm::outs() << "debug: user defined typedef '" << T->getNameAsString() << "' from file :" << DefFile << "\n";
 
     //maybe the implementation headers are not in system directories
     if (!SM.isFromMainFile(Loc)) {

@@ -604,27 +604,41 @@ inline static std::string getApproxFunctionName(openacc::DirectiveInfo *DI) {
 void StmtPrinter::VisitAccStmt(AccStmt *Node) {
     openacc::DirectiveInfo *DI = Node->getDirective();
 
-    if (SubtaskPrintMode == openacc::K_PRINT_ALL)
+    if (SubtaskPrintMode == openacc::K_PRINT_ALL) {
         OS << DI->getPrettyDirective(Policy);
+        PrintStmt(Node->getSubStmt());
+    }
     else if (SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK) {
         assert(DI->getKind() == DK_SUBTASK);
         AlternativeName = getApproxFunctionName(DI);
-#warning IMPLEMENT ME: special case if the substmt is a declaration
         if (!AlternativeName.size())
             return;
+        if (CallExpr *CE = dyn_cast<CallExpr>(Node->getSubStmt())) {
+            if (CE->getDirectCallee()->getASTContext().isFunctionWithSubtasks(CE->getDirectCallee()))
+                AlternativeName = CE->getDirectCallee()->getNameAsString() + "__approx__";
+        }
+        else if (BinaryOperator *BO = dyn_cast<BinaryOperator>(Node->getSubStmt())) {
+            Expr *RHS = BO->getRHS()->IgnoreParenCasts();
+            CallExpr *CE = dyn_cast<CallExpr>(RHS);
+            assert(CE);
+            if (CE->getDirectCallee()->getASTContext().isFunctionWithSubtasks(CE->getDirectCallee()))
+                AlternativeName = CE->getDirectCallee()->getNameAsString() + "__approx__";
+        }
         PrintStmt(Node->getSubStmt());
         AlternativeName = std::string();
     }
     else if (SubtaskPrintMode == openacc::K_PRINT_ACCURATE_SUBTASK) {
         assert(DI->getKind() == DK_SUBTASK);
         if (CallExpr *CE = dyn_cast<CallExpr>(Node->getSubStmt())) {
-            AlternativeName = CE->getDirectCallee()->getNameAsString();  // + "__accurate__";
+            if (CE->getDirectCallee()->getASTContext().isFunctionWithSubtasks(CE->getDirectCallee()))
+                AlternativeName = CE->getDirectCallee()->getNameAsString() + "__accurate__";
         }
         else if (BinaryOperator *BO = dyn_cast<BinaryOperator>(Node->getSubStmt())) {
             Expr *RHS = BO->getRHS()->IgnoreParenCasts();
             CallExpr *CE = dyn_cast<CallExpr>(RHS);
             assert(CE);
-            AlternativeName = CE->getDirectCallee()->getNameAsString();  // + "__accurate__";
+            if (CE->getDirectCallee()->getASTContext().isFunctionWithSubtasks(CE->getDirectCallee()))
+                AlternativeName = CE->getDirectCallee()->getNameAsString() + "__accurate__";
         }
 
         PrintStmt(Node->getSubStmt());
@@ -960,11 +974,17 @@ void StmtPrinter::PrintCallArgs(CallExpr *Call) {
 }
 
 void StmtPrinter::VisitCallExpr(CallExpr *Call) {
-    if ((SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK ||
-         SubtaskPrintMode == openacc::K_PRINT_ACCURATE_SUBTASK) && AlternativeName.size())
+    if (AlternativeName.size())
         OS << AlternativeName;
-    else
+    else {
         PrintExpr(Call->getCallee());
+        if (Call->getDirectCallee()->getASTContext().isFunctionWithSubtasks(Call->getDirectCallee())) {
+            if (SubtaskPrintMode == openacc::K_PRINT_ACCURATE_SUBTASK)
+                OS << "__accurate__";
+            else if (SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK)
+                OS << "__approx__";
+        }
+    }
   OS << "(";
   PrintCallArgs(Call);
   OS << ")";

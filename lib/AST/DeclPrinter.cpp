@@ -464,9 +464,7 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
   std::string Proto = D->getNameInfo().getAsString();
 
   //overwrite function call name
-  if (AlternativeName.size() &&
-      (SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK ||
-       SubtaskPrintMode == openacc::K_PRINT_ACCURATE_SUBTASK))
+  if (AlternativeName.size())
       Proto = AlternativeName;
 
   QualType Ty = D->getType();
