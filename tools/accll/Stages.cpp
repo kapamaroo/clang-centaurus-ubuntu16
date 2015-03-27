@@ -465,7 +465,7 @@ static bool isRuntimeCall(const std::string Name) {
     static const SmallVector<std::string,8> RuntimeCalls(data, data + sizeof(data)/sizeof(std::string));
 
     for (SmallVector<std::string,8>::const_iterator II = RuntimeCalls.begin(), EE = RuntimeCalls.end();
-             II != EE; ++II)
+         II != EE; ++II)
         if (Name.compare(*II) == 0)
             return true;
     return false;
@@ -883,7 +883,7 @@ Stage1_ASTVisitor::Rename(Expr *E) {
             ArgVector &Args = (*II)->getArgs();
             for (ArgVector::iterator
                      IA = Args.begin(), EA = Args.end(); IA != EA; ++IA) {
-               if ((*IA)->Matches(A)) {
+                if ((*IA)->Matches(A)) {
                     //do the Rename
                     std::string NewCode = getNewNameFor(Map,A);
                     Replacement R(Context->getSourceManager(),E,NewCode);
@@ -1225,7 +1225,7 @@ Stage1_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
             if (const ASTTemplateArgumentListInfo *TALI =
                 FTSI->TemplateArgumentsAsWritten) {
                 TRY_TO(Stage1_TraverseTemplateArgumentLocsHelper(TALI->getTemplateArgs(),
-                                                          TALI->NumTemplateArgs));
+                                                                 TALI->NumTemplateArgs));
             }
         }
     }
@@ -1460,8 +1460,8 @@ Stage1_ASTVisitor::VisitReturnStmt(ReturnStmt *S) {
     S->printPretty(OS,/*Helper=*/0,Context->getPrintingPolicy(),/*Indentation=*/0);
     OS.str();
     Replacement R(Context->getSourceManager(),
-        S->getLocStart(),0,
-        "{" + RuntimeFinish + Return + "}\n//");
+                  S->getLocStart(),0,
+                  "{" + RuntimeFinish + Return + "}\n//");
     applyReplacement(ReplacementPool,R);
 
     return true;
@@ -1849,409 +1849,409 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
 
 }
 
- void
- Stage1_ASTVisitor::Finish() {
-     if (!TaskSrc::TaskUID)
-         return;
+void
+Stage1_ASTVisitor::Finish() {
+    if (!TaskSrc::TaskUID)
+        return;
 
-     SourceManager &SM = Context->getSourceManager();
-     std::string FileName = SM.getFileEntryForID(SM.getMainFileID())->getName();
-     std::string Suffix("_ocl");
+    SourceManager &SM = Context->getSourceManager();
+    std::string FileName = SM.getFileEntryForID(SM.getMainFileID())->getName();
+    std::string Suffix("_ocl");
 
-     std::string NewHeader = RemoveDotExtension(FileName) + Suffix + ".h";
-     {
-         std::ofstream dst(NewHeader.c_str());
-         dst << accll::NewFileHeader.c_str();
-         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
-                  II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
-             dst << (*II).second->InlineDeviceCode.HeaderDecl;
-             dst << (*II).second->Binary.HeaderDecl;
-         }
-         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
-                  II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
-             dst << (*II).second->InlineDeviceCode.HeaderDecl;
-             dst << (*II).second->Binary.HeaderDecl;
-         }
-         dst << "\n";
-         dst.flush();
-     }
-     InputFiles.push_back(NewHeader);
-     llvm::outs() << "Create header           : '" << NewHeader << "'  -  new file\n";
-
-     std::string NewImpl = RemoveDotExtension(FileName) + Suffix + ".c";
-     {
-         std::ofstream dst(NewImpl.c_str());
-         dst << accll::NewFileHeader.c_str();
-         //dst << "#include \"" << NewHeader << "\"\n";
-         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
-                  II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
-             dst << (*II).second->InlineDeviceCode.Definition;
-             dst << (*II).second->Binary.Definition;
-         }
-         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
-                  II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
-             dst << (*II).second->InlineDeviceCode.Definition;
-             dst << (*II).second->Binary.Definition;
-         }
-         dst << "\n";
-         dst.flush();
-     }
-     InputFiles.push_back(NewImpl);
-     llvm::outs() << "Create kernel src/bin   : '" << NewImpl << "'  -  new file\n";
-
-     std::string NewDeviceImpl = RemoveDotExtension(FileName) + Suffix + ".cl";
-     {
-         std::ofstream dst(NewDeviceImpl.c_str());
-         dst << KernelHeader << OpenCLExtensions;
-         for (StringMap<bool>::iterator
-                  II = DepHeaders.begin(), EE = DepHeaders.end(); II != EE; ++II) {
-             dst << "#include \"" + II->getKey().str() + "\"\n";
-         }
-         dst << UserTypes;
+    std::string NewHeader = RemoveDotExtension(FileName) + Suffix + ".h";
+    {
+        std::ofstream dst(NewHeader.c_str());
+        dst << accll::NewFileHeader.c_str();
         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
-                  II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
+                 II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
+            dst << (*II).second->InlineDeviceCode.HeaderDecl;
+            dst << (*II).second->Binary.HeaderDecl;
+        }
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
+            dst << (*II).second->InlineDeviceCode.HeaderDecl;
+            dst << (*II).second->Binary.HeaderDecl;
+        }
+        dst << "\n";
+        dst.flush();
+    }
+    InputFiles.push_back(NewHeader);
+    llvm::outs() << "Create header           : '" << NewHeader << "'  -  new file\n";
+
+    std::string NewImpl = RemoveDotExtension(FileName) + Suffix + ".c";
+    {
+        std::ofstream dst(NewImpl.c_str());
+        dst << accll::NewFileHeader.c_str();
+        //dst << "#include \"" << NewHeader << "\"\n";
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
+            dst << (*II).second->InlineDeviceCode.Definition;
+            dst << (*II).second->Binary.Definition;
+        }
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
+            dst << (*II).second->InlineDeviceCode.Definition;
+            dst << (*II).second->Binary.Definition;
+        }
+        dst << "\n";
+        dst.flush();
+    }
+    InputFiles.push_back(NewImpl);
+    llvm::outs() << "Create kernel src/bin   : '" << NewImpl << "'  -  new file\n";
+
+    std::string NewDeviceImpl = RemoveDotExtension(FileName) + Suffix + ".cl";
+    {
+        std::ofstream dst(NewDeviceImpl.c_str());
+        dst << KernelHeader << OpenCLExtensions;
+        for (StringMap<bool>::iterator
+                 II = DepHeaders.begin(), EE = DepHeaders.end(); II != EE; ++II) {
+            dst << "#include \"" + II->getKey().str() + "\"\n";
+        }
+        dst << UserTypes;
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
             //if (SM.isFromMainFile((*II).first->getLocStart()))
             dst << (*II).second->DeviceCode.Definition;
-         }
-         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
-                  II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
-             //if (SM.isFromMainFile((*II).first->getLocStart()))
-             dst << (*II).second->DeviceCode.Definition;
-         }
-         dst.flush();
-     }
-     KernelFiles.push_back(NewDeviceImpl);
-     llvm::outs() << "Write OpenCL kernels to : '" << NewDeviceImpl << "'  -  new file\n";
+        }
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
+            //if (SM.isFromMainFile((*II).first->getLocStart()))
+            dst << (*II).second->DeviceCode.Definition;
+        }
+        dst.flush();
+    }
+    KernelFiles.push_back(NewDeviceImpl);
+    llvm::outs() << "Write OpenCL kernels to : '" << NewDeviceImpl << "'  -  new file\n";
 
-     {
-         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
-                  II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
-             delete (*II).second;
-         }
-         KernelAccuratePool.clear();
-         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
-                  II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
-             delete (*II).second;
-         }
-         KernelApproximatePool.clear();
-     }
+    {
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
+            delete (*II).second;
+        }
+        KernelAccuratePool.clear();
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
+            delete (*II).second;
+        }
+        KernelApproximatePool.clear();
+    }
 
-     for (SmallPtrSet<FunctionDecl*,32>::iterator
-              II = EraseFunctionDeclPool.begin(),
-              EE = EraseFunctionDeclPool.end(); II != EE; ++II) {
-         if (!SM.isFromMainFile((*II)->getLocStart()))
-             continue;
+    for (SmallPtrSet<FunctionDecl*,32>::iterator
+             II = EraseFunctionDeclPool.begin(),
+             EE = EraseFunctionDeclPool.end(); II != EE; ++II) {
+        if (!SM.isFromMainFile((*II)->getLocStart()))
+            continue;
 
-         Replacement R1(Context->getSourceManager(),(*II)->getLocStart(),0,"\n#if 0\n");
-         applyReplacement(ReplacementPool,R1);
+        Replacement R1(Context->getSourceManager(),(*II)->getLocStart(),0,"\n#if 0\n");
+        applyReplacement(ReplacementPool,R1);
 
-         Replacement R2(Context->getSourceManager(),(*II)->getLocEnd().getLocWithOffset(1),0,"\n#endif\n");
-         applyReplacement(ReplacementPool,R2);
-     }
-     EraseFunctionDeclPool.clear();
+        Replacement R2(Context->getSourceManager(),(*II)->getLocEnd().getLocWithOffset(1),0,"\n#endif\n");
+        applyReplacement(ReplacementPool,R2);
+    }
+    EraseFunctionDeclPool.clear();
 
-     DepHeaders.clear();
+    DepHeaders.clear();
 
-     //CG->dump();
- }
+    //CG->dump();
+}
 
- #if 0
- ///////////////////////////////////////////////////////////////////////////////
- //                        Stage3
- ///////////////////////////////////////////////////////////////////////////////
+#if 0
+///////////////////////////////////////////////////////////////////////////////
+//                        Stage3
+///////////////////////////////////////////////////////////////////////////////
 
- std::string
- Stage3_ASTVisitor::CreateNewNameFor(Arg *A, bool AddPrefix) {
-     assert(!isa<RawExprArg>(A) && !isa<SubArrayArg>(A));
+std::string
+Stage3_ASTVisitor::CreateNewNameFor(Arg *A, bool AddPrefix) {
+    assert(!isa<RawExprArg>(A) && !isa<SubArrayArg>(A));
 
-     ClauseInfo *CI = A->getParent()->getAsClause();
-     assert(CI);
+    ClauseInfo *CI = A->getParent()->getAsClause();
+    assert(CI);
 
-     if (isa<RawExprArg>(A) && A->isICE())
-         return A->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
+    if (isa<RawExprArg>(A) && A->isICE())
+        return A->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
 
-     std::string Prefix = "__accll_";  //prefix
-     std::string NewName;
-     Expr *BaseExpr = A->getExpr()->IgnoreParenCasts();
-     if (ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(BaseExpr)) {
-         Expr *Base = ASE->getBase()->IgnoreParenCasts();
-         Arg *BaseA = CreateNewArgFrom(Base,CI,Context);
-         std::string NameBase = CreateNewNameFor(BaseA,/*AddPrefix=*/false);
+    std::string Prefix = "__accll_";  //prefix
+    std::string NewName;
+    Expr *BaseExpr = A->getExpr()->IgnoreParenCasts();
+    if (ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(BaseExpr)) {
+        Expr *Base = ASE->getBase()->IgnoreParenCasts();
+        Arg *BaseA = CreateNewArgFrom(Base,CI,Context);
+        std::string NameBase = CreateNewNameFor(BaseA,/*AddPrefix=*/false);
 
-         Expr *Index = ASE->getIdx()->IgnoreParenCasts();
-         Arg *IndexA = CreateNewArgFrom(Index,CI,Context);
-         std::string NameIndex = CreateNewNameFor(IndexA,/*AddPrefix=*/false);
+        Expr *Index = ASE->getIdx()->IgnoreParenCasts();
+        Arg *IndexA = CreateNewArgFrom(Index,CI,Context);
+        std::string NameIndex = CreateNewNameFor(IndexA,/*AddPrefix=*/false);
 
-         DirectiveInfo *DI = CI->getParentDirective();
-         assert(DI);
-         if (!(isa<RawExprArg>(IndexA) && IndexA->isICE()))
-             if (RStack.FindVisibleCopyInDirective(DI,IndexA) ||
-                 RStack.FindVisibleCopyInRegionStack(IndexA))
-                 NameIndex = Prefix + NameIndex;
+        DirectiveInfo *DI = CI->getParentDirective();
+        assert(DI);
+        if (!(isa<RawExprArg>(IndexA) && IndexA->isICE()))
+            if (RStack.FindVisibleCopyInDirective(DI,IndexA) ||
+                RStack.FindVisibleCopyInRegionStack(IndexA))
+                NameIndex = Prefix + NameIndex;
 
-         //NameBase and NameIndex have prefix if needed, d not add it again here
+        //NameBase and NameIndex have prefix if needed, d not add it again here
 
-         if (isa<RawExprArg>(IndexA) && IndexA->isICE())
-             //let the caller to add any dereference code to the final NewName
-             NewName = NameBase + "_" + NameIndex + "_";
-         else if (!isa<ArrayArg>(IndexA))
-             //dereference the Index only
-             NewName = NameBase + "[(*" + NameIndex + ")]";
-         else
-             //this is a user programming error, let the compiler find it
-             NewName = NameBase + "[" + NameIndex + "]";
-     }
-     else if (MemberExpr *ME = dyn_cast<MemberExpr>(BaseExpr)) {
-         FieldDecl *FD = dyn_cast<FieldDecl>(ME->getMemberDecl());
-         assert(FD);
-         BaseExpr = ME->getBase()->IgnoreParenImpCasts();
-         Arg *BaseA = CreateNewArgFrom(BaseExpr,CI,Context);
-         std::string NameBase = CreateNewNameFor(BaseA,/*AddPrefix=*/false);
-         NewName = NameBase + "_" + FD->getNameAsString();
-     }
-     else {
-         assert(isa<DeclRefExpr>(BaseExpr));
-         DeclRefExpr *DF = dyn_cast<DeclRefExpr>(BaseExpr);
-         (void)DF;
-         assert(DF && isa<VarDecl>(DF->getDecl()));
-         NewName = getPrettyExpr(Context,BaseExpr);
-     }
+        if (isa<RawExprArg>(IndexA) && IndexA->isICE())
+            //let the caller to add any dereference code to the final NewName
+            NewName = NameBase + "_" + NameIndex + "_";
+        else if (!isa<ArrayArg>(IndexA))
+            //dereference the Index only
+            NewName = NameBase + "[(*" + NameIndex + ")]";
+        else
+            //this is a user programming error, let the compiler find it
+            NewName = NameBase + "[" + NameIndex + "]";
+    }
+    else if (MemberExpr *ME = dyn_cast<MemberExpr>(BaseExpr)) {
+        FieldDecl *FD = dyn_cast<FieldDecl>(ME->getMemberDecl());
+        assert(FD);
+        BaseExpr = ME->getBase()->IgnoreParenImpCasts();
+        Arg *BaseA = CreateNewArgFrom(BaseExpr,CI,Context);
+        std::string NameBase = CreateNewNameFor(BaseA,/*AddPrefix=*/false);
+        NewName = NameBase + "_" + FD->getNameAsString();
+    }
+    else {
+        assert(isa<DeclRefExpr>(BaseExpr));
+        DeclRefExpr *DF = dyn_cast<DeclRefExpr>(BaseExpr);
+        (void)DF;
+        assert(DF && isa<VarDecl>(DF->getDecl()));
+        NewName = getPrettyExpr(Context,BaseExpr);
+    }
 
-     if (AddPrefix)
-         NewName = Prefix + NewName;
+    if (AddPrefix)
+        NewName = Prefix + NewName;
 
-     return NewName;
- }
- #endif
+    return NewName;
+}
+#endif
 
- bool
- Stage1_ASTVisitor::VisitRecordDecl(RecordDecl *R) {
-     SourceLocation Loc = R->getSourceRange().getBegin();
-     assert(!Loc.isInvalid());
+bool
+Stage1_ASTVisitor::VisitRecordDecl(RecordDecl *R) {
+    SourceLocation Loc = R->getSourceRange().getBegin();
+    assert(!Loc.isInvalid());
 
-     SourceManager &SM = Context->getSourceManager();
-     if (SM.isInSystemHeader(Loc))
-         return true;
+    SourceManager &SM = Context->getSourceManager();
+    if (SM.isInSystemHeader(Loc))
+        return true;
 
-     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
-     llvm::outs() << "debug: user defined record '" << R->getNameAsString() << "' from file :"
-                << DefFile << "\n";
+    std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
+    llvm::outs() << "debug: user defined record '" << R->getNameAsString() << "' from file :"
+                 << DefFile << "\n";
 
-     //maybe the implementation headers are not in system directories
-     if (!SM.isFromMainFile(Loc)) {
-         if (DefFile.find(APIHeader) == std::string::npos)
-             DepHeaders[DefFile] = true;
-         return true;
-     }
+    //maybe the implementation headers are not in system directories
+    if (!SM.isFromMainFile(Loc)) {
+        if (DefFile.find(APIHeader) == std::string::npos)
+            DepHeaders[DefFile] = true;
+        return true;
+    }
 
-     std::string Tmp;
-     raw_string_ostream OS(Tmp);
-     R->print(OS);
-     UserTypes += OS.str() + ";\n\n";
+    std::string Tmp;
+    raw_string_ostream OS(Tmp);
+    R->print(OS);
+    UserTypes += OS.str() + ";\n\n";
 
-     return true;
- }
+    return true;
+}
 
- bool
- Stage1_ASTVisitor::VisitEnumDecl(EnumDecl *E) {
-     SourceLocation Loc = E->getSourceRange().getBegin();
-     assert(!Loc.isInvalid());
+bool
+Stage1_ASTVisitor::VisitEnumDecl(EnumDecl *E) {
+    SourceLocation Loc = E->getSourceRange().getBegin();
+    assert(!Loc.isInvalid());
 
-     SourceManager &SM = Context->getSourceManager();
-     if (SM.isInSystemHeader(Loc))
-         return true;
+    SourceManager &SM = Context->getSourceManager();
+    if (SM.isInSystemHeader(Loc))
+        return true;
 
-     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
-     llvm::outs() << "debug: user defined enum '" << E->getNameAsString() << "' from file :"
-                << DefFile << "\n";
+    std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
+    llvm::outs() << "debug: user defined enum '" << E->getNameAsString() << "' from file :"
+                 << DefFile << "\n";
 
-     //maybe the implementation headers are not in system directories
-     if (!SM.isFromMainFile(Loc)) {
-         if (DefFile.find(APIHeader) == std::string::npos)
-             DepHeaders[DefFile] = true;
-         return true;
-     }
+    //maybe the implementation headers are not in system directories
+    if (!SM.isFromMainFile(Loc)) {
+        if (DefFile.find(APIHeader) == std::string::npos)
+            DepHeaders[DefFile] = true;
+        return true;
+    }
 
-     std::string Tmp;
-     raw_string_ostream OS(Tmp);
-     E->print(OS);
-     UserTypes += OS.str() + ";\n\n";
+    std::string Tmp;
+    raw_string_ostream OS(Tmp);
+    E->print(OS);
+    UserTypes += OS.str() + ";\n\n";
 
-     return true;
- }
+    return true;
+}
 
- bool
- Stage1_ASTVisitor::VisitTypedefDecl(TypedefDecl *T) {
-     SourceLocation Loc = T->getSourceRange().getBegin();
+bool
+Stage1_ASTVisitor::VisitTypedefDecl(TypedefDecl *T) {
+    SourceLocation Loc = T->getSourceRange().getBegin();
 
-     //compiler defined typedef
-     if (Loc.isInvalid())
-         return true;
+    //compiler defined typedef
+    if (Loc.isInvalid())
+        return true;
 
-     SourceManager &SM = Context->getSourceManager();
-     if (SM.isInSystemHeader(Loc))
-         return true;
+    SourceManager &SM = Context->getSourceManager();
+    if (SM.isInSystemHeader(Loc))
+        return true;
 
-     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
-     llvm::outs() << "debug: user defined typedef '" << T->getNameAsString() << "' from file :"
-                << DefFile << "\n";
+    std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
+    llvm::outs() << "debug: user defined typedef '" << T->getNameAsString() << "' from file :"
+                 << DefFile << "\n";
 
-     //maybe the implementation headers are not in system directories
-     if (!SM.isFromMainFile(Loc)) {
-         if (DefFile.find(APIHeader) == std::string::npos)
-             DepHeaders[DefFile] = true;
-         return true;
-     }
+    //maybe the implementation headers are not in system directories
+    if (!SM.isFromMainFile(Loc)) {
+        if (DefFile.find(APIHeader) == std::string::npos)
+            DepHeaders[DefFile] = true;
+        return true;
+    }
 
-     std::string Tmp;
-     raw_string_ostream OS(Tmp);
-     T->print(OS);
-     UserTypes += OS.str() + ";\n\n";
+    std::string Tmp;
+    raw_string_ostream OS(Tmp);
+    T->print(OS);
+    UserTypes += OS.str() + ";\n\n";
 
-     return true;
- }
+    return true;
+}
 
- #if 0
- bool
- Stage3_ASTVisitor::VisitVarDecl(VarDecl *VD) {
-     //FIXME: move this to separate stage
-     //       in order to be able to ignore this stage
-     //       when there is no device code
+#if 0
+bool
+Stage3_ASTVisitor::VisitVarDecl(VarDecl *VD) {
+    //FIXME: move this to separate stage
+    //       in order to be able to ignore this stage
+    //       when there is no device code
 
-     //clean Stage1 mess
+    //clean Stage1 mess
 
-     ValueDecl *Val = cast<ValueDecl>(VD);
-     assert(Val);
+    ValueDecl *Val = cast<ValueDecl>(VD);
+    assert(Val);
 
-     QualType QTy = Val->getType();
-     std::string TypeName = QTy.getAsString();
-     //llvm::outs() << "\ntype is: " << TypeName << "\n";
+    QualType QTy = Val->getType();
+    std::string TypeName = QTy.getAsString();
+    //llvm::outs() << "\ntype is: " << TypeName << "\n";
 
-     //ignore this vardecl
-     if (TypeName.compare("__incomplete__ *") != 0)
-         return true;
+    //ignore this vardecl
+    if (TypeName.compare("__incomplete__ *") != 0)
+        return true;
 
-     assert(VD->hasInit());
-     Expr *Init = VD->getInit();
+    assert(VD->hasInit());
+    Expr *Init = VD->getInit();
 
-     //llvm::outs() << "'" << getPrettyExpr(Context,Init) << "'\n";
+    //llvm::outs() << "'" << getPrettyExpr(Context,Init) << "'\n";
 
-     std::string NewName = VD->getNameAsString();
-     std::string NewCode = "cl_mem " + NewName + " = " + getPrettyExpr(Context,Init);
-     //the semicolon remains
-     Replacement R(Context->getSourceManager(),VD,NewCode);
-     applyReplacement(ReplacementPool,R);
+    std::string NewName = VD->getNameAsString();
+    std::string NewCode = "cl_mem " + NewName + " = " + getPrettyExpr(Context,Init);
+    //the semicolon remains
+    Replacement R(Context->getSourceManager(),VD,NewCode);
+    applyReplacement(ReplacementPool,R);
 
-     return true;
- }
+    return true;
+}
 
- bool
- Stage3_ASTVisitor::Stage3_TraverseTemplateArgumentLocsHelper(const TemplateArgumentLoc *TAL,unsigned Count) {
-     for (unsigned I = 0; I < Count; ++I) {
-         TRY_TO(TraverseTemplateArgumentLoc(TAL[I]));
-     }
-     return true;
- }
+bool
+Stage3_ASTVisitor::Stage3_TraverseTemplateArgumentLocsHelper(const TemplateArgumentLoc *TAL,unsigned Count) {
+    for (unsigned I = 0; I < Count; ++I) {
+        TRY_TO(TraverseTemplateArgumentLoc(TAL[I]));
+    }
+    return true;
+}
 
- bool
- Stage3_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
-     int KernelCallsSoFar = KernelCalls;
-     KernelCalls = 0;
-     hasDirectives = 0;
+bool
+Stage3_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
+    int KernelCallsSoFar = KernelCalls;
+    KernelCalls = 0;
+    hasDirectives = 0;
 
-     TRY_TO(WalkUpFromFunctionDecl(FD));
-     SourceManager &SM = Context->getSourceManager();
-     CurrentFunction = 0;
-     if (!SM.isInSystemHeader(FD->getSourceRange().getBegin()))
-         CurrentFunction = FD;
+    TRY_TO(WalkUpFromFunctionDecl(FD));
+    SourceManager &SM = Context->getSourceManager();
+    CurrentFunction = 0;
+    if (!SM.isInSystemHeader(FD->getSourceRange().getBegin()))
+        CurrentFunction = FD;
 
-     //{ CODE; }
-     //inline the helper function
-     //
-     //TraverseFunctionHelper(D);
+    //{ CODE; }
+    //inline the helper function
+    //
+    //TraverseFunctionHelper(D);
 
-     TRY_TO(TraverseNestedNameSpecifierLoc(FD->getQualifierLoc()));
-     TRY_TO(TraverseDeclarationNameInfo(FD->getNameInfo()));
+    TRY_TO(TraverseNestedNameSpecifierLoc(FD->getQualifierLoc()));
+    TRY_TO(TraverseDeclarationNameInfo(FD->getNameInfo()));
 
-     // If we're an explicit template specialization, iterate over the
-     // template args that were explicitly specified.  If we were doing
-     // this in typing order, we'd do it between the return type and
-     // the function args, but both are handled by the FunctionTypeLoc
-     // above, so we have to choose one side.  I've decided to do before.
-     if (const FunctionTemplateSpecializationInfo *FTSI =
-         FD->getTemplateSpecializationInfo()) {
-         if (FTSI->getTemplateSpecializationKind() != TSK_Undeclared &&
-             FTSI->getTemplateSpecializationKind() != TSK_ImplicitInstantiation) {
-             // A specialization might not have explicit template arguments if it has
-             // a templated return type and concrete arguments.
-             if (const ASTTemplateArgumentListInfo *TALI =
-                 FTSI->TemplateArgumentsAsWritten) {
-                 TRY_TO(Stage3_TraverseTemplateArgumentLocsHelper(TALI->getTemplateArgs(),
-                                                           TALI->NumTemplateArgs));
-             }
-         }
-     }
+    // If we're an explicit template specialization, iterate over the
+    // template args that were explicitly specified.  If we were doing
+    // this in typing order, we'd do it between the return type and
+    // the function args, but both are handled by the FunctionTypeLoc
+    // above, so we have to choose one side.  I've decided to do before.
+    if (const FunctionTemplateSpecializationInfo *FTSI =
+        FD->getTemplateSpecializationInfo()) {
+        if (FTSI->getTemplateSpecializationKind() != TSK_Undeclared &&
+            FTSI->getTemplateSpecializationKind() != TSK_ImplicitInstantiation) {
+            // A specialization might not have explicit template arguments if it has
+            // a templated return type and concrete arguments.
+            if (const ASTTemplateArgumentListInfo *TALI =
+                FTSI->TemplateArgumentsAsWritten) {
+                TRY_TO(Stage3_TraverseTemplateArgumentLocsHelper(TALI->getTemplateArgs(),
+                                                                 TALI->NumTemplateArgs));
+            }
+        }
+    }
 
-     // Visit the function type itself, which can be either
-     // FunctionNoProtoType or FunctionProtoType, or a typedef.  This
-     // also covers the return type and the function parameters,
-     // including exception specifications.
-     if (TypeSourceInfo *TSI = FD->getTypeSourceInfo()) {
-         TRY_TO(TraverseTypeLoc(TSI->getTypeLoc()));
-     }
+    // Visit the function type itself, which can be either
+    // FunctionNoProtoType or FunctionProtoType, or a typedef.  This
+    // also covers the return type and the function parameters,
+    // including exception specifications.
+    if (TypeSourceInfo *TSI = FD->getTypeSourceInfo()) {
+        TRY_TO(TraverseTypeLoc(TSI->getTypeLoc()));
+    }
 
-     if (CXXConstructorDecl *Ctor = dyn_cast<CXXConstructorDecl>(FD)) {
-         // Constructor initializers.
-         for (CXXConstructorDecl::init_iterator I = Ctor->init_begin(),
-                  E = Ctor->init_end();
-              I != E; ++I) {
-             TRY_TO(TraverseConstructorInitializer(*I));
-         }
-     }
+    if (CXXConstructorDecl *Ctor = dyn_cast<CXXConstructorDecl>(FD)) {
+        // Constructor initializers.
+        for (CXXConstructorDecl::init_iterator I = Ctor->init_begin(),
+                 E = Ctor->init_end();
+             I != E; ++I) {
+            TRY_TO(TraverseConstructorInitializer(*I));
+        }
+    }
 
-     if (FD->isThisDeclarationADefinition()) {
-         TRY_TO(TraverseStmt(FD->getBody()));  // Function body.
-     }
+    if (FD->isThisDeclarationADefinition()) {
+        TRY_TO(TraverseStmt(FD->getBody()));  // Function body.
+    }
 
-     /////////////////////////////////////////////////////////////////////
+    /////////////////////////////////////////////////////////////////////
 
-     if (SM.isInSystemHeader(FD->getSourceRange().getBegin()))
-         return true;
+    if (SM.isInSystemHeader(FD->getSourceRange().getBegin()))
+        return true;
 
-     //maybe the implementiation headers are not in system directories
-     if (!SM.isFromMainFile(FD->getSourceRange().getBegin()))
-         return true;
+    //maybe the implementiation headers are not in system directories
+    if (!SM.isFromMainFile(FD->getSourceRange().getBegin()))
+        return true;
 
-     int NewKernelCalls = KernelCalls;
-     KernelCalls = KernelCallsSoFar + NewKernelCalls;
+    int NewKernelCalls = KernelCalls;
+    KernelCalls = KernelCallsSoFar + NewKernelCalls;
 
-     llvm::outs() << "in function '" << FD->getNameAsString() << "'\n";
+    llvm::outs() << "in function '" << FD->getNameAsString() << "'\n";
 
- #if 0
-     if (hasDirectives) {
-         std::string NewCode = "\n__accll_init_accll_runtime();";
-         if (NewKernelCalls) {
-             //Create for each function a program object in the stack
-             std::string KernelFile = getCurrentKernelFile();
-             NewCode += "cl_program program = __accll_load_and_build(\""
-                 + KernelFile + "\");";
-         }
+#if 0
+    if (hasDirectives) {
+        std::string NewCode = "\n__accll_init_accll_runtime();";
+        if (NewKernelCalls) {
+            //Create for each function a program object in the stack
+            std::string KernelFile = getCurrentKernelFile();
+            NewCode += "cl_program program = __accll_load_and_build(\""
+                + KernelFile + "\");";
+        }
 
-         CompoundStmt *Body = dyn_cast<CompoundStmt>(FD->getBody());
-         assert(Body);
-         SourceLocation StartLoc = Body->getLocStart().getLocWithOffset(1);
-         Replacement R(Context->getSourceManager(),StartLoc,0,NewCode);
-         applyReplacement(ReplacementPool,R);
-     }
-     #endif
+        CompoundStmt *Body = dyn_cast<CompoundStmt>(FD->getBody());
+        assert(Body);
+        SourceLocation StartLoc = Body->getLocStart().getLocWithOffset(1);
+        Replacement R(Context->getSourceManager(),StartLoc,0,NewCode);
+        applyReplacement(ReplacementPool,R);
+    }
+#endif
 
-     return true;
- }
+    return true;
+}
 
- bool
- Stage3_ASTVisitor::VisitCallExpr(CallExpr *CE) {
-     SourceManager &SM = Context->getSourceManager();
-     if (SM.isInSystemHeader(CE->getSourceRange().getBegin())) {
+bool
+Stage3_ASTVisitor::VisitCallExpr(CallExpr *CE) {
+    SourceManager &SM = Context->getSourceManager();
+    if (SM.isInSystemHeader(CE->getSourceRange().getBegin())) {
         //llvm::outs() << "Writing to system header prevented!\n";
         return true;
     }
@@ -2354,8 +2354,8 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
 #endif
 
 std::string KernelSrc::MakeParamFromArg(Arg *A,bool MakeDefinition,
-                                      std::string Kernel, int &ArgPos,
-                                      std::string &CleanupCode) {
+                                        std::string Kernel, int &ArgPos,
+                                        std::string &CleanupCode) {
     //get original name
     std::string OrigName = A->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
 
