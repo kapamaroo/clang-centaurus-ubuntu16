@@ -1540,11 +1540,25 @@ Stage1_ASTVisitor::VisitReturnStmt(ReturnStmt *S) {
     return true;
 }
 
-static Arg *getMatchedArg(Arg *A, SmallVector<Arg*,8> &Pool) {
+static Arg *getMatchedArg(Arg *A, SmallVector<Arg*,8> &Pool, ASTContext *Context) {
+    assert(!isa<SubArrayArg>(A));
     for (SmallVector<Arg*,8>::iterator
-             AI = Pool.begin(), AE = Pool.end(); AI != AE; ++AI)
+             AI = Pool.begin(), AE = Pool.end(); AI != AE; ++AI) {
         if (A->Matches(*AI))
             return *AI;
+        if (SubArrayArg *SA = dyn_cast<SubArrayArg>(*AI)) {
+            ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(SA->getExpr());
+            ClauseInfo TmpCI(CK_IN,SA->getParent()->getAsDirective());  //the clause type here is not important
+            Arg *TmpA = CreateNewArgFrom(ASE->getBase()->IgnoreParenCasts(),&TmpCI,Context);
+            TmpCI.setArg(TmpA);
+            if (A->Matches(TmpA)) {
+                delete TmpA;
+                return *AI;
+            }
+            else
+                delete TmpA;
+        }
+    }
     return 0;
 }
 
@@ -1557,10 +1571,17 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
     Arg *TmpA = CreateNewArgFrom(E,&TmpCI,Context);
     TmpCI.setArg(TmpA);
 
-    Arg *A = getMatchedArg(TmpA,PragmaArgs);
-    if (!A)
-        //not in data clause, therefore not a dependency (pass by value)
+    Arg *A = getMatchedArg(TmpA,PragmaArgs,Context);
+    if (!A) {
+        //not in data clause
+        //therefore not a dependency (pass by value)
         A = TmpA;
+        if (A->getExpr()->getType()->isPointerType()) {
+            llvm::outs() << "warning: argument " << toString(Index + 1) << " '"
+                         << A->getPrettyArg(Context->getPrintingPolicy())
+                         << "' not found in data clauses - treat as no dependence\n";
+        }
+    }
     else {
         delete TmpA;
 
@@ -1594,6 +1615,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
     std::string SizeExpr;
     std::string Prologue;
     std::string Address = OrigName;
+    std::string StartOffset = "0";
 
     std::string DataDepType;
     ClauseKind CK = A->getParent()->getAsClause()->getKind();
@@ -1610,15 +1632,17 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
     }
 
     if (SubArrayArg *SA = dyn_cast<SubArrayArg>(A)) {
+        ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(SA->getExpr());
+        Address = getPrettyExpr(Context,ASE->getBase());
+        StartOffset = getPrettyExpr(Context,ASE->getIdx());
         SizeExpr = "sizeof(" + SA->getExpr()->getType().getAsString()
             + ")*(" + getPrettyExpr(Context,SA->getLength()) + ")";
     }
     else if (Ty->isPointerType()) {
         SizeExpr = DynSizeMap.lookup(OrigName);
         if (!SizeExpr.size()) {
-            llvm::outs() << "INTERNAL ERROR: '" << OrigName << "'pointer's data size not found, assuming pointer size\n";
-            //fallback
-            SizeExpr = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
+            llvm::outs() << "warning: '" << OrigName << "'pointer's data size not found automatically - use malloc_usable_size(void *)\n";
+            SizeExpr = "malloc_usable_size(" + A->getPrettyArg(Context->getPrintingPolicy()) + ")";
         }
     }
     else if (isa<ArrayArg>(A)) {
@@ -1637,6 +1661,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         + ".index = " + toString(Index)
         + ",.dependency = " + DataDepType
         + ",.host_ptr = (void*)" + Address
+        + ",.start_offset = " + StartOffset
         + ",.size = " + SizeExpr
         + "};";
 
@@ -1853,7 +1878,7 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
     for (SmallVector<Arg*,8>::iterator
              II = PragmaArgs.begin(), EE = PragmaArgs.end(); II != EE; ++II)
         if (!isa<SubArrayArg>(*II) && !isa<ArrayArg>(*II) &&
-            !isa<VarArg>(*II) && !(*II)->getExpr()->getType()->isPointerType())
+            (!isa<VarArg>(*II) || !(*II)->getExpr()->getType()->isPointerType()))
             llvm::outs() << "warning: ignore invalid '" << (*II)->getParent()->getAsClause()->getAsString()
                          << "' data dependency for pass-by-value argument '"
                          << (*II)->getPrettyArg(PrintingPolicy(Context->getLangOpts())) << "' (" << (*II)->getKindAsString() << ")\n";
