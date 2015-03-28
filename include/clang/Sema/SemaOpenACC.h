@@ -133,7 +133,7 @@ public:
     bool isVarExpr(Expr *E);
     bool isArrayExpr(Expr *E);
     bool isArrayElementExpr(Expr *E);
-    bool isSubArrayExpr(Expr *E);
+    bool isSubArrayExpr(Expr *E, Expr *Length);
 
 };
 

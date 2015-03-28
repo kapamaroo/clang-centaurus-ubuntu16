@@ -376,8 +376,8 @@ OpenACC::isArrayElementExpr(Expr *E) {
 }
 
 bool
-OpenACC::isSubArrayExpr(Expr *E) {
-    return LengthTmp && dyn_cast<ArraySubscriptExpr>(E);
+OpenACC::isSubArrayExpr(Expr *E, Expr *Length) {
+    return Length && dyn_cast<ArraySubscriptExpr>(E);
 }
 
 Arg*
@@ -390,7 +390,7 @@ OpenACC::CreateArg(Expr *E, CommonInfo *Common) {
     Expr *CurrentLength = LengthTmp;
     LengthTmp = 0;
 
-    if (isSubArrayExpr(E))
+    if (isSubArrayExpr(E,CurrentLength))
         A = new SubArrayArg(Common,E,CurrentLength,&S.getASTContext());
     else if (isArrayElementExpr(E))
         A = new ArrayElementArg(Common,E,&S.getASTContext());
