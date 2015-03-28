@@ -1567,7 +1567,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
                               NameMap &Map, RegionStack &RStack, const int Index) {
     //declare a new var here for the accelerator
 
-    ClauseInfo TmpCI(CK_IN,RStack.back());  //the clause type here is not important
+    ClauseInfo TmpCI(CK_IN,RStack.back());  //default data dependency
     Arg *TmpA = CreateNewArgFrom(E,&TmpCI,Context);
     TmpCI.setArg(TmpA);
 
@@ -1579,7 +1579,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         if (A->getExpr()->getType()->isPointerType()) {
             llvm::outs() << "warning: argument " << toString(Index + 1) << " '"
                          << A->getPrettyArg(Context->getPrintingPolicy())
-                         << "' not found in data clauses - treat as no dependence\n";
+                         << "' not found in data clauses - treat as 'in' dependence\n";
         }
     }
     else {
