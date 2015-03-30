@@ -11,5 +11,6 @@ void ReplaceStringInPlace(std::string& subject, const std::string& search,
 
 std::string RemoveDotExtension(const std::string &filename);
 std::string GetDotExtension(const std::string &filename);
+std::string GetBasename(const std::string &filename);
 
 #endif

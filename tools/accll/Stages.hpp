@@ -147,6 +147,11 @@ private:
 
     std::string UserTypes;
 
+    std::string Suffix;
+    std::string CommonFileHeader;
+    std::string NewHeader;
+    std::string HostHeader;
+
     std::string addMoveHostToDevice(clang::openacc::Arg *A,
                                     clang::openacc::ClauseInfo *AsyncCI = 0,
                                     std::string Event = std::string());
