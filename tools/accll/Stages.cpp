@@ -1579,7 +1579,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         if (A->getExpr()->getType()->isPointerType()) {
             llvm::outs() << "warning: argument " << toString(Index + 1) << " '"
                          << A->getPrettyArg(Context->getPrintingPolicy())
-                         << "' not found in data clauses - treat as 'in' dependence\n";
+                         << "' not found in data clauses - treat as 'in' dependency\n";
         }
     }
     else {
