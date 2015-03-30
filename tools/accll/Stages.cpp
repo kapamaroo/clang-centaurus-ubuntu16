@@ -327,7 +327,6 @@ private:
 };
 
 struct TaskSrc {
-    static std::string runtime_call;
     static int TaskUID;
 
     std::string Label;
@@ -373,7 +372,6 @@ private:
 };
 
 int TaskSrc::TaskUID = 0;
-std::string TaskSrc::runtime_call = "acl_create_task";
 UIDKernelMap KernelRefDef::KernelUIDMap;
 
 void
@@ -470,7 +468,7 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, Direct
 }
 
 std::string TaskSrc::HostCall() {
-    std::string call = runtime_call + "("
+    std::string call = "acl_create_task("
         + Approx + ","
         + MemObjInfo.NameRef + "," + MemObjInfo.NumArgs + ","
         + OpenCLCode.NameRef + ","
