@@ -216,7 +216,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
     std::string BinArray = compile(__offline,"NVIDIA",BuildOptions);
     if (BinArray.size()) {
         Binary.NameRef = "__binArray_" + DeviceCode.NameRef;
-#if 0
+#if 1
         std::string HexBinArray = ToHex(BinArray);
 #else
         std::string HexBinArray;
@@ -235,9 +235,15 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
 
     // On Linux the driver caches compiled kernels in ~/.nv/ComputeCache.
     // Deleting this folder forces a recompile.
-    llvm::outs() << "########    Build Log (" << DeviceCode.NameRef << ")   ########\n";
-    llvm::outs() << BuildLog << "\n";
-    llvm::outs() << "#################################\n";
+    std::string OpenCLCacheDir = "~/.nv/ComputeCache";
+    if (BuildLog.size()) {
+        llvm::outs() << "########    Build Log (" << DeviceCode.NameRef << ")   ########\n";
+        llvm::outs() << BuildLog;
+        llvm::outs() << "#################################\n";
+    }
+    else
+        llvm::outs() << "Binary for '" << DeviceCode.NameRef << "' kernel found in cache directory '"
+                     << OpenCLCacheDir << "'  -  delete cache directory to force regeneration of build log.\n";
 
     HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
     HostCode.Definition = "struct _kernel_struct " + HostCode.NameRef
@@ -473,6 +479,7 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, Direct
 
 std::string TaskSrc::HostCall() {
     std::string FileName = PLoc.getFilename();
+#warning FIXME: dynamically generate SrcLocID to take care of possible iteration spaces
     std::string SrcLocID = GetBasename(FileName) + ":" + toString(PLoc.getLine());
 
     std::string call = "acl_create_task("

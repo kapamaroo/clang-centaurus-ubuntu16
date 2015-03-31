@@ -106,12 +106,14 @@ int main(int argc, const char **argv) {
         status += clang_format_main(*II,Style);
     }
 
+#if 0
     for (std::vector<std::string>::iterator
              II = LibOCLFiles.begin(),
              EE = LibOCLFiles.end(); II != EE; ++II) {
         //llvm::outs() << *II << "\n";
         status += clang_format_main(*II,Style);
     }
+#endif
 
     for (std::vector<std::string>::iterator
              II = KernelFiles.begin(),

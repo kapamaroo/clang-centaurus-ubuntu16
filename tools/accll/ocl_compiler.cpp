@@ -85,6 +85,9 @@ std::string ocltLogBuildInfo(cl_program cpProgram, cl_device_id cdDevice)
     errcode = clGetProgramBuildInfo(cpProgram, cdDevice, CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
     checkError(errcode, CL_SUCCESS);
 
+    if (log_size <= 2)
+        return std::string();
+
     char *buildLog = (char*)malloc((log_size+1));
     if (!buildLog)
         return std::string();
