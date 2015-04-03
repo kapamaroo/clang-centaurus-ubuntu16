@@ -163,7 +163,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
     for (StringMap<bool>::iterator
              II = DepHeaders.begin(), EE = DepHeaders.end(); II != EE; ++II) {
         __offline += "#include \"" + II->getKey().str() + "\"\n";
-        PreDef += "#include \"" + II->getKey().str() + "\"\n";
+        //PreDef += "#include \"" + II->getKey().str() + "\"\n";
     }
     __offline += UserTypes;
     PreDef += UserTypes;
