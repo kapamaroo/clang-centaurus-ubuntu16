@@ -38,6 +38,7 @@ int main(int argc, const char **argv) {
     conf.push_back("--");
     conf.push_back("-fopenacc");
     conf.push_back("-I.");
+    conf.push_back("-I/opt/LLVM/include");
     conf.push_back("-Wno-implicit-function-declaration");  //suppress missing opencl builtins
     //conf.push_back("-x");
     //conf.push_back("cl");
