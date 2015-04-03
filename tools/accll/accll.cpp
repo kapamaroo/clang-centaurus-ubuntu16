@@ -43,6 +43,8 @@ int main(int argc, const char **argv) {
     //conf.push_back("cl");
     //conf.push_back("-w");
     conf.push_back("-include__acl_api_types.h");
+    conf.push_back("-DCLK_LOCAL_MEM_FENCE=1");
+    conf.push_back("-DCLK_GLOBAL_MEM_FENCE=2");
 
     int ARGC = argc + conf.size();
     const char **ARGV = new const char*[ARGC];
