@@ -342,7 +342,7 @@ Parser::ParseClauseApproxfun(DirectiveKind DK, ClauseInfo *CI) {
         return false;
     }
 
-    PP.Diag(Tok,diag::note_pragma_acc_parser_test) << ApproxFun->getNameInfo().getName().getAsString();
+    //PP.Diag(Tok,diag::note_pragma_acc_parser_test) << ApproxFun->getNameInfo().getName().getAsString();
     Arg *A = new (Actions.getASTContext()) FunctionArg(CI,ApproxFun);
     CI->setArg(A);
 
