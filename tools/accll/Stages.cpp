@@ -21,7 +21,8 @@ namespace {
     bool TrackThisHeader(std::string &Header) {
         for (std::vector<std::string>::iterator
              II = APIHeaderVector.begin(), EE = APIHeaderVector.end(); II != EE; ++II)
-            if ((*II).find(Header) != std::string::npos)
+            // do not track internal api header files
+            if (Header.find(*II) != std::string::npos)
                 return false;
         return true;
     }
