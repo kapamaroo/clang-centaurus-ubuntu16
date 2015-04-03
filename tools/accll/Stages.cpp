@@ -1965,6 +1965,12 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     NewHeader = RemoveDotExtension(FileName) + Suffix + ".h";
     HostHeader = CommonFileHeader + "#include \"" + NewHeader + "\"\n";
 
+    HostHeader += "#define __kernel \n";
+    HostHeader += "#define __global \n";
+    HostHeader += "#define __local \n";
+    HostHeader += "#define __constant \n";
+    HostHeader += "#define __private \n";
+
     {
         SourceLocation StartLocOfMainFile = SM.getLocForStartOfFile(SM.getMainFileID());
         Replacement R(Context->getSourceManager(),StartLocOfMainFile,0,HostHeader);
