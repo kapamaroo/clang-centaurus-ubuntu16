@@ -42,6 +42,7 @@ int main(int argc, const char **argv) {
     //conf.push_back("-x");
     //conf.push_back("cl");
     //conf.push_back("-w");
+    conf.push_back("-include__acl_api_types.h");
 
     int ARGC = argc + conf.size();
     const char **ARGV = new const char*[ARGC];

@@ -16,14 +16,21 @@ using namespace clang::openacc;
 using namespace accll;
 
 namespace {
-    const std::string APIHeader = "centaurus_common.h";
+    std::vector<std::string> APIHeaderVector;
+    llvm::StringMap<bool> DepHeaders;
+    bool TrackThisHeader(std::string &Header) {
+        for (std::vector<std::string>::iterator
+             II = APIHeaderVector.begin(), EE = APIHeaderVector.end(); II != EE; ++II)
+            if ((*II).find(Header) != std::string::npos)
+                return false;
+        return true;
+    }
 
     llvm::StringMap<std::string> DynSizeMap;
     llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelAccuratePool;
     llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelApproximatePool;
     llvm::DenseMap<FunctionDecl *,std::string> CommonFunctionsPool;
     llvm::SmallPtrSet<FunctionDecl *,32> EraseFunctionDeclPool;
-    llvm::StringMap<bool> DepHeaders;
 }
 
 ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
@@ -151,7 +158,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
     }
 
     std::string __offline = Extensions;
-    std::string PreDef = Extensions;
+    std::string PreDef;  // = Extensions;
     for (StringMap<bool>::iterator
              II = DepHeaders.begin(), EE = DepHeaders.end(); II != EE; ++II) {
         __offline += "#include \"" + II->getKey().str() + "\"\n";
@@ -239,7 +246,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
     if (BuildLog.size()) {
         llvm::outs() << "########    Build Log (" << DeviceCode.NameRef << ")   ########\n";
         llvm::outs() << BuildLog;
-        llvm::outs() << "#################################\n";
+        llvm::outs() << "\n#################################\n";
     }
     else
         llvm::outs() << "Binary for '" << DeviceCode.NameRef << "' kernel found in cache directory '"
@@ -1571,6 +1578,8 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
                               NameMap &Map, RegionStack &RStack, const int Index) {
     //declare a new var here for the accelerator
 
+    E = E->IgnoreParenCasts();
+
     ClauseInfo TmpCI(CK_IN,RStack.back());  //default data dependency
     Arg *TmpA = CreateNewArgFrom(E,&TmpCI,Context);
     TmpCI.setArg(TmpA);
@@ -1635,6 +1644,23 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         DataDepType = "D_PASS_BY_VALUE";
     }
 
+    if (A->getExpr()->getType().getUnqualifiedType().getAsString().compare("cl_mem") == 0) {
+        llvm::outs() << "Found user defined low level cl_mem object '"
+                     << A->getPrettyArg(Context->getPrintingPolicy()) << "' as '"
+                     << A->getParent()->getAsClause()->getAsString() << "' data dependency.\n";
+
+        std::string NewCode = Prologue + "struct _memory_object " + NewName + " = {"
+            + ".cl_obj = " + getPrettyExpr(Context,A->getExpr())
+            + ",.index = " + toString(Index)
+            + ",.dependency = " + DataDepType
+            + ",.host_ptr = 0"
+            + ",.start_offset = 0"
+            + ",.size = 0"
+            + "};";
+
+        return ObjRefDef(NewName,NewCode);
+    }
+
     if (SubArrayArg *SA = dyn_cast<SubArrayArg>(A)) {
         ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(SA->getExpr());
         Address = getPrettyExpr(Context,ASE->getBase());
@@ -1662,7 +1688,8 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
     }
 
     std::string NewCode = Prologue + "struct _memory_object " + NewName + " = {"
-        + ".index = " + toString(Index)
+        + ".cl_obj = 0"
+        + ",.index = " + toString(Index)
         + ",.dependency = " + DataDepType
         + ",.host_ptr = (void*)" + Address
         + ",.start_offset = " + StartOffset
@@ -1926,6 +1953,9 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     Context = C;
     CG = _CG;
 
+    APIHeaderVector.push_back("centaurus_common.h");
+    APIHeaderVector.push_back("__acl_api_types.h");
+
     SourceManager &SM = Context->getSourceManager();
     std::string FileName = SM.getFileEntryForID(SM.getMainFileID())->getName();
 
@@ -2084,6 +2114,7 @@ Stage1_ASTVisitor::Finish() {
     }
     EraseFunctionDeclPool.clear();
 
+    APIHeaderVector.clear();
     CommonFunctionsPool.clear();
     DepHeaders.clear();
 
@@ -2173,7 +2204,7 @@ Stage1_ASTVisitor::VisitRecordDecl(RecordDecl *R) {
 
     //maybe the implementation headers are not in system directories
     if (!SM.isFromMainFile(Loc)) {
-        if (DefFile.find(APIHeader) == std::string::npos)
+        if (TrackThisHeader(DefFile))
             DepHeaders[DefFile] = true;
         return true;
     }
@@ -2200,7 +2231,7 @@ Stage1_ASTVisitor::VisitEnumDecl(EnumDecl *E) {
 
     //maybe the implementation headers are not in system directories
     if (!SM.isFromMainFile(Loc)) {
-        if (DefFile.find(APIHeader) == std::string::npos)
+        if (TrackThisHeader(DefFile))
             DepHeaders[DefFile] = true;
         return true;
     }
@@ -2225,12 +2256,18 @@ Stage1_ASTVisitor::VisitTypedefDecl(TypedefDecl *T) {
     if (SM.isInSystemHeader(Loc))
         return true;
 
-    std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
+    const FileEntry *F = SM.getFileEntryForID(SM.getFileID(Loc));
+    if(!F) {
+        // if we -include a file from the command line, FileEntry is 0
+        //llvm::outs() << "BUG: UnknownFile for typedef '" << T->getNameAsString() << "'\n";
+        return true;
+    }
+    std::string DefFile = F->getName();
     //llvm::outs() << "debug: user defined typedef '" << T->getNameAsString() << "' from file :" << DefFile << "\n";
 
     //maybe the implementation headers are not in system directories
     if (!SM.isFromMainFile(Loc)) {
-        if (DefFile.find(APIHeader) == std::string::npos)
+        if (TrackThisHeader(DefFile))
             DepHeaders[DefFile] = true;
         return true;
     }
