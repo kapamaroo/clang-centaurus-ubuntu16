@@ -2074,13 +2074,11 @@ Stage1_ASTVisitor::Finish() {
             dst << "#include \"" + II->getKey().str() + "\"\n";
         }
         dst << UserTypes;
-        //dst << "//#############################\n";
         for (llvm::DenseMap<FunctionDecl *, std::string>::iterator
                  II = CommonFunctionsPool.begin(), EE = CommonFunctionsPool.end(); II != EE; ++II) {
             if (SM.isFromMainFile((*II).first->getLocStart()))
                 dst << (*II).second;
         }
-        //dst << "//#############################\n";
         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
                  II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
             if (Context->isFunctionWithSubtasks((*II).first) ||
