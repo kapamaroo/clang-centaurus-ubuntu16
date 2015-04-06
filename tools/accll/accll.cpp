@@ -84,24 +84,27 @@ int main(int argc, const char **argv) {
         }
     int tool_argc = ExtraArgsStartPos ? ExtraArgsStartPos : argc;
 
-    std::vector<std::string> conf;
-    conf.push_back("--");
-    conf.push_back("-fopenacc");
-    conf.push_back("-I/opt/LLVM/include");
-    conf.push_back("-include__acl_api_types.h");
-    conf.push_back("-c");
-    //conf.push_back("-DCLK_LOCAL_MEM_FENCE=1");
-    //conf.push_back("-DCLK_GLOBAL_MEM_FENCE=2");
-
-    int ARGC = tool_argc + conf.size();
-    const char **ARGV = new const char*[ARGC];
+    SmallVector<const char *, 256> ARGV;
 
     for (int i=0; i<tool_argc; ++i)
-        ARGV[i] = argv[i];
-    for (std::vector<std::string>::size_type i=0; i<conf.size(); ++i)
-        ARGV[tool_argc + i] = conf[i].c_str();
+        ARGV.push_back(argv[i]);
 
-    CommonOptionsParser OptionsParser(ARGC, ARGV);
+    ARGV.push_back("--");
+    ARGV.push_back("-fopenacc");
+    ARGV.push_back("-I/opt/LLVM/include");
+    ARGV.push_back("-include__acl_api_types.h");
+    ARGV.push_back("-c");
+
+    for (int i=ExtraArgsStartPos + 1; i<argc; ++i)
+        ARGV.push_back(argv[i]);
+
+    int ARGC = ARGV.size();
+    llvm::outs() << "debug: Invoke Stages as: ";
+    for (int i=0; i<ARGV.size(); ++i)
+        llvm::outs() << ARGV[i] + std::string(" ");
+    llvm::outs() << "\n";
+
+    CommonOptionsParser OptionsParser(ARGC, ARGV.data());
 
     std::vector<std::string> UserInputFiles = OptionsParser.getSourcePathList();
 
