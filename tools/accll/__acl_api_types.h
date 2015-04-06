@@ -7,6 +7,9 @@
 #include <CL/opencl.h>
 #endif
 
+#define CLK_LOCAL_MEM_FENCE 1
+#define DCLK_GLOBAL_MEM_FENCE 2
+
 #if 0
 #define OPENCL_API_TYPE(typename, size) cl_ ## typename ## size
 #define TYPEDEF_BUILTIN_VECTOR(typename, size) typedef OPENCL_API_TYPE(typename,size) typename ## size
