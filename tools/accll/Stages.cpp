@@ -1973,6 +1973,7 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     for (std::vector<std::string>::iterator
              II = APIHeaderVector.begin(), EE = APIHeaderVector.end(); II != EE; ++II)
         HostHeader += "#include <" + *II + ">\n";
+    HostHeader += "#include <malloc.h>\n";  //malloc_usable_size()
 
     HostHeader += "#define __kernel \n";
     HostHeader += "#define __global \n";
@@ -1986,6 +1987,7 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
         applyReplacement(ReplacementPool,R);
     }
 
+#if 0
     for (llvm::SmallPtrSet<clang::FunctionDecl *, 32>::iterator
              II = Context->getKernelFunctions().begin(),
              EE = Context->getKernelFunctions().end(); II != EE; ++II) {
@@ -1996,6 +1998,7 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
              EE = Context->getFunctionsWithSubtasks().end(); II != EE; ++II) {
         llvm::outs() << (*II)->getNameAsString() << " <-- has subtasks\n";
     }
+#endif
 }
 
 void KernelRefDef::findCallDeps(FunctionDecl *StartFD, CallGraph *CG,
@@ -2135,75 +2138,6 @@ Stage1_ASTVisitor::Finish() {
     //CG->dump();
 }
 
-#if 0
-///////////////////////////////////////////////////////////////////////////////
-//                        Stage3
-///////////////////////////////////////////////////////////////////////////////
-
-std::string
-Stage3_ASTVisitor::CreateNewNameFor(Arg *A, bool AddPrefix) {
-    assert(!isa<RawExprArg>(A) && !isa<SubArrayArg>(A));
-
-    ClauseInfo *CI = A->getParent()->getAsClause();
-    assert(CI);
-
-    if (isa<RawExprArg>(A) && A->isICE())
-        return A->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
-
-    std::string Prefix = "__accll_";  //prefix
-    std::string NewName;
-    Expr *BaseExpr = A->getExpr()->IgnoreParenCasts();
-    if (ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(BaseExpr)) {
-        Expr *Base = ASE->getBase()->IgnoreParenCasts();
-        Arg *BaseA = CreateNewArgFrom(Base,CI,Context);
-        std::string NameBase = CreateNewNameFor(BaseA,/*AddPrefix=*/false);
-
-        Expr *Index = ASE->getIdx()->IgnoreParenCasts();
-        Arg *IndexA = CreateNewArgFrom(Index,CI,Context);
-        std::string NameIndex = CreateNewNameFor(IndexA,/*AddPrefix=*/false);
-
-        DirectiveInfo *DI = CI->getParentDirective();
-        assert(DI);
-        if (!(isa<RawExprArg>(IndexA) && IndexA->isICE()))
-            if (RStack.FindVisibleCopyInDirective(DI,IndexA) ||
-                RStack.FindVisibleCopyInRegionStack(IndexA))
-                NameIndex = Prefix + NameIndex;
-
-        //NameBase and NameIndex have prefix if needed, d not add it again here
-
-        if (isa<RawExprArg>(IndexA) && IndexA->isICE())
-            //let the caller to add any dereference code to the final NewName
-            NewName = NameBase + "_" + NameIndex + "_";
-        else if (!isa<ArrayArg>(IndexA))
-            //dereference the Index only
-            NewName = NameBase + "[(*" + NameIndex + ")]";
-        else
-            //this is a user programming error, let the compiler find it
-            NewName = NameBase + "[" + NameIndex + "]";
-    }
-    else if (MemberExpr *ME = dyn_cast<MemberExpr>(BaseExpr)) {
-        FieldDecl *FD = dyn_cast<FieldDecl>(ME->getMemberDecl());
-        assert(FD);
-        BaseExpr = ME->getBase()->IgnoreParenImpCasts();
-        Arg *BaseA = CreateNewArgFrom(BaseExpr,CI,Context);
-        std::string NameBase = CreateNewNameFor(BaseA,/*AddPrefix=*/false);
-        NewName = NameBase + "_" + FD->getNameAsString();
-    }
-    else {
-        assert(isa<DeclRefExpr>(BaseExpr));
-        DeclRefExpr *DF = dyn_cast<DeclRefExpr>(BaseExpr);
-        (void)DF;
-        assert(DF && isa<VarDecl>(DF->getDecl()));
-        NewName = getPrettyExpr(Context,BaseExpr);
-    }
-
-    if (AddPrefix)
-        NewName = Prefix + NewName;
-
-    return NewName;
-}
-#endif
-
 bool
 Stage1_ASTVisitor::VisitRecordDecl(RecordDecl *R) {
     SourceLocation Loc = R->getSourceRange().getBegin();
@@ -2293,248 +2227,6 @@ Stage1_ASTVisitor::VisitTypedefDecl(TypedefDecl *T) {
 
     return true;
 }
-
-#if 0
-bool
-Stage3_ASTVisitor::VisitVarDecl(VarDecl *VD) {
-    //FIXME: move this to separate stage
-    //       in order to be able to ignore this stage
-    //       when there is no device code
-
-    //clean Stage1 mess
-
-    ValueDecl *Val = cast<ValueDecl>(VD);
-    assert(Val);
-
-    QualType QTy = Val->getType();
-    std::string TypeName = QTy.getAsString();
-    //llvm::outs() << "\ntype is: " << TypeName << "\n";
-
-    //ignore this vardecl
-    if (TypeName.compare("__incomplete__ *") != 0)
-        return true;
-
-    assert(VD->hasInit());
-    Expr *Init = VD->getInit();
-
-    //llvm::outs() << "'" << getPrettyExpr(Context,Init) << "'\n";
-
-    std::string NewName = VD->getNameAsString();
-    std::string NewCode = "cl_mem " + NewName + " = " + getPrettyExpr(Context,Init);
-    //the semicolon remains
-    Replacement R(Context->getSourceManager(),VD,NewCode);
-    applyReplacement(ReplacementPool,R);
-
-    return true;
-}
-
-bool
-Stage3_ASTVisitor::Stage3_TraverseTemplateArgumentLocsHelper(const TemplateArgumentLoc *TAL,unsigned Count) {
-    for (unsigned I = 0; I < Count; ++I) {
-        TRY_TO(TraverseTemplateArgumentLoc(TAL[I]));
-    }
-    return true;
-}
-
-bool
-Stage3_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
-    int KernelCallsSoFar = KernelCalls;
-    KernelCalls = 0;
-    hasDirectives = 0;
-
-    TRY_TO(WalkUpFromFunctionDecl(FD));
-    SourceManager &SM = Context->getSourceManager();
-    CurrentFunction = 0;
-    if (!SM.isInSystemHeader(FD->getSourceRange().getBegin()))
-        CurrentFunction = FD;
-
-    //{ CODE; }
-    //inline the helper function
-    //
-    //TraverseFunctionHelper(D);
-
-    TRY_TO(TraverseNestedNameSpecifierLoc(FD->getQualifierLoc()));
-    TRY_TO(TraverseDeclarationNameInfo(FD->getNameInfo()));
-
-    // If we're an explicit template specialization, iterate over the
-    // template args that were explicitly specified.  If we were doing
-    // this in typing order, we'd do it between the return type and
-    // the function args, but both are handled by the FunctionTypeLoc
-    // above, so we have to choose one side.  I've decided to do before.
-    if (const FunctionTemplateSpecializationInfo *FTSI =
-        FD->getTemplateSpecializationInfo()) {
-        if (FTSI->getTemplateSpecializationKind() != TSK_Undeclared &&
-            FTSI->getTemplateSpecializationKind() != TSK_ImplicitInstantiation) {
-            // A specialization might not have explicit template arguments if it has
-            // a templated return type and concrete arguments.
-            if (const ASTTemplateArgumentListInfo *TALI =
-                FTSI->TemplateArgumentsAsWritten) {
-                TRY_TO(Stage3_TraverseTemplateArgumentLocsHelper(TALI->getTemplateArgs(),
-                                                                 TALI->NumTemplateArgs));
-            }
-        }
-    }
-
-    // Visit the function type itself, which can be either
-    // FunctionNoProtoType or FunctionProtoType, or a typedef.  This
-    // also covers the return type and the function parameters,
-    // including exception specifications.
-    if (TypeSourceInfo *TSI = FD->getTypeSourceInfo()) {
-        TRY_TO(TraverseTypeLoc(TSI->getTypeLoc()));
-    }
-
-    if (CXXConstructorDecl *Ctor = dyn_cast<CXXConstructorDecl>(FD)) {
-        // Constructor initializers.
-        for (CXXConstructorDecl::init_iterator I = Ctor->init_begin(),
-                 E = Ctor->init_end();
-             I != E; ++I) {
-            TRY_TO(TraverseConstructorInitializer(*I));
-        }
-    }
-
-    if (FD->isThisDeclarationADefinition()) {
-        TRY_TO(TraverseStmt(FD->getBody()));  // Function body.
-    }
-
-    /////////////////////////////////////////////////////////////////////
-
-    if (SM.isInSystemHeader(FD->getSourceRange().getBegin()))
-        return true;
-
-    //maybe the implementiation headers are not in system directories
-    if (!SM.isFromMainFile(FD->getSourceRange().getBegin()))
-        return true;
-
-    int NewKernelCalls = KernelCalls;
-    KernelCalls = KernelCallsSoFar + NewKernelCalls;
-
-    llvm::outs() << "in function '" << FD->getNameAsString() << "'\n";
-
-#if 0
-    if (hasDirectives) {
-        std::string NewCode = "\n__accll_init_accll_runtime();";
-        if (NewKernelCalls) {
-            //Create for each function a program object in the stack
-            std::string KernelFile = getCurrentKernelFile();
-            NewCode += "cl_program program = __accll_load_and_build(\""
-                + KernelFile + "\");";
-        }
-
-        CompoundStmt *Body = dyn_cast<CompoundStmt>(FD->getBody());
-        assert(Body);
-        SourceLocation StartLoc = Body->getLocStart().getLocWithOffset(1);
-        Replacement R(Context->getSourceManager(),StartLoc,0,NewCode);
-        applyReplacement(ReplacementPool,R);
-    }
-#endif
-
-    return true;
-}
-
-bool
-Stage3_ASTVisitor::VisitCallExpr(CallExpr *CE) {
-    SourceManager &SM = Context->getSourceManager();
-    if (SM.isInSystemHeader(CE->getSourceRange().getBegin())) {
-        //llvm::outs() << "Writing to system header prevented!\n";
-        return true;
-    }
-
-    FunctionDecl *FD = CE->getDirectCallee();
-    if (!FD)
-        return true;
-
-    std::string Name = FD->getNameAsString();
-
-#define TEST_RUNTIME_CALL(name,call) (name.compare(#call) == 0)
-    if (TEST_RUNTIME_CALL(Name,acc_async_test)) {
-        llvm::outs() << "Processing Runtime call to '" << Name << "' ...\n";
-        assert(CE->getNumArgs() == 1 && "OpenACC API changed, update your program!");
-        //ignore any casts or parens,
-        //the Arg Constructors expect a 'clean' expression
-        Expr *E = CE->getArg(0)->IgnoreParenCasts();
-        //llvm::outs() << "Argument is '" + getPrettyExpr(Context,E) + "'\n";
-
-        Arg *Target = CreateNewArgFrom(E,0,Context);
-
-        std::string Events;
-        unsigned EventsNum = 0;
-
-        for (AsyncEventVector::iterator
-                 II = AsyncEvents.begin(), EE = AsyncEvents.end(); II != EE; ++II) {
-            Arg *IA = (II->first->hasArgs()) ? II->first->getArg() : 0;
-            if (IA && Target->Matches(IA)) {
-                if (!Events.empty())
-                    Events += ", ";
-                Events += II->second;
-                EventsNum++;
-            }
-        }
-
-        if (EventsNum == 0) {
-            //we have no async device code
-            llvm::outs() << "No asynchronous events found\n";
-            return true;
-        }
-
-        //wait for a list of events
-
-        std::string Tmp;
-        raw_string_ostream OS(Tmp);
-        OS << EventsNum;
-
-        std::string NewCode = "accll_async_test(" + OS.str() + "," + Events + ")";
-        Replacement R(Context->getSourceManager(),CE,NewCode);
-        applyReplacement(ReplacementPool,R);
-    }
-    else if (TEST_RUNTIME_CALL(Name,acc_async_test_all)) {
-        llvm::outs() << "Processing Runtime call to '" << Name << "' ...\n";
-
-        std::string Events;
-        unsigned EventsNum = 0;
-
-        for (AsyncEventVector::iterator
-                 II = AsyncEvents.begin(), EE = AsyncEvents.end(); II != EE; ++II) {
-            Arg *IA = (II->first->hasArgs()) ? II->first->getArg() : 0;
-            if (IA) {
-                if (!Events.empty())
-                    Events += ", ";
-                Events += II->second;
-                EventsNum++;
-            }
-        }
-
-        if (EventsNum == 0) {
-            //we have no async device code
-            llvm::outs() << "No asynchronous events found\n";
-            return true;
-        }
-
-        //wait for a list of events
-
-        std::string Tmp;
-        raw_string_ostream OS(Tmp);
-        OS << EventsNum;
-
-        std::string NewCode = "accll_async_test(" + OS.str() + "," + Events + ")";
-        Replacement R(Context->getSourceManager(),CE,NewCode);
-        applyReplacement(ReplacementPool,R);
-    }
-    else if (TEST_RUNTIME_CALL(Name,__accll_unreachable)) {
-        SourceLocation StartLoc = CE->getLocStart();
-        //EndLoc + 1, is guaranteed to be semicolol ';', see Stage00
-        SourceLocation EndLoc = CE->getLocEnd().getLocWithOffset(2);
-        CharSourceRange Range(SourceRange(StartLoc,EndLoc),/*IsTokenRange=*/false);
-
-        //avoid generation of NullStmt
-        //Replacement R(Context->getSourceManager(),CE,"");
-        Replacement R(Context->getSourceManager(),Range,"");
-        applyReplacement(ReplacementPool,R);
-    }
-#undef TEST_RUNTIME_CALL
-
-    return true;
-}
-#endif
 
 std::string KernelSrc::MakeParamFromArg(Arg *A,bool MakeDefinition,
                                         std::string Kernel, int &ArgPos,
@@ -2661,43 +2353,6 @@ std::string KernelSrc::MakeParams(DirectiveInfo *DI,
     return Params;
 }
 
-#if 0
-std::string
-Stage3_ASTVisitor::getIdxOfWorkerInLoop(ForStmt *F, std::string Qual) {
-    assert(Qual.compare("global") == 0 || Qual.compare("local") == 0);
-
-    std::string Buffer;
-    raw_string_ostream OS(Buffer);
-
-    std::string NewCode = "";
-    if (const DeclStmt *InitDS = dyn_cast_or_null<DeclStmt>(F->getInit())) {
-        //asserts if not SingleDecl
-        //FIXME: what about multiple declarations?
-        //       eg. 'for (int x=1,y=2; ... ; ..) ;
-
-        const NamedDecl *ND = cast<NamedDecl>(InitDS->getSingleDecl());
-
-        InitDS->printPretty(OS,/*Helper=*/0,
-                            Context->getPrintingPolicy(),/*Indentation=*/0);
-        ND->printName(OS);
-    }
-    else if (const BinaryOperator *BO = dyn_cast_or_null<BinaryOperator>(F->getInit())) {
-        assert(BO->isAssignmentOp());
-        BO->getLHS()->printPretty(OS,/*Helper=*/0,
-                                  Context->getPrintingPolicy(),/*Indentation=*/0);
-        QualType QTy = BO->getLHS()->getType();
-        std::string TypeName = QTy.getAsString();
-        NewCode += TypeName + " ";
-    }
-    else
-        assert(0 && "unknown for init expr");
-
-    NewCode += OS.str() + " = get_" + Qual + "_id(0);";
-
-    return NewCode;
-}
-#endif
-
 std::string KernelSrc::MakeBody(DirectiveInfo *DI, Stmt *SubStmt) {
     std::string Body;
     raw_string_ostream OS(Body);
@@ -2739,40 +2394,3 @@ std::string KernelSrc::MakeBody(DirectiveInfo *DI, Stmt *SubStmt) {
 
     return Body;
 }
-#if 0
-std::string
-Stage3_ASTVisitor::CreateNewUniqueEventNameFor(Arg *A) {
-    static unsigned EID = 0;
-
-    std::string NewName("__accll_device_code_event_");  //prefix
-
-    //add variable name to event name to correctly separate and identify
-    //async events without Arg or with RawExprArgICE
-
-    if (A) {
-        std::string AStr;
-        if (isa<RawExprArg>(A) && A->isICE()) {
-            NewName += "const_";
-            AStr = A->getICE().toString(10);
-        }
-        else {
-            AStr = A->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
-            ReplaceStringInPlace(AStr,"->","_");  //delimiter
-            ReplaceStringInPlace(AStr,".","_");   //delimiter
-        }
-        if (isa<ArrayElementArg>(A)) {
-            ReplaceStringInPlace(AStr,"[","_");  //delimiter
-            ReplaceStringInPlace(AStr,"]","_");  //delimiter
-        }
-        NewName += AStr;
-    }
-    else
-        NewName += "implicit_";
-
-    raw_string_ostream OS(NewName);
-    OS << "_" << EID;
-    EID++;
-
-    return OS.str();
-}
-#endif

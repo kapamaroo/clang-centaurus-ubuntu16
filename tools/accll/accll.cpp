@@ -119,8 +119,7 @@ int main(int argc, const char **argv) {
     std::vector<std::string> LibOCLFiles;
     std::vector<std::string> KernelFiles;
 
-    llvm::outs() << "\n\n#######     Stage0     #######\n\n";
-    llvm::outs() << "Check input files ...\n\n";
+    llvm::outs() << "Stage0: Check input files ...\n";
     RefactoringTool Tool0(OptionsParser.getCompilations(), UserInputFiles);
     Stage0_ConsumerFactory Stage0(InputFiles,KernelFiles);
     if (Tool0.runAndSave(newFrontendActionFactory(&Stage0))) {
@@ -129,30 +128,17 @@ int main(int argc, const char **argv) {
     }
 
     if (InputFiles.empty()) {
-        llvm::outs() << "Source code has no directives, nothing to do - exit\n";
+        llvm::outs() << "Source code has no directives, nothing to do - exit.\n";
         return 1;
     }
 
-    llvm::outs() << "\n\n#######     Stage1     #######\n\n";
-    llvm::outs() << "Generate new scopes, data moves, renaming ...\n";
+    llvm::outs() << "Stage1: Transform source code ...\n";
     RefactoringTool Tool1(OptionsParser.getCompilations(), InputFiles);
     Stage1_ConsumerFactory Stage1(Tool1.getReplacements(),LibOCLFiles,KernelFiles);
     if (Tool1.runAndSave(newFrontendActionFactory(&Stage1))) {
         llvm::errs() << "Stage1 failed - exit.\n";
         return 1;
     }
-
-#if 0
-    llvm::outs() << "\n\n#######     Stage3     #######\n\n";
-    llvm::outs() << "Write new kernels to separate '*.cl' files ...\n";
-    llvm::outs() << "Generate OpenCL API calls on host program ...\n";
-    RefactoringTool Tool3(OptionsParser.getCompilations(), InputFiles);
-    Stage3_ConsumerFactory Stage3(Tool3.getReplacements(),KernelFiles);
-    if (Tool3.runAndSave(newFrontendActionFactory(&Stage3))) {
-        llvm::errs() << "Stage3 failed - exit.\n";
-        return 1;
-    }
-#endif
 
 #if 0
     // Clang does not like the keyword 'static' for function declarations.
@@ -203,8 +189,7 @@ int main(int argc, const char **argv) {
     }
 #endif
 
-    llvm::outs() << "\n\n##############################\n\n";
-    llvm::outs() << "Format new generated source files ...\n";
+    llvm::outs() << "Format new generated source files ... ";
 
     int status = 0;
 
@@ -227,13 +212,18 @@ int main(int argc, const char **argv) {
         status += clang_format_main(*II,Style);
     }
 
-    llvm::outs() << "\n\n##############################\n\n";
-    llvm::outs() << "Check new generated source files ...\n";
+    if (!status) {
+        llvm::outs() << "Fail\n";
+        return 1;
+    }
+    llvm::outs() << "OK\n";
+
+    llvm::outs() << "Check new generated source files ... ";
 
     {
         ClangTool Tool5(OptionsParser.getCompilations(),InputFiles);
         if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
-            llvm::errs() << "FATAL: __internal_error__: illegal generated source code  -  Exit.\n";
+            llvm::errs() << "\nFATAL: __internal_error__: illegal generated source code  -  Exit.\n";
             return 1;
         }
     }
@@ -242,7 +232,7 @@ int main(int argc, const char **argv) {
     {
         ClangTool Tool5(OptionsParser.getCompilations(),KernelFiles);
         if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
-            llvm::errs() << "FATAL: __internal_error__: illegal generated source code  -  Exit.\n";
+            llvm::errs() << "\nFATAL: __internal_error__: illegal generated source code  -  Exit.\n";
             return 1;
         }
     }
@@ -251,15 +241,13 @@ int main(int argc, const char **argv) {
     {
         ClangTool Tool5(OptionsParser.getCompilations(),LibOCLFiles);
         if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
-            llvm::errs() << "FATAL: __internal_error__: illegal generated source code  -  Exit.\n";
+            llvm::errs() << "\nFATAL: __internal_error__: illegal generated source code  -  Exit.\n";
             return 1;
         }
     }
 
-    llvm::outs() << "\n\n##############################\n\n";
-    llvm::outs() << "New source files are valid\n" << "Generate object files ...\n\n";
-
-    int Res = 0;
+    llvm::outs() << "OK\n";
+    llvm::outs() << "Generate temporary object files ... ";
 
     {
         SmallVector<const char *, 256> cli;
@@ -288,6 +276,8 @@ int main(int argc, const char **argv) {
                 cli.push_back(argv[i]);
             }
 
+        int Res = 0;
+
         std::vector<std::string> TmpObjList;
 
         cli.push_back("-include__acl_api_types.h");
@@ -298,7 +288,7 @@ int main(int argc, const char **argv) {
                 continue;
             std::string obj = RemoveDotExtension(*II) + ".o";
             obj = GetBasename(obj);
-            llvm::outs() << obj << "\n";
+            //llvm::outs() << obj << "\n";
             TmpObjList.push_back(obj);
 
             cli.push_back(II->c_str());
@@ -318,7 +308,7 @@ int main(int argc, const char **argv) {
                 continue;
             std::string obj = RemoveDotExtension(*II) + ".o";
             obj = GetBasename(obj);
-            llvm::outs() << obj << "\n";
+            //llvm::outs() << obj << "\n";
             TmpObjList.push_back(obj);
 
             cli.push_back(II->c_str());
@@ -330,15 +320,21 @@ int main(int argc, const char **argv) {
             cli.pop_back();
         }
 
+        if (Res) {
+            llvm::outs() << "Fail\n";
+            return 1;
+        }
+        llvm::outs() << "OK\n";
+
         std::string ObjFile = RemoveDotExtension(UserInputFiles.front()) + ".o";
         ObjFile = GetBasename(ObjFile);
 
         if (CompileOnly && UserDefinedOutputFile.size())
             ObjFile = UserDefinedOutputFile;
 
-        {
-            std::string LinkerPath = "/usr/bin/ld";
+        std::string LinkerPath = "/usr/bin/ld";
 
+        {
             SmallVector<const char *, 256> ldcli;
             ldcli.push_back(LinkerPath.c_str());
             ldcli.push_back("-r");
@@ -349,8 +345,7 @@ int main(int argc, const char **argv) {
             ldcli.push_back(ObjFile.c_str());
             ldcli.push_back(0);
 
-            llvm::outs() << "\n\n##############################\n\n";
-            llvm::outs() << "Link partial object files to: " << ObjFile << " ...\n";
+            llvm::outs() << "Merge temporary object files to '" << ObjFile << "': ... ";
 
             int pid  = fork();
             if (pid < 0) {
@@ -360,20 +355,74 @@ int main(int argc, const char **argv) {
             if (!pid) {
                 //execvp(LinkerPath.c_str(),(char * const *)ldcli.data());
                 execlp(LinkerPath.c_str(),LinkerPath.c_str(),"-r",TmpObjList[0].c_str(),TmpObjList[1].c_str(),"-o",ObjFile.c_str(),(char *)NULL);
-                llvm::outs() << "Linker failed  -  exit.\n";
+                llvm::outs() << "Fail : execlp()  -  exit.\n";
                 return 1;
             }
 
-            if (waitpid(pid,NULL,0) < 0) {
-                llvm::outs() << "waitpid() failed  -  exit.\n";
+            int status;
+            if (waitpid(pid,&status,0) < 0) {
+                llvm::outs() << "Fail : waitpid()  -  exit.\n";
                 return 1;
             }
+
+            if (!WIFEXITED(status)) {
+                llvm::outs() << "Fail : linker termination  -  exit.\n";
+                return 1;
+            }
+
+            if (WEXITSTATUS(status)) {
+                llvm::outs() << "Fail : linker returned " << WEXITSTATUS(status) << "\n";
+                return 1;
+            }
+            llvm::outs() << "OK\n";
+
+            llvm::outs() << "Remove temporary object files ... ";
+            for (std::vector<std::string>::iterator
+                     II = TmpObjList.begin(), EE = TmpObjList.end(); II != EE; ++II)
+                if (unlink(II->c_str())) {
+                    llvm::outs() << "Fail : unlink()  -  exit.\n";
+                    return 1;
+                }
+            llvm::outs() << "OK\n";
         }
 
         if (!CompileOnly) {
-            llvm::outs() << "\n\n##############################\n\n";
-            llvm::outs() << "Link executable ...\n\n";
+            llvm::outs() << "Link with runtime ... ";
 
+#if 1
+            int Res = 0;
+            int pid  = fork();
+            if (pid < 0) {
+                llvm::outs() << "fork() failed  -  exit.\n";
+                return 1;
+            }
+            if (!pid) {
+                //execvp(LinkerPath.c_str(),(char * const *)ldcli.data());
+                if (UserDefinedOutputFile.size())
+                    execlp(LinkerPath.c_str(),LinkerPath.c_str(),ObjFile.c_str(),"-o",UserDefinedOutputFile.c_str(),(char *)NULL);
+                else
+                    execlp(LinkerPath.c_str(),LinkerPath.c_str(),ObjFile.c_str(),(char *)NULL);
+                llvm::outs() << "Fail : execlp()  -  exit.\n";
+                return 1;
+            }
+
+            int status;
+            if (waitpid(pid,&status,0) < 0) {
+                llvm::outs() << "Fail : waitpid()  -  exit.\n";
+                return 1;
+            }
+
+            if (!WIFEXITED(status)) {
+                llvm::outs() << "Fail : linker termination  -  exit.\n";
+                return 1;
+            }
+
+            if (WEXITSTATUS(status)) {
+                llvm::outs() << "Fail : linker returned " << WEXITSTATUS(status) << "\n";
+                return 1;
+            }
+            llvm::outs() << "OK\n";
+#else
             SmallVector<const char *, 256> ldcli;
             ldcli.push_back(ObjFile.c_str());
             llvm::outs() << ldcli.back() << "\n";
@@ -383,11 +432,17 @@ int main(int argc, const char **argv) {
                 ldcli.push_back("-o");
                 ldcli.push_back(UserDefinedOutputFile.c_str());
             }
-            runClang(ClangPath,ldcli);
+            int Res = runClang(ClangPath,ldcli);
+#endif
+            if (Res) {
+                llvm::outs() << "Fail\n";
+                return 1;
+            }
+            llvm::outs() << "OK\n";
         }
     }
 
     llvm::llvm_shutdown();
 
-    return Res;
+    return 0;
 }
