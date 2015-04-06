@@ -101,7 +101,7 @@ int main(int argc, const char **argv) {
 
     int ARGC = ARGV.size();
     llvm::outs() << "debug: Invoke Stages as: ";
-    for (int i=0; i<ARGV.size(); ++i)
+    for (size_t i=0; i<ARGV.size(); ++i)
         llvm::outs() << ARGV[i] + std::string(" ");
     llvm::outs() << "\n";
 
@@ -259,11 +259,9 @@ int main(int argc, const char **argv) {
     llvm::outs() << "\n\n##############################\n\n";
     llvm::outs() << "New source files are valid\n" << "Generate object files ...\n\n";
 
-    std::string ObjFile = RemoveDotExtension(UserInputFiles.front()) + ".o";
-    ObjFile = GetBasename(ObjFile);
-    {
-        int Res = 0;
+    int Res = 0;
 
+    {
         SmallVector<const char *, 256> cli;
 
         std::string ClangPath = "/opt/LLVM/build-dev/bin/clang-3.3";
@@ -306,7 +304,7 @@ int main(int argc, const char **argv) {
             cli.push_back(II->c_str());
             cli.push_back("-o");
             cli.push_back(obj.c_str());
-            Res = runClang(ClangPath,cli);
+            Res += runClang(ClangPath,cli);
             cli.pop_back();
             cli.pop_back();
             cli.pop_back();
@@ -326,11 +324,14 @@ int main(int argc, const char **argv) {
             cli.push_back(II->c_str());
             cli.push_back("-o");
             cli.push_back(obj.c_str());
-            Res = runClang(ClangPath,cli);
+            Res += runClang(ClangPath,cli);
             cli.pop_back();
             cli.pop_back();
             cli.pop_back();
         }
+
+        std::string ObjFile = RemoveDotExtension(UserInputFiles.front()) + ".o";
+        ObjFile = GetBasename(ObjFile);
 
         if (CompileOnly && UserDefinedOutputFile.size())
             ObjFile = UserDefinedOutputFile;
@@ -388,5 +389,5 @@ int main(int argc, const char **argv) {
 
     llvm::llvm_shutdown();
 
-    return 0;
+    return Res;
 }
