@@ -358,7 +358,11 @@ int main(int argc, const char **argv) {
                 llvm::outs() << "Linker failed  -  exit.\n";
                 return 1;
             }
-            waitpid(pid,NULL,0);
+
+            if (waitpid(pid,NULL,0) < 0) {
+                llvm::outs() << "waitpid() failed  -  exit.\n";
+                return 1;
+            }
         }
 
         if (!CompileOnly) {
