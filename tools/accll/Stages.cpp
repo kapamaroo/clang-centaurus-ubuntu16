@@ -1973,7 +1973,6 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     for (std::vector<std::string>::iterator
              II = APIHeaderVector.begin(), EE = APIHeaderVector.end(); II != EE; ++II)
         HostHeader += "#include <" + *II + ">\n";
-    HostHeader += "#include <malloc.h>\n";  //malloc_usable_size()
 
     HostHeader += "#define __kernel \n";
     HostHeader += "#define __global \n";

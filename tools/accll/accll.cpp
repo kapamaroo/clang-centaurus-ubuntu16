@@ -96,8 +96,12 @@ int main(int argc, const char **argv) {
     ARGV.push_back("-c");
 
     if (ExtraArgsStartPos)
-        for (int i=ExtraArgsStartPos + 1; i<argc; ++i)
+        for (int i=ExtraArgsStartPos + 1; i<argc; ++i) {
+            // ignore linker specific arguments
+            if (strlen(argv[i]) >= 2 && argv[i][0] == '-' && (argv[i][1] == 'l' || argv[i][1] == 'L'))
+                continue;
             ARGV.push_back(argv[i]);
+        }
 
     int ARGC = ARGV.size();
     llvm::outs() << "debug: Invoke Stages as: ";
@@ -189,6 +193,7 @@ int main(int argc, const char **argv) {
     }
 #endif
 
+    llvm::outs() << "\n";
     llvm::outs() << "Format new generated source files ... ";
 
     int status = 0;
@@ -273,6 +278,9 @@ int main(int argc, const char **argv) {
                     ++i;
                     continue;
                 }
+                // ignore linker specific arguments
+                else if (strlen(argv[i]) >= 2 && argv[i][0] == '-' && (argv[i][1] == 'l' || argv[i][1] == 'L'))
+                    continue;
                 cli.push_back(argv[i]);
             }
 
@@ -332,9 +340,9 @@ int main(int argc, const char **argv) {
         if (CompileOnly && UserDefinedOutputFile.size())
             ObjFile = UserDefinedOutputFile;
 
-        std::string LinkerPath = "/usr/bin/ld";
-
         {
+            std::string LinkerPath = "/usr/bin/ld";
+
             SmallVector<const char *, 256> ldcli;
             ldcli.push_back(LinkerPath.c_str());
             ldcli.push_back("-r");
@@ -353,8 +361,8 @@ int main(int argc, const char **argv) {
                 return 1;
             }
             if (!pid) {
-                //execvp(LinkerPath.c_str(),(char * const *)ldcli.data());
-                execlp(LinkerPath.c_str(),LinkerPath.c_str(),"-r",TmpObjList[0].c_str(),TmpObjList[1].c_str(),"-o",ObjFile.c_str(),(char *)NULL);
+                execvp(LinkerPath.c_str(),(char * const *)ldcli.data());
+                //execlp(LinkerPath.c_str(),LinkerPath.c_str(),"-r",TmpObjList[0].c_str(),TmpObjList[1].c_str(),"-o",ObjFile.c_str(),(char *)NULL);
                 llvm::outs() << "Fail : execlp()  -  exit.\n";
                 return 1;
             }
@@ -390,18 +398,28 @@ int main(int argc, const char **argv) {
             llvm::outs() << "Link with runtime ... ";
 
 #if 1
-            int Res = 0;
             int pid  = fork();
             if (pid < 0) {
                 llvm::outs() << "fork() failed  -  exit.\n";
                 return 1;
             }
             if (!pid) {
-                //execvp(LinkerPath.c_str(),(char * const *)ldcli.data());
-                if (UserDefinedOutputFile.size())
-                    execlp(LinkerPath.c_str(),LinkerPath.c_str(),ObjFile.c_str(),"-o",UserDefinedOutputFile.c_str(),(char *)NULL);
-                else
-                    execlp(LinkerPath.c_str(),LinkerPath.c_str(),ObjFile.c_str(),(char *)NULL);
+                SmallVector<const char *, 256> ldcli;
+                ldcli.push_back(ClangPath.c_str());
+                ldcli.push_back(ObjFile.c_str());
+                if (UserDefinedOutputFile.size()) {
+                    ldcli.push_back("-o");
+                    ldcli.push_back(UserDefinedOutputFile.c_str());
+                }
+                //ldcli.push_back("-v");
+
+                if (ExtraArgsStartPos)
+                    for (int i=ExtraArgsStartPos + 1; i<argc; ++i)
+                        ldcli.push_back(argv[i]);
+
+                ldcli.push_back(0);
+
+                execvp(ClangPath.c_str(),(char * const *)ldcli.data());
                 llvm::outs() << "Fail : execlp()  -  exit.\n";
                 return 1;
             }
@@ -433,11 +451,11 @@ int main(int argc, const char **argv) {
                 ldcli.push_back(UserDefinedOutputFile.c_str());
             }
             int Res = runClang(ClangPath,ldcli);
-#endif
             if (Res) {
                 llvm::outs() << "Fail\n";
                 return 1;
             }
+#endif
             llvm::outs() << "OK\n";
         }
     }
