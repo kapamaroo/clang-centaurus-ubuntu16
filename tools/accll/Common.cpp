@@ -36,6 +36,6 @@ GetDotExtension(const std::string &filename) {
 std::string
 GetBasename(const std::string &filename) {
     size_t lastslash = filename.find_last_of("/");
-    if (lastslash == std::string::npos) return "";
-    return filename.substr(lastslash,std::string::npos-1);
+    if (lastslash == std::string::npos) return filename;
+    return filename.substr(lastslash+1,std::string::npos-1);
 }
