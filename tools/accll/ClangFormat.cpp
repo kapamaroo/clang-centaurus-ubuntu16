@@ -93,5 +93,5 @@ static bool format(std::string FileName, std::string Style) {
 }  // namespace clang
 
 int clang_format_main(std::string FileName, std::string Style) {
-    return clang::format::format(FileName,Style);
+    return clang::format::format(FileName,Style) ? 0 : 1;
 }
