@@ -95,8 +95,9 @@ int main(int argc, const char **argv) {
     ARGV.push_back("-include__acl_api_types.h");
     ARGV.push_back("-c");
 
-    for (int i=ExtraArgsStartPos + 1; i<argc; ++i)
-        ARGV.push_back(argv[i]);
+    if (ExtraArgsStartPos)
+        for (int i=ExtraArgsStartPos + 1; i<argc; ++i)
+            ARGV.push_back(argv[i]);
 
     int ARGC = ARGV.size();
     llvm::outs() << "debug: Invoke Stages as: ";
