@@ -154,7 +154,12 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
     }
     else {
         // exists on header, just set the NameRef
-        //llvm::outs() << "debug: " << FD->getNameAsString() << "-------------------kernel function from header\n";
+        // we have a header dependency
+        SourceManager &SM = Context->getSourceManager();
+        std::string DefFile = SM.getFileEntryForID(SM.getFileID(FD->getLocStart()))->getName();
+        DepHeaders[DefFile] = true;
+
+        llvm::outs() << "debug: " << FD->getNameAsString() << "-------------------kernel function from header, add header dependency\n";
         DeviceCode.NameRef = AlternativeName;
     }
 
