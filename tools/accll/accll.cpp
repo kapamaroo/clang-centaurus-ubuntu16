@@ -487,8 +487,9 @@ int main(int argc, const char **argv) {
                 return 1;
             }
 #endif
-            llvm::outs() << "OK\n";
         }
+
+        llvm::outs() << "Success!\n";
     }
 
     llvm::llvm_shutdown();

@@ -10,6 +10,20 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 
+
+#define ANSI_COLOR_RED     "\x1b[31m"
+#define ANSI_COLOR_GREEN   "\x1b[32m"
+#define ANSI_COLOR_YELLOW  "\x1b[33m"
+#define ANSI_COLOR_BLUE    "\x1b[34m"
+#define ANSI_COLOR_MAGENTA "\x1b[35m"
+#define ANSI_COLOR_CYAN    "\x1b[36m"
+#define ANSI_COLOR_RESET   "\x1b[0m"
+
+#define DEBUG ANSI_COLOR_YELLOW "debug: " ANSI_COLOR_RESET
+#define NOTE ANSI_COLOR_CYAN "note: " ANSI_COLOR_RESET
+#define WARNING ANSI_COLOR_MAGENTA "warning: " ANSI_COLOR_RESET
+#define ERROR ANSI_COLOR_RED "error: " ANSI_COLOR_RESET
+
 using namespace llvm;
 using namespace clang;
 using namespace clang::tooling;
@@ -127,7 +141,8 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
     if (!FD->getResultType()->isVoidType()) {
         HostCode.NameRef = "NULL";
         DeviceCode.NameRef = "NULL";
-        llvm::outs() << "Error: Function '" << FD->getNameAsString()
+        llvm::outs() << ERROR
+                     << "Function '" << FD->getNameAsString()
                      << "' must have return type of void to define a task\n";
         return;
     }
@@ -156,7 +171,8 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         std::string DefFile = SM.getFileEntryForID(SM.getFileID(FD->getLocStart()))->getName();
         DepHeaders[DefFile] = true;
 
-        llvm::outs() << "debug: " << FD->getNameAsString() << "-------------------kernel function from header, add header dependency\n";
+        llvm::outs() << DEBUG
+                     << FD->getNameAsString() << "-------------------kernel function from header, add header dependency\n";
         DeviceCode.NameRef = AlternativeName;
     }
 
@@ -200,7 +216,8 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         }
         else {
             // exists on header
-            //llvm::outs() << "debug: " << DepFD->getNameAsString() << "-------------------function dep from header\n";
+            //llvm::outs() << DEBUG
+            //             << DepFD->getNameAsString() << "-------------------function dep from header\n";
             continue;
         }
     }
@@ -251,9 +268,13 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         llvm::outs() << BuildLog;
         llvm::outs() << "\n#################################\n";
     }
-    else
-        llvm::outs() << "Binary for '" << DeviceCode.NameRef << "' kernel found in cache directory '"
-                     << OpenCLCacheDir << "'  -  delete cache directory to force regeneration of build log.\n";
+    else {
+        llvm::outs() << WARNING
+                     << "kernel binary for '" << DeviceCode.NameRef
+                     << "' found in cache directory '" << OpenCLCacheDir << "'\n";
+        llvm::outs() << NOTE
+                     << "delete cache directory to force regeneration of build log.\n";
+    }
 
     HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
     HostCode.Definition = "struct _kernel_struct " + HostCode.NameRef
@@ -635,7 +656,8 @@ Stage0_ASTVisitor::Finish(ASTContext *Context) {
     llvm::outs() << "Found                   : '" << FileName << "'\n";
 
     if (!hasDirectives && !hasRuntimeCalls) {
-        llvm::outs() << "debug: skip file without OpenACC Directives or Runtime Calls: '"
+        llvm::outs() << DEBUG
+                     << "skip file without OpenACC Directives or Runtime Calls: '"
                      << FileName << "'\n";
         return;
     }
@@ -868,7 +890,8 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         FunctionDecl *AccurateFun = CE->getDirectCallee();
         FunctionDecl *ApproxFun = getApproxFunctionDecl(DI);
         if (Context->isFunctionWithSubtasks(AccurateFun) && ApproxFun) {
-            llvm::outs() << "error: Kernel with subtasks '"
+            llvm::outs() << ERROR
+                         << "Kernel with subtasks '"
                          << AccurateFun->getNameAsString()
                          << "' cannot have direct approximate version\n";
             return true;
@@ -1072,7 +1095,8 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         //therefore not a dependency (pass by value)
         A = TmpA;
         if (A->getExpr()->getType()->isPointerType()) {
-            llvm::outs() << "warning: argument " << toString(Index + 1) << " '"
+            llvm::outs() << WARNING
+                         << "argument " << toString(Index + 1) << " '"
                          << A->getPrettyArg(Context->getPrintingPolicy())
                          << "' not found in data clauses - treat as 'in' dependency\n";
         }
@@ -1088,12 +1112,6 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
                          << "' in Clause '" << A->getParent()->getAsClause()->getAsString() << "'\n";
             return ObjRefDef();
         }
-#if 0
-#error we do not have inter-region memory buffers, the runtime handles them
-        else
-            //FIXME: some of the Args may already exist because of previous regions
-            RStack.InterRegionMemBuffers.push_back(A);
-#endif
     }
 
     std::string OrigName = A->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
@@ -1153,7 +1171,10 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
     else if (Ty->isPointerType()) {
         SizeExpr = DynSizeMap.lookup(OrigName);
         if (!SizeExpr.size()) {
-            llvm::outs() << "warning: '" << OrigName << "'pointer's data size not found automatically - use malloc_usable_size(void *)\n";
+            llvm::outs() << WARNING
+                         << "'" << OrigName << "' pointer's data size not found automatically\n";
+            llvm::outs() << NOTE
+                         << "use malloc_usable_size(void *)\n";
             SizeExpr = "malloc_usable_size(" + A->getPrettyArg(Context->getPrintingPolicy()) + ")";
         }
     }
@@ -1250,7 +1271,8 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
              II = PragmaArgs.begin(), EE = PragmaArgs.end(); II != EE; ++II)
         if (!isa<SubArrayArg>(*II) && !isa<ArrayArg>(*II) &&
             (!isa<VarArg>(*II) || !(*II)->getExpr()->getType()->isPointerType()))
-            llvm::outs() << "warning: ignore invalid '" << (*II)->getParent()->getAsClause()->getAsString()
+            llvm::outs() << WARNING
+                         << "ignore invalid '" << (*II)->getParent()->getAsClause()->getAsString()
                          << "' data dependency for pass-by-value argument '"
                          << (*II)->getPrettyArg(PrintingPolicy(Context->getLangOpts())) << "' (" << (*II)->getKindAsString() << ")\n";
 
@@ -1263,7 +1285,8 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
         NameRef = "NULL";
         //Definition = "";
         NumArgs = "0";
-        llvm::outs() << "error: number of pass-by-reference function arguments (" << PtrArgs.size()
+        llvm::outs() << ERROR
+                     << "number of pass-by-reference function arguments (" << PtrArgs.size()
                      << ") and dependency data clause arguments (" << PragmaArgs.size()
                      << ") mismatch\n";
         return;
@@ -1482,7 +1505,8 @@ Stage1_ASTVisitor::VisitRecordDecl(RecordDecl *R) {
         return true;
 
     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
-    //llvm::outs() << "debug: user defined record '" << R->getNameAsString() << "' from file :" << DefFile << "\n";
+    //llvm::outs() << DEBUG
+    //             << "user defined record '" << R->getNameAsString() << "' from file :" << DefFile << "\n";
 
     //maybe the implementation headers are not in system directories
     if (!SM.isFromMainFile(Loc)) {
@@ -1509,7 +1533,8 @@ Stage1_ASTVisitor::VisitEnumDecl(EnumDecl *E) {
         return true;
 
     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
-    //llvm::outs() << "debug: user defined enum '" << E->getNameAsString() << "' from file :" << DefFile << "\n";
+    //llvm::outs() << DEBUG
+    //             << "user defined enum '" << E->getNameAsString() << "' from file :" << DefFile << "\n";
 
     //maybe the implementation headers are not in system directories
     if (!SM.isFromMainFile(Loc)) {
@@ -1545,7 +1570,8 @@ Stage1_ASTVisitor::VisitTypedefDecl(TypedefDecl *T) {
         return true;
     }
     std::string DefFile = F->getName();
-    //llvm::outs() << "debug: user defined typedef '" << T->getNameAsString() << "' from file :" << DefFile << "\n";
+    //llvm::outs() << DEBUG
+    //             << "user defined typedef '" << T->getNameAsString() << "' from file :" << DefFile << "\n";
 
     //maybe the implementation headers are not in system directories
     if (!SM.isFromMainFile(Loc)) {
