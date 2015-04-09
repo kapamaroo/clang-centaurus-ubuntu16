@@ -419,22 +419,22 @@ int main(int argc, const char **argv) {
                 //-lpthread -lOpenCL -ldl -lrt -fPIC -lm -lnvidia-ml
 
                 // we also need the path to OpenCL library
-                std::string OCLPath("/usr/local/cuda-6.5/targets/x86_64-linux/lib");
-                std::string OCLPathFlag("-L" + OCLPath);
+                //std::string OCLPath("/usr/local/cuda-6.5/targets/x86_64-linux/lib");
+                //std::string OCLPathFlag("-L" + OCLPath);
+                //ldcli.push_back(OCLPathFlag.c_str());
+                //ldcli.push_back("-lOpenCL");
 
                 // ... and nvidia-ml path
                 std::string NVMLPath("/usr/lib/nvidia-340");
                 std::string NVMLPathFlag("-L" + NVMLPath);
+                ldcli.push_back("-lnvidia-ml");
 
-                ldcli.push_back(OCLPathFlag.c_str());
                 ldcli.push_back(NVMLPathFlag.c_str());
                 ldcli.push_back("-lpthread");
-                ldcli.push_back("-lOpenCL");
                 ldcli.push_back("-ldl");
                 ldcli.push_back("-lrt");
                 ldcli.push_back("-fPIC");
                 ldcli.push_back("-lm");
-                ldcli.push_back("-lnvidia-ml");
                 std::string LibStaticRuntime(LibPath + "/libcentaurus.a");
                 ldcli.push_back(LibStaticRuntime.c_str());
                 if (UserDefinedOutputFile.size()) {
