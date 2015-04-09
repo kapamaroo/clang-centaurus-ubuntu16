@@ -1295,6 +1295,7 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
 
     APIHeaderVector.push_back("centaurus_common.h");
     APIHeaderVector.push_back("__acl_api_types.h");
+    APIHeaderVector.push_back("malloc.h");
 
     SourceManager &SM = Context->getSourceManager();
     std::string FileName = SM.getFileEntryForID(SM.getMainFileID())->getName();
