@@ -361,8 +361,7 @@ int main(int argc, const char **argv) {
                 return 1;
             }
             if (!pid) {
-                execvp(LinkerPath.c_str(),(char * const *)ldcli.data());
-                //execlp(LinkerPath.c_str(),LinkerPath.c_str(),"-r",TmpObjList[0].c_str(),TmpObjList[1].c_str(),"-o",ObjFile.c_str(),(char *)NULL);
+                execvp(LinkerPath.c_str(),(char * const *)const_cast<char **>(ldcli.data()));
                 llvm::outs() << "Fail : execlp()  -  exit.\n";
                 return 1;
             }
@@ -419,7 +418,7 @@ int main(int argc, const char **argv) {
 
                 ldcli.push_back(0);
 
-                execvp(ClangPath.c_str(),(char * const *)ldcli.data());
+                execvp(ClangPath.c_str(),(char * const *)const_cast<char **>(ldcli.data()));
                 llvm::outs() << "Fail : execlp()  -  exit.\n";
                 return 1;
             }
