@@ -609,7 +609,7 @@ void StmtPrinter::VisitAccStmt(AccStmt *Node) {
         PrintStmt(Node->getSubStmt());
     }
     else if (SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK) {
-        assert(DI->getKind() == DK_SUBTASK);
+        assert(DI->getKind() == openacc::DK_SUBTASK);
         AlternativeName = getApproxFunctionName(DI);
         if (!AlternativeName.size())
             return;
@@ -628,7 +628,7 @@ void StmtPrinter::VisitAccStmt(AccStmt *Node) {
         AlternativeName = std::string();
     }
     else if (SubtaskPrintMode == openacc::K_PRINT_ACCURATE_SUBTASK) {
-        assert(DI->getKind() == DK_SUBTASK);
+        assert(DI->getKind() == openacc::DK_SUBTASK);
         if (CallExpr *CE = dyn_cast<CallExpr>(Node->getSubStmt())) {
             if (CE->getDirectCallee()->getASTContext().isFunctionWithSubtasks(CE->getDirectCallee()))
                 AlternativeName = CE->getDirectCallee()->getNameAsString() + "__accurate__";
@@ -1993,7 +1993,7 @@ void Stmt::printPrettyAccurateVersion(raw_ostream &OS,
 
   StmtPrinter P(OS, Helper, Policy, Indentation);
   P.SubtaskPrintMode = openacc::K_PRINT_ACCURATE_SUBTASK;
-  assert(isa<CompountStmt>(this) && "Not a function body");
+  assert(isa<CompoundStmt>(this) && "Not a function body");
   P.Visit(const_cast<Stmt*>(this));
 }
 
@@ -2008,7 +2008,7 @@ void Stmt::printPrettyApproximateVersion(raw_ostream &OS,
 
   StmtPrinter P(OS, Helper, Policy, Indentation);
   P.SubtaskPrintMode = openacc::K_PRINT_APPROXIMATE_SUBTASK;
-  assert(isa<CompountStmt>(this) && "Not a function body");
+  assert(isa<CompoundStmt>(this) && "Not a function body");
   P.Visit(const_cast<Stmt*>(this));
 }
 
