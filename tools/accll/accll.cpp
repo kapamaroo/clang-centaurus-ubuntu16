@@ -35,6 +35,8 @@ using namespace accll;
 //                        Main Tool
 ///////////////////////////////////////////////////////////////////////////////
 
+static std::string InstallPath = "/opt/LLVM";
+
 int runClang(std::string Path, SmallVector<const char *, 256> &cli) {
     using namespace clang::driver;
 
@@ -89,9 +91,15 @@ int main(int argc, const char **argv) {
     for (int i=0; i<tool_argc; ++i)
         ARGV.push_back(argv[i]);
 
+    std::string IncludePath(InstallPath + "/include");
+    std::string LibPath(InstallPath + "/lib");
+
+    std::string IncludeFlag("-I" + IncludePath);
+    //std::string LibFlag("-L" + LibPath);
+
     ARGV.push_back("--");
     ARGV.push_back("-fopenacc");
-    ARGV.push_back("-I/opt/LLVM/include");
+    ARGV.push_back(IncludeFlag.c_str());
     ARGV.push_back("-include__acl_api_types.h");
     ARGV.push_back("-c");
 
@@ -257,12 +265,12 @@ int main(int argc, const char **argv) {
     {
         SmallVector<const char *, 256> cli;
 
-        std::string ClangPath = "/opt/LLVM/build-dev/bin/clang-3.3";
+        std::string ClangPath = InstallPath + "/build-dev/bin/clang-3.3";
 
         //cli.push_back("-###");
         cli.push_back("-Wall");
         cli.push_back("-fopenacc");
-        cli.push_back("-I/opt/LLVM/include");
+        cli.push_back(IncludeFlag.c_str());
         cli.push_back("-c");
 
         bool CompileOnly = false;
@@ -406,10 +414,34 @@ int main(int argc, const char **argv) {
                 SmallVector<const char *, 256> ldcli;
                 ldcli.push_back(ClangPath.c_str());
                 ldcli.push_back(ObjFile.c_str());
+
+                // the runtime linker flags
+                //-lpthread -lOpenCL -ldl -lrt -fPIC -lm -lnvidia-ml
+
+                // we also need the path to OpenCL library
+                std::string OCLPath("/usr/local/cuda-6.5/targets/x86_64-linux/lib");
+                std::string OCLPathFlag("-L" + OCLPath);
+
+                // ... and nvidia-ml path
+                std::string NVMLPath("/usr/lib/nvidia-340");
+                std::string NVMLPathFlag("-L" + NVMLPath);
+
+                ldcli.push_back(OCLPathFlag.c_str());
+                ldcli.push_back(NVMLPathFlag.c_str());
+                ldcli.push_back("-lpthread");
+                ldcli.push_back("-lOpenCL");
+                ldcli.push_back("-ldl");
+                ldcli.push_back("-lrt");
+                ldcli.push_back("-fPIC");
+                ldcli.push_back("-lm");
+                ldcli.push_back("-lnvidia-ml");
+                std::string LibStaticRuntime(LibPath + "/libcentaurus.a");
+                ldcli.push_back(LibStaticRuntime.c_str());
                 if (UserDefinedOutputFile.size()) {
                     ldcli.push_back("-o");
                     ldcli.push_back(UserDefinedOutputFile.c_str());
                 }
+
                 //ldcli.push_back("-v");
 
                 if (ExtraArgsStartPos)
