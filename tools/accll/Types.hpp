@@ -1,7 +1,6 @@
 #ifndef __ACCLL_TYPES_H__
 #define __ACCLL_TYPES_H__
 
-#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/SetVector.h"
 
@@ -22,7 +21,6 @@ namespace clang {
 namespace accll {
 typedef llvm::StringMap<size_t> UIDKernelMap;
 typedef std::pair<std::string, std::string> ArgNames;
-typedef llvm::DenseMap<clang::openacc::Arg*,ArgNames> NameMap;
 
 struct ObjRefDef {
 #if 1
@@ -46,14 +44,14 @@ struct DataIOSrc {
     std::string NumArgs;
 
     DataIOSrc(clang::ASTContext *Context,clang::openacc::DirectiveInfo *DI,
-              NameMap &Map,clang::openacc::RegionStack &RStack)
+              clang::openacc::RegionStack &RStack)
     {
-        init(Context,DI,Map,RStack);
+        init(Context,DI,RStack);
     }
 
 private:
     void init(clang::ASTContext *Context,clang::openacc::DirectiveInfo *DI,
-              NameMap &Map,clang::openacc::RegionStack &RStack);
+              clang::openacc::RegionStack &RStack);
 };
 
 struct KernelRefDef {

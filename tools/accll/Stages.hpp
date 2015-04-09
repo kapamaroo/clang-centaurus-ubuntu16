@@ -134,8 +134,6 @@ private:
     clang::ASTContext *Context;
     clang::CallGraph *CG;
 
-    NameMap Map;
-
     typedef std::pair<clang::openacc::ClauseInfo*, std::string> AsyncEvent;
     typedef llvm::SmallVector<AsyncEvent,8> AsyncEventVector;
     AsyncEventVector AsyncEvents;
@@ -151,21 +149,6 @@ private:
     std::string CommonFileHeader;
     std::string NewHeader;
     std::string HostHeader;
-
-    std::string addMoveHostToDevice(clang::openacc::Arg *A,
-                                    clang::openacc::ClauseInfo *AsyncCI = 0,
-                                    std::string Event = std::string());
-    std::string addMoveDeviceToHost(clang::openacc::Arg *A,
-                                    clang::openacc::ClauseInfo *AsyncCI = 0,
-                                    std::string Event = std::string());
-
-    std::string CreateNewUniqueEventNameFor(clang::openacc::Arg *A);
-
-    std::string EmitCodeForDirectiveWait(clang::openacc::DirectiveInfo *DI,
-                                         clang::Stmt *SubStmt);
-
-    clang::openacc::Arg *EmitImplicitDataMoveCodeFor(clang::Expr *E);
-    bool Rename(clang::Expr *E);
 
     bool Stage1_TraverseTemplateArgumentLocsHelper(const clang::TemplateArgumentLoc *TAL,unsigned Count);
 
@@ -193,10 +176,6 @@ public:
 
     bool VisitAccStmt(clang::AccStmt *ACC);
     bool VisitDeclStmt(clang::DeclStmt *DS);
-    bool VisitVarDecl(clang::VarDecl *VD);
-    bool VisitDeclRefExpr(clang::DeclRefExpr *DRE);
-    bool VisitMemberExpr(clang::MemberExpr *ME);
-    bool VisitArraySubscriptExpr(clang::ArraySubscriptExpr *ASE);
     bool VisitReturnStmt(clang::ReturnStmt *S);
     bool VisitBinaryOperator(clang::BinaryOperator *BO);
 
