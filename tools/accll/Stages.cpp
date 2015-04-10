@@ -239,7 +239,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         + " = "
         + "\"" + __inline_definition + "\";";
 
-    BuildOptions.push_back("-cl-nv-verbose");
+    //BuildOptions.push_back("-cl-nv-verbose");
     std::string BinArray = compile(__offline,"NVIDIA",BuildOptions);
     if (BinArray.size()) {
         Binary.NameRef = "__binArray_" + DeviceCode.NameRef;

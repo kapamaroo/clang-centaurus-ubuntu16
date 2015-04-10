@@ -246,6 +246,9 @@ KernelRefDef::compile(std::string src, const std::string &platform, const std::v
              II = options.begin(), EE = options.end(); II != EE; ++II)
         BuildOptions += *II + " ";
 
+    if (platform.compare("NVIDIA") == 0)
+        BuildOptions += "-cl-nv-verbose";
+
     std::string includesStr;
     std::string definesStr;
 
