@@ -54,6 +54,23 @@ private:
               clang::openacc::RegionStack &RStack);
 };
 
+struct PTXASInfo {
+    size_t arch;
+
+    //Number of registers
+    size_t registers;
+
+    //sizes are in bytes
+
+    //total global size
+    size_t gmem;
+
+    size_t stack_frame;
+    size_t spill_stores;
+    size_t spill_loads;
+    size_t cmem;
+};
+
 struct KernelRefDef {
     static UIDKernelMap KernelUIDMap;
 
@@ -64,6 +81,7 @@ struct KernelRefDef {
 
     std::vector<std::string> BuildOptions;
     std::string BuildLog;
+    struct PTXASInfo ParsedBuildLog;
 
     KernelRefDef() {}
 

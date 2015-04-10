@@ -78,6 +78,98 @@ void getProgBinary(cl_program cpProgram, cl_device_id cdDevice, char** binary, s
 ////////////////////////////////////////////////////////////////////////////////
 // Get the build log from ocl
 ////////////////////////////////////////////////////////////////////////////////
+struct accll::PTXASInfo ParsePTXLog(const std::string &Log) {
+    /*
+      ptxas info    : 0 bytes gmem
+      ptxas info    : Compiling entry function 'kernel_pbpi1' for 'sm_30'
+      ptxas info    : Function properties for kernel_pbpi1
+      ptxas         .     0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      ptxas info    : Used 28 registers, 348 bytes cmem[0]
+      ptxas info    : Compiling entry function 'kernel_pbpi2' for 'sm_30'
+      ptxas info    : Function properties for kernel_pbpi2
+      ptxas         .     0 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+      ptxas info    : Used 37 registers, 360 bytes cmem[0]
+    */
+
+    struct accll::PTXASInfo info;
+    memset(&info,0,sizeof(struct accll::PTXASInfo));
+
+    const char *str = Log.c_str();
+    const char *end = str + Log.size();
+    while (*str != '\0') {
+        while (str != end && !isdigit(*str))
+            str++;
+        if (str == end)
+            break;
+
+        char *lastpos = NULL;
+        size_t tmp_value = std::strtol(str,&lastpos,0);
+        assert(str != lastpos);
+        if (*lastpos == '\0')
+            break;
+        str = lastpos;
+        if (*str == '\'') {
+            if (str[1] == '\n')
+                //handle arch
+                info.arch = tmp_value;
+        }
+        else if (*str == ']') {
+            //ignore
+            continue;
+        }
+        else if (isspace(*str)) {
+            //eat space
+            str++;
+            if (strncmp(str,"bytes gmem",10) == 0) {
+                str += 10;
+                info.gmem += tmp_value;
+            }
+            else if (strncmp(str,"bytes cmem",10) == 0) {
+                str += 10;
+                info.cmem += tmp_value;
+            }
+            else if (strncmp(str,"bytes stack frame",17) == 0) {
+                str += 17;
+                info.stack_frame += tmp_value;
+            }
+            else if (strncmp(str,"bytes spill stores",18) == 0) {
+                str += 18;
+                info.spill_stores += tmp_value;
+            }
+            else if (strncmp(str,"bytes spill loads",17) == 0) {
+                str += 17;
+                info.spill_loads += tmp_value;
+            }
+            else if (strncmp(str,"registers",9) == 0) {
+                str += 9;
+                info.registers += tmp_value;
+            }
+        }
+    }
+
+#if 0
+    std::cout
+        << info.arch
+        << "\n"
+        << info.registers
+        << "\n"
+        << info.gmem
+        << "\n"
+        << info.stack_frame
+        << "\n"
+        << info.spill_stores
+        << "\n"
+        << info.spill_loads
+        << "\n"
+        << info.cmem
+        << "\n"
+        << "\n"
+        ;
+#endif
+
+    return info;
+}
+
 std::string ocltLogBuildInfo(cl_program cpProgram, cl_device_id cdDevice)
 {
     cl_int errcode;
@@ -191,6 +283,9 @@ KernelRefDef::compile(std::string src, const std::string &platform, const std::v
     if(errcode != CL_SUCCESS) {
         return std::string();
     }
+
+    if (BuildLog.size())
+        ParsedBuildLog = ParsePTXLog(BuildLog);
 
     // Store the binary in the file system
     char* binary;
