@@ -30,7 +30,6 @@ extern "C" {
    extern char __ocl_code_end   __attribute__((weak));
 }
 
-cl_int         ocltGetPlatformID(cl_platform_id* clSelectedPlatformID, const char* name);
 void           ocltExtractKernels();
 char*          ocltLoadKernelSrc(const char* filename, size_t* length);
 unsigned char* ocltLoadKernelBin(const char* filename, char** compilerFlags, size_t* length);
@@ -95,58 +94,6 @@ void ocltExtractKernels()
       start_flag   = end_name + 1;
    }
 
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Gets the OpenCL cl_platform_id
-////////////////////////////////////////////////////////////////////////////////
-cl_int ocltGetPlatformID(cl_platform_id* clSelectedPlatformID, const char* name)
-{
-    char            buffer[2048];
-    cl_uint         num_platforms;
-    cl_platform_id* clPlatformIDs;
-    cl_int          status;
-
-    *clSelectedPlatformID = NULL;
-
-    status = clGetPlatformIDs(0, NULL, &num_platforms);
-    if (status != CL_SUCCESS)
-    {
-        std::cerr << "Error " << status << "in clGetPlatformIDs" << std::endl;
-        return -1;
-    }
-    if(num_platforms == 0)
-    {
-        std::cerr << "No OpenCL platform found!" << std::cout;
-        return -2;
-    }
-    else
-    {
-        clPlatformIDs = (cl_platform_id*)malloc(num_platforms * sizeof(cl_platform_id));
-
-        status = clGetPlatformIDs(num_platforms, clPlatformIDs, NULL);
-        for(uint i = 0; i < num_platforms; ++i)
-        {
-            status = clGetPlatformInfo(clPlatformIDs[i], CL_PLATFORM_NAME, 2048, &buffer, NULL);
-            if(status == CL_SUCCESS)
-            {
-                if(strstr(buffer, name) != NULL)
-                {
-                    *clSelectedPlatformID = clPlatformIDs[i];
-                    break;
-                }
-            }
-        }
-
-        if(*clSelectedPlatformID == NULL)
-        {
-            std::cerr << "WARNING: Requested OpenCL platform not found - defaulting to first platform!" << std::endl;
-            *clSelectedPlatformID = clPlatformIDs[0];
-        }
-        free(clPlatformIDs);
-    }
-
-    return CL_SUCCESS;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

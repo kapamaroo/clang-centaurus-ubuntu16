@@ -55,6 +55,8 @@ private:
 };
 
 struct PTXASInfo {
+    std::string Raw;
+
     size_t arch;
 
     //Number of registers
@@ -69,6 +71,32 @@ struct PTXASInfo {
     size_t spill_stores;
     size_t spill_loads;
     size_t cmem;
+
+    PTXASInfo(std::string Log, std::string PlatformName);
+    PTXASInfo() :
+        Raw(std::string()), arch(0), registers(0), gmem(0),
+        stack_frame(0), spill_stores(0), spill_loads(0), cmem(0) {}
+};
+
+struct DeviceBin : public ObjRefDef {
+    std::string PlatformName;
+    ObjRefDef Bin;
+    struct PTXASInfo Log;
+
+    explicit DeviceBin(std::string NameRef, std::string Definition,
+                       std::string PlatformName, ObjRefDef Bin,
+                       std::string RawLog)
+        : ObjRefDef(NameRef,Definition),
+        PlatformName(PlatformName), Bin(Bin), Log(RawLog,PlatformName) {}
+};
+
+struct PlatformBin : public ObjRefDef, public std::vector<DeviceBin> {
+    //if empty ignore this KernelBin
+    std::string PlatformName;
+
+    explicit PlatformBin(std::string PlatformName) : PlatformName(PlatformName) {}
+
+    PlatformBin() {}
 };
 
 struct KernelRefDef {
@@ -77,11 +105,11 @@ struct KernelRefDef {
     ObjRefDef HostCode;
     ObjRefDef DeviceCode;
     ObjRefDef InlineDeviceCode;
-    ObjRefDef Binary;
 
+    //common for all platforms
     std::vector<std::string> BuildOptions;
-    std::string BuildLog;
-    struct PTXASInfo ParsedBuildLog;
+
+    std::vector<PlatformBin> Binary;
 
     KernelRefDef() {}
 
@@ -89,9 +117,8 @@ struct KernelRefDef {
                       llvm::SmallSetVector<clang::FunctionDecl *,sizeof(clang::FunctionDecl *)> &Deps);
 
     //return the size of the compiled kernel in bytes, 0 if cannot compile
-    std::string compile(std::string inFile,
-                        const std::string &platform = std::string("NVIDIA"),
-                        const std::vector<std::string> &options = std::vector<std::string>());
+    int compile(std::string src, std::string SymbolName, std::string PrefixDef,
+                const std::vector<std::string> &options = std::vector<std::string>());
 
     KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, clang::CallGraph *CG,
                  std::string &Extensions, std::string &UserTypes,

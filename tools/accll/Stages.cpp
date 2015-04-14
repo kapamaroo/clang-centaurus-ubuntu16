@@ -1,11 +1,8 @@
 #include "Stages.hpp"
 #include "Common.hpp"
 
-#include <sstream>
 #include <iostream>
 #include <fstream>
-#include <sstream>
-#include <iomanip>
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
@@ -49,25 +46,20 @@ namespace {
     llvm::SmallPtrSet<FunctionDecl *,32> EraseFunctionDeclPool;
 }
 
-template <typename T>
-static std::string toString(const T &x) {
-    std::string out;
-    llvm::raw_string_ostream OS(out);
-    OS << x;
-    OS.str();
-    return out;
-}
-
-static std::string ToHex(const std::string src) {
-    std::string out;
-    //llvm::raw_string_ostream OS(out);
-    std::stringstream OS;
-    for (size_t i=0; i<src.size(); ++i) {
-        if (i)
-            OS << ",";
-        OS << "0x" << std::setfill('0') << std::setw(2)
-           << std::hex << (unsigned int)src[i];
-    }
+std::string print(const PTXASInfo &info) {
+    std::string str;
+    llvm::raw_string_ostream OS(str);
+#define PRINT(x) #x << " = " << x << "\n"
+    OS  << "\n\n"
+        << PRINT(info.arch)
+        << PRINT(info.registers)
+        << PRINT(info.gmem)
+        << PRINT(info.stack_frame)
+        << PRINT(info.spill_stores)
+        << PRINT(info.spill_loads)
+        << PRINT(info.cmem)
+        ;
+#undef PRINT
     return OS.str();
 }
 
@@ -239,53 +231,67 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         + " = "
         + "\"" + __inline_definition + "\";";
 
-    //BuildOptions.push_back("-cl-nv-verbose");
-    std::string BinArray = compile(__offline,"NVIDIA",BuildOptions);
-    if (BinArray.size()) {
-        Binary.NameRef = "__binArray_" + DeviceCode.NameRef;
-#if 1
-        std::string HexBinArray = ToHex(BinArray);
-#else
-        std::string HexBinArray;
-#endif
-        Binary.HeaderDecl = "extern const unsigned char " + Binary.NameRef
-            + "[" + toString(BinArray.size()) + "];";
-        Binary.Definition = "const unsigned char " + Binary.NameRef
-            + "[" + toString(BinArray.size()) + "]"
-            +" = "
-            + "{" + HexBinArray + "};";
-    }
-    else {
-        Binary.NameRef = "NULL";
-        //Binary.Definition = "NULL";
-    }
+    std::string PrefixDef;
+    if (SubtaskPrintMode == K_PRINT_ACCURATE_SUBTASK)
+        PrefixDef += "__ACCR__";
+    else if (SubtaskPrintMode == K_PRINT_APPROXIMATE_SUBTASK)
+        PrefixDef += "__APRX__";
+    compile(__offline,DeviceCode.NameRef,PrefixDef,BuildOptions);
 
     // On Linux the driver caches compiled kernels in ~/.nv/ComputeCache.
     // Deleting this folder forces a recompile.
     std::string OpenCLCacheDir = "~/.nv/ComputeCache";
-    if (BuildLog.size()) {
-        llvm::outs() << "########    Build Log (" << DeviceCode.NameRef << ")   ########\n";
-        llvm::outs() << BuildLog;
-        llvm::outs() << "\n#################################\n";
-    }
-    else {
-        llvm::outs() << WARNING
-                     << "kernel binary for '" << DeviceCode.NameRef
-                     << "' found in cache directory '" << OpenCLCacheDir << "'\n";
+
+    std::string PreAPIDef;
+    std::string PlatformTableName = PrefixDef + "PLATFORM_TABLE";
+    std::string PlatformTable = "struct _platform_bin *" + PlatformTableName + "[ACL_SUPPORTED_PLATFORMS_NUM] = { NULL };";
+
+    for (std::vector<PlatformBin>::iterator
+             II = Binary.begin(), EE = Binary.end(); II != EE; ++II) {
+        PlatformBin &Platform = *II;
         llvm::outs() << NOTE
-                     << "delete cache directory to force regeneration of build log.\n";
+                     << "########    [" << Platform.PlatformName << "]'\n";
+
+        std::string PlatformDef;
+
+        for (std::vector<DeviceBin>::iterator
+                 DI = Platform.begin(), DE = Platform.end(); DI != DE; ++DI) {
+            DeviceBin &Device = *DI;
+            llvm::outs() << NOTE
+                << "########" << Device.Bin.NameRef << "' build log   ########\n";
+            if (Device.Log.Raw.size()) {
+                llvm::outs() << Device.Log.Raw;
+                if (Device.PlatformName.compare("NVIDIA") == 0) {
+                    llvm::outs() << print(Device.Log);
+                }
+            }
+            else {
+                llvm::outs() << WARNING
+                             << "[OpenCL cache]: found '" << Device.Bin.NameRef << "'  -  "
+                             << "delete cache directory '" << OpenCLCacheDir
+                             << "' to regenerate the build log.\n";
+            }
+
+            PlatformDef += Device.Definition;
+        }
+
+        PlatformDef += Platform.Definition;
+        PreAPIDef += PlatformDef;
+        PlatformTable += PlatformTableName + "[" "PL_" + Platform.PlatformName + "] = &" + Platform.NameRef + ";";
+
+        llvm::outs() << "\n#################################\n";
     }
 
     HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
-    HostCode.Definition = "struct _kernel_struct " + HostCode.NameRef
+    HostCode.Definition = PreAPIDef + PlatformTable
+        + "struct _kernel_struct " + HostCode.NameRef
         + " = {"
         + ".UID = " + toString(getKernelUID(DeviceCode.NameRef))
         + ",.name = \"" + DeviceCode.NameRef + "\""
         + ",.name_size = " + toString(DeviceCode.NameRef.size())
         + ",.src = " + InlineDeviceCode.NameRef
         + ",.src_size = " + toString(__inline_definition.size())
-        + ",.__bin = " + Binary.NameRef
-        + ",.__bin_size = " + toString(BinArray.size())
+        + ",.platform_table = &" + PlatformTableName
         + "};";
 }
 
@@ -478,13 +484,16 @@ std::string TaskSrc::HostCall() {
 #warning FIXME: dynamically generate SrcLocID to take care of possible iteration spaces
     std::string SrcLocID = GetBasename(FileName) + ":" + toString(PLoc.getLine());
 
-    std::string call = "acl_create_task("
+    std::string LabelDef = "const char __acl_group_label[] = \"" + Label + "\";";
+    std::string SrcLocDef = "const char __acl_srcloc[] = \"" + SrcLocID + "\";";
+    std::string call = LabelDef + SrcLocDef
+        + "acl_create_task("
         + Approx + ","
         + MemObjInfo.NameRef + "," + MemObjInfo.NumArgs + ","
         + OpenCLCode.NameRef + ","
         + Geometry.NameRef + ","
-        + "\"" + Label + "\","
-        + "\"" + SrcLocID + "\""
+        + "__acl_group_label" + ","
+        + "__acl_srcloc"
         + ");";
     return call;
 }
@@ -1395,13 +1404,31 @@ Stage1_ASTVisitor::Finish() {
         dst << CommonFileHeader;
         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
                  II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
-            dst << (*II).second->InlineDeviceCode.HeaderDecl;
-            dst << (*II).second->Binary.HeaderDecl;
+            dst << II->second->InlineDeviceCode.HeaderDecl;
+            std::vector<PlatformBin> &Platforms = II->second->Binary;
+            for (std::vector<PlatformBin>::iterator
+                     BI = Platforms.begin(), BE = Platforms.end(); BI != BE; ++BI) {
+                PlatformBin &Platform = *BI;
+                for (std::vector<DeviceBin>::iterator
+                         DI = Platform.begin(), DE = Platform.end(); DI != DE; ++DI) {
+                    DeviceBin &Device = *DI;
+                    dst << Device.Bin.HeaderDecl;
+                }
+            }
         }
         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
                  II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
-            dst << (*II).second->InlineDeviceCode.HeaderDecl;
-            dst << (*II).second->Binary.HeaderDecl;
+            dst << II->second->InlineDeviceCode.HeaderDecl;
+            std::vector<PlatformBin> &Platforms = II->second->Binary;
+            for (std::vector<PlatformBin>::iterator
+                     BI = Platforms.begin(), BE = Platforms.end(); BI != BE; ++BI) {
+                PlatformBin &Platform = *BI;
+                for (std::vector<DeviceBin>::iterator
+                         DI = Platform.begin(), DE = Platform.end(); DI != DE; ++DI) {
+                    DeviceBin &Device = *DI;
+                    dst << Device.Bin.HeaderDecl;
+                }
+            }
         }
         dst << "\n";
         dst.flush();
@@ -1416,13 +1443,31 @@ Stage1_ASTVisitor::Finish() {
         //dst << "#include \"" << NewHeader << "\"\n";
         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
                  II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
-            dst << (*II).second->InlineDeviceCode.Definition;
-            dst << (*II).second->Binary.Definition;
+            dst << II->second->InlineDeviceCode.Definition;
+            std::vector<PlatformBin> &Platforms = II->second->Binary;
+            for (std::vector<PlatformBin>::iterator
+                     BI = Platforms.begin(), BE = Platforms.end(); BI != BE; ++BI) {
+                PlatformBin &Platform = *BI;
+                for (std::vector<DeviceBin>::iterator
+                         DI = Platform.begin(), DE = Platform.end(); DI != DE; ++DI) {
+                    DeviceBin &Device = *DI;
+                    dst << Device.Bin.Definition;
+                }
+            }
         }
         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
                  II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
-            dst << (*II).second->InlineDeviceCode.Definition;
-            dst << (*II).second->Binary.Definition;
+            dst << II->second->InlineDeviceCode.Definition;
+            std::vector<PlatformBin> &Platforms = II->second->Binary;
+            for (std::vector<PlatformBin>::iterator
+                     BI = Platforms.begin(), BE = Platforms.end(); BI != BE; ++BI) {
+                PlatformBin &Platform = *BI;
+                for (std::vector<DeviceBin>::iterator
+                         DI = Platform.begin(), DE = Platform.end(); DI != DE; ++DI) {
+                    DeviceBin &Device = *DI;
+                    dst << Device.Bin.Definition;
+                }
+            }
         }
         dst << "\n";
         dst.flush();

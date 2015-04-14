@@ -43,14 +43,6 @@ inline void __shrCheckErrorEX(int iSample, int iReference, void (*pCleanup)(int)
 }
 
 /*
-   This function finds the cl_platform_id that matches the name passed in.  It
-   assumes that you only care about a single platform.  If it can not find
-   a cl_platform_id that matches the one requested it will print out a warning
-   and return the zeroth cl_platform_id.
-*/
-cl_int          ocltGetPlatformID(cl_platform_id* clSelectedPlatformID, const char* name);
-
-/*
    This function reads in an OpenCL kernel binary from the file system.  This binary must
    be created with oclcc because oclcc will embed the compiler flags used at compilation
    time into the binary file it creates.  This function extracts the compiler flags (if any)

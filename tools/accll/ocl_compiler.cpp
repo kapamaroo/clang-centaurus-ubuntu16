@@ -23,12 +23,34 @@
 #include <CL/cl.h>
 #include <CL/cl_ext.h>
 
+#include <sstream>
+#include <iomanip>
+
 #include "Types.hpp"
+#include "Common.hpp"
 #include "ocl_utils.hpp"
 
 namespace {
 
-void getProgBinary(cl_program cpProgram, cl_device_id cdDevice, char** binary, size_t* length)
+std::string ToHex(const std::string src) {
+    std::string out;
+    //llvm::raw_string_ostream OS(out);
+    std::stringstream OS;
+
+    for (size_t i=0; i<src.size(); ++i) {
+        if (i)
+            OS << ",";
+        OS << "0x"
+           << std::setfill('0')
+           << std::setw(2)
+           << std::hex
+           << (int)(unsigned char)src[i];
+    }
+
+    return OS.str();
+}
+
+std::vector<std::string> getProgBinary(cl_program cpProgram, cl_device_id *clDevices, cl_uint device_num)
 {
     cl_int errcode;
 
@@ -39,46 +61,100 @@ void getProgBinary(cl_program cpProgram, cl_device_id cdDevice, char** binary, s
 
     // Grab the device ids
     cl_device_id* devices = (cl_device_id*) malloc(num_devices * sizeof(cl_device_id));
+    if (!devices)
+        return std::vector<std::string>();
     errcode = clGetProgramInfo(cpProgram, CL_PROGRAM_DEVICES, num_devices * sizeof(cl_device_id), devices, 0);
     checkError(errcode, CL_SUCCESS);
 
+    //sanity checks
+    assert(num_devices == device_num);
+    for (cl_uint i=0; i<device_num; ++i)
+        assert(devices[i] == clDevices[i]);
+
     // Grab the sizes of the binaries
     size_t* binary_sizes = (size_t*)malloc(num_devices * sizeof(size_t));
+    if (!binary_sizes)
+        return std::vector<std::string>();
     errcode = clGetProgramInfo(cpProgram, CL_PROGRAM_BINARY_SIZES, num_devices * sizeof(size_t), binary_sizes, NULL);
     checkError(errcode, CL_SUCCESS);
 
     // Now get the binaries
     char** ptx_code = (char**) malloc(num_devices * sizeof(char*));
+    if (!ptx_code)
+        return std::vector<std::string>();
     for( unsigned int i=0; i<num_devices; ++i) {
         ptx_code[i]= (char*)malloc(binary_sizes[i]);
     }
-    errcode = clGetProgramInfo(cpProgram, CL_PROGRAM_BINARIES, 0, ptx_code, NULL);
+    errcode = clGetProgramInfo(cpProgram, CL_PROGRAM_BINARIES, num_devices * sizeof(ptx_code), ptx_code, NULL);
     checkError(errcode, CL_SUCCESS);
 
-    // Find the index of the device of interest
-    unsigned int idx = 0;
-    while( idx<num_devices && devices[idx] != cdDevice ) ++idx;
-
-    // If it is associated prepare the result
-    if( idx < num_devices )
-        {
-            *binary = ptx_code[idx];
-            *length = binary_sizes[idx];
-        }
+    std::vector<std::string> Binary;
+    for(unsigned int i=0; i<num_devices; ++i) {
+        std::string bin(ptx_code[i],binary_sizes[i]);
+        Binary.push_back(bin);
+    }
 
     // Cleanup
     free( devices );
     free( binary_sizes );
     for( unsigned int i=0; i<num_devices; ++i) {
-        if( i != idx ) free(ptx_code[i]);
+        free(ptx_code[i]);
     }
     free( ptx_code );
+
+    return Binary;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Get the build log from ocl
 ////////////////////////////////////////////////////////////////////////////////
-struct accll::PTXASInfo ParsePTXLog(const std::string &Log) {
+
+std::vector<std::string> ocltLogBuildInfo(cl_program cpProgram, cl_device_id *cdDevice, cl_uint device_num)
+{
+    cl_int errcode;
+
+    std::vector<std::string> out;
+
+    cl_uint i;
+    for (i=0; i<device_num; ++i) {
+        size_t log_size;
+        errcode = clGetProgramBuildInfo(cpProgram, cdDevice[i], CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
+        checkError(errcode, CL_SUCCESS);
+
+        if (log_size <= 2) {
+            out.push_back(std::string());
+            continue;
+        }
+
+        char *buildLog = (char*)malloc((log_size+1));
+        if (!buildLog) {
+            out.push_back(std::string());
+            continue;
+        }
+
+        errcode = clGetProgramBuildInfo(cpProgram, cdDevice[i], CL_PROGRAM_BUILD_LOG, log_size, buildLog, NULL);
+        checkError(errcode, CL_SUCCESS);
+
+        buildLog[log_size] = '\0';
+        std::string log(buildLog,log_size);
+        out.push_back(log);
+        free(buildLog);
+    }
+
+    return out;
+}
+
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// entry point
+////////////////////////////////////////////////////////////////////////////////
+
+namespace accll {
+    PTXASInfo::PTXASInfo(std::string Log, std::string PlatformName) :
+    Raw(Log), arch(0), registers(0), gmem(0),
+    stack_frame(0), spill_stores(0), spill_loads(0), cmem(0)
+{
     /*
       ptxas info    : 0 bytes gmem
       ptxas info    : Compiling entry function 'kernel_pbpi1' for 'sm_30'
@@ -91,8 +167,11 @@ struct accll::PTXASInfo ParsePTXLog(const std::string &Log) {
       ptxas info    : Used 37 registers, 360 bytes cmem[0]
     */
 
-    struct accll::PTXASInfo info;
-    memset(&info,0,sizeof(struct accll::PTXASInfo));
+    if (PlatformName.compare("NVIDIA"))
+        return;
+
+    if (!Log.size())
+        return;
 
     const char *str = Log.c_str();
     const char *end = str + Log.size();
@@ -111,7 +190,7 @@ struct accll::PTXASInfo ParsePTXLog(const std::string &Log) {
         if (*str == '\'') {
             if (str[1] == '\n')
                 //handle arch
-                info.arch = tmp_value;
+                arch = tmp_value;
         }
         else if (*str == ']') {
             //ignore
@@ -122,87 +201,35 @@ struct accll::PTXASInfo ParsePTXLog(const std::string &Log) {
             str++;
             if (strncmp(str,"bytes gmem",10) == 0) {
                 str += 10;
-                info.gmem += tmp_value;
+                gmem += tmp_value;
             }
             else if (strncmp(str,"bytes cmem",10) == 0) {
                 str += 10;
-                info.cmem += tmp_value;
+                cmem += tmp_value;
             }
             else if (strncmp(str,"bytes stack frame",17) == 0) {
                 str += 17;
-                info.stack_frame += tmp_value;
+                stack_frame += tmp_value;
             }
             else if (strncmp(str,"bytes spill stores",18) == 0) {
                 str += 18;
-                info.spill_stores += tmp_value;
+                spill_stores += tmp_value;
             }
             else if (strncmp(str,"bytes spill loads",17) == 0) {
                 str += 17;
-                info.spill_loads += tmp_value;
+                spill_loads += tmp_value;
             }
             else if (strncmp(str,"registers",9) == 0) {
                 str += 9;
-                info.registers += tmp_value;
+                registers += tmp_value;
             }
         }
     }
-
-#if 0
-    std::cout
-        << info.arch
-        << "\n"
-        << info.registers
-        << "\n"
-        << info.gmem
-        << "\n"
-        << info.stack_frame
-        << "\n"
-        << info.spill_stores
-        << "\n"
-        << info.spill_loads
-        << "\n"
-        << info.cmem
-        << "\n"
-        << "\n"
-        ;
-#endif
-
-    return info;
 }
 
-std::string ocltLogBuildInfo(cl_program cpProgram, cl_device_id cdDevice)
-{
-    cl_int errcode;
-    size_t log_size;
-    errcode = clGetProgramBuildInfo(cpProgram, cdDevice, CL_PROGRAM_BUILD_LOG, 0, NULL, &log_size);
-    checkError(errcode, CL_SUCCESS);
-
-    if (log_size <= 2)
-        return std::string();
-
-    char *buildLog = (char*)malloc((log_size+1));
-    if (!buildLog)
-        return std::string();
-
-    errcode = clGetProgramBuildInfo(cpProgram, cdDevice, CL_PROGRAM_BUILD_LOG, log_size, buildLog, NULL);
-    checkError(errcode, CL_SUCCESS);
-
-    buildLog[log_size] = '\0';
-    std::string out(buildLog,log_size);
-    free(buildLog);
-    return out;
-}
-
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// entry point
-////////////////////////////////////////////////////////////////////////////////
-
-namespace accll {
-
-std::string
-KernelRefDef::compile(std::string src, const std::string &platform, const std::vector<std::string> &options) {
+PlatformBin _compile(std::string src, std::string SymbolName, std::string PrefixDef,
+                   const std::vector<std::string> &options,
+                   cl_platform_id cpPlatform) {
     cl_context       clGPUContext;
     cl_program       clProgram;
 
@@ -240,14 +267,31 @@ KernelRefDef::compile(std::string src, const std::string &platform, const std::v
         ("Werror",                           "Turn warnings into errors.\n");
     */
 
+    char buffer[2048];
+    std::string PlatformName;
+    errcode = clGetPlatformInfo(cpPlatform, CL_PLATFORM_NAME, 2048, &buffer, NULL);
+    if(errcode == CL_SUCCESS)
+        PlatformName = std::string(buffer,strlen(buffer));
+
     std::string BuildOptions;
 
     for (std::vector<std::string>::const_iterator
              II = options.begin(), EE = options.end(); II != EE; ++II)
         BuildOptions += *II + " ";
 
-    if (platform.compare("NVIDIA") == 0)
+    if (PlatformName.find("NVIDIA") != std::string::npos) {
         BuildOptions += "-cl-nv-verbose";
+        PlatformName = "NVIDIA";
+    }
+    else if (PlatformName.find("Intel") != std::string::npos) {
+        PlatformName = "INTEL";
+    }
+    else if (PlatformName.find("AMD") != std::string::npos) {
+        PlatformName = "AMD";
+    }
+    else {
+        PlatformName = "UNKNOWN";
+    }
 
     std::string includesStr;
     std::string definesStr;
@@ -255,24 +299,30 @@ KernelRefDef::compile(std::string src, const std::string &platform, const std::v
     BuildOptions += definesStr;
     BuildOptions += includesStr;
 
-    cl_platform_id   cpPlatform;
-    cl_device_id     cdDevice;
+    cl_uint device_num;
+    errcode = clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_ALL, 0, NULL, &device_num);
+    checkError(errcode, CL_SUCCESS);
 
-    ocltGetPlatformID(&cpPlatform, platform.c_str());
+    cl_device_id *cdDevice = (cl_device_id *)malloc(sizeof(cl_device_id)*device_num);
 
     // Get a GPU device
-    errcode = clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_GPU, 1, &cdDevice, NULL);
+    errcode = clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_ALL, device_num, cdDevice, NULL);
     checkError(errcode, CL_SUCCESS);
 
-    clGPUContext = clCreateContext(0, 1, &cdDevice, NULL, NULL, &errcode);
-
+    clGPUContext = clCreateContext(0, device_num, cdDevice, NULL, NULL, &errcode);
     checkError(errcode, CL_SUCCESS);
 
-    // get the list of GPU devices associated with context
+    // get the list of devices associated with context
     errcode = clGetContextInfo(clGPUContext, CL_CONTEXT_DEVICES, 0, NULL, &dataBytes);
     cl_device_id *cdDevices = (cl_device_id *)malloc(dataBytes);
     errcode |= clGetContextInfo(clGPUContext, CL_CONTEXT_DEVICES, dataBytes, cdDevices, NULL);
     checkError(errcode, CL_SUCCESS);
+
+    //sanity check
+    for (unsigned int i=0; i<device_num; ++i)
+        assert(cdDevice[i] == cdDevices[i]);
+
+    free(cdDevice);
 
     const char *c_str = src.c_str();
     clProgram = clCreateProgramWithSource(clGPUContext, 1, (const char **)&c_str, &srcLength, &errcode);
@@ -282,29 +332,109 @@ KernelRefDef::compile(std::string src, const std::string &platform, const std::v
 
     // Get the build log... Without doing this it is next to impossible to
     // debug a failed .cl build
-    BuildLog = ocltLogBuildInfo(clProgram, cdDevices[0]);
+    std::vector<std::string> RawBuildLogs = ocltLogBuildInfo(clProgram, cdDevices, device_num);
     if(errcode != CL_SUCCESS) {
-        return std::string();
+        return PlatformBin();
     }
 
-    if (BuildLog.size())
-        ParsedBuildLog = ParsePTXLog(BuildLog);
-
     // Store the binary in the file system
-    char* binary;
-    size_t binaryLength;
-    getProgBinary(clProgram, cdDevices[0], &binary, &binaryLength);
-    checkError(errcode, CL_SUCCESS);
+    std::vector<std::string> BinArray = getProgBinary(clProgram, cdDevices, device_num);
 
     errcode |= clReleaseProgram(clProgram);
     errcode |= clReleaseContext(clGPUContext);
     checkError(errcode, CL_SUCCESS);
 
-    std::string Binary = std::string(binary,binaryLength);
-
     free(cdDevices);
-    free(binary);
-    return Binary;
+
+    //sanity check
+    assert(RawBuildLogs.size() == BinArray.size());
+
+    if (!BinArray.size()) {
+        //ObjRefDef Empty("NULL",std::string());
+        //return KernelBin(std::string(),Empty,std::string());
+        return PlatformBin();
+    }
+
+    PlatformBin PlatformBinary(PlatformName);
+    PlatformBinary.NameRef = PrefixDef + PlatformName;
+
+    std::string DevTableName = PrefixDef + PlatformName + "_DEV_TABLE";
+    std::string DevTable = "struct _device_bin *" + DevTableName + "[" + toString(BinArray.size()) + "] = {";
+
+    for (std::vector<std::string>::size_type i=0; i<BinArray.size(); ++i) {
+        std::string APINameRef = PrefixDef + PlatformName + "__device" + toString(i);
+        if (i)
+            DevTable += ",";
+        DevTable += "&" + APINameRef;
+
+        std::string NameRef = "__bin__" + APINameRef + "__" + SymbolName;
+#if 1
+        std::string HexBinArray = ToHex(BinArray[i]);
+#else
+        std::string HexBinArray;
+#endif
+        std::string HeaderDecl = "extern const unsigned char " + NameRef
+            + "[" + toString(BinArray[i].size()) + "];";
+        std::string Definition = "const unsigned char " + NameRef
+            + "[" + toString(BinArray[i].size()) + "]"
+            +" = "
+            + "{" + HexBinArray + "};";
+
+        std::string APIDefinition = "struct _device_bin " + APINameRef + " = {"
+            + ".bin = " + NameRef
+            + ",.bin_size = " + toString(BinArray[i].size())
+            + "};";
+
+        DeviceBin DeviceBinary(APINameRef,APIDefinition,
+                               PlatformName,ObjRefDef(NameRef,Definition,HeaderDecl),
+                               RawBuildLogs[i]);
+        PlatformBinary.push_back(DeviceBinary);
+    }
+
+    DevTable += "};";
+    PlatformBinary.Definition = DevTable
+        + "struct _platform_bin " + PlatformBinary.NameRef + " = {"
+        + ".device_table = " + DevTableName
+        + ",.device_num = " + toString(BinArray.size())
+        + "};";
+
+    return PlatformBinary;
+}
+
+int
+KernelRefDef::compile(std::string src, std::string SymbolName, std::string PrefixDef,
+                      const std::vector<std::string> &options)
+{
+    cl_uint         num_platforms;
+    cl_platform_id* clPlatformIDs;
+    cl_int          status;
+
+    status = clGetPlatformIDs(0, NULL, &num_platforms);
+    if (status != CL_SUCCESS)
+    {
+        std::cerr << "Error " << status << "in clGetPlatformIDs" << std::endl;
+        return -1;
+    }
+    if(num_platforms == 0)
+    {
+        std::cerr << "No OpenCL platform found!" << std::cout;
+        return -2;
+    }
+    else
+    {
+        clPlatformIDs = (cl_platform_id*)malloc(num_platforms * sizeof(cl_platform_id));
+
+        status = clGetPlatformIDs(num_platforms, clPlatformIDs, NULL);
+        for(uint i = 0; i < num_platforms; ++i)
+        {
+            PlatformBin PlatformBinary = _compile(src,SymbolName,PrefixDef,options,clPlatformIDs[i]);
+            Binary.push_back(PlatformBinary);
+        }
+
+        free(clPlatformIDs);
+    }
+
+    return 0;
 }
 
 }
