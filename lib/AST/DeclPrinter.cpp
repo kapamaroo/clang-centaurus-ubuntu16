@@ -713,7 +713,7 @@ void DeclPrinter::VisitLabelDecl(LabelDecl *D) {
 void DeclPrinter::VisitVarDecl(VarDecl *D) {
   if (!Policy.SuppressSpecifiers) {
     StorageClass SC = D->getStorageClass();
-    if (SC != SC_None)
+    if (SC != SC_None && SC != SC_OpenCLWorkGroupLocal)
       Out << VarDecl::getStorageClassSpecifierString(SC) << " ";
 
     switch (D->getTSCSpec()) {
