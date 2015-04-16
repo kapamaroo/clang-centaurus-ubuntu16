@@ -16,6 +16,7 @@
 
 #include "clang/Rewrite/Core/Rewriter.h"
 
+#include "Common.hpp"
 #include "Stages.hpp"
 #include "ClangFormat.hpp"
 
@@ -86,6 +87,32 @@ int main(int argc, const char **argv) {
         }
     int tool_argc = ExtraArgsStartPos ? ExtraArgsStartPos : argc;
 
+    if (ExtraArgsStartPos == 1) {
+        //treat as raw clang invocation
+        llvm::outs() << WARNING
+                     << "no input files, enter clang mode.\n";
+
+        SmallVector<const char *, 256> cli;
+
+        //std::string LinkerPath = "/usr/bin/ld";
+        std::string ClangPath = InstallPath + "/build-dev/bin/clang-3.3";
+
+        for (int i=ExtraArgsStartPos+1; i<argc; ++i)
+            cli.push_back(argv[i]);
+
+        llvm::outs() << DEBUG
+                     << "Invoke clang as: " << ClangPath << " ";
+        for (size_t i=0; i<cli.size(); ++i)
+            llvm::outs() << cli[i] << " ";
+        llvm::outs() << "\n";
+        runClang(ClangPath,cli);
+
+        llvm::outs() << DEBUG
+                     << "Exit clang mode.\n";
+
+        return 0;
+    }
+
     SmallVector<const char *, 256> ARGV;
 
     for (int i=0; i<tool_argc; ++i)
@@ -122,7 +149,7 @@ int main(int argc, const char **argv) {
     std::vector<std::string> UserInputFiles = OptionsParser.getSourcePathList();
 
     if (UserInputFiles.size() != 1) {
-        llvm::outs() << "Unsupported multiple input fils  -  exit.\n";
+        llvm::outs() << "Unsupported multiple input files  -  exit.\n";
         return 1;
     }
 
@@ -130,17 +157,51 @@ int main(int argc, const char **argv) {
     std::vector<std::string> InputFiles;
     std::vector<std::string> LibOCLFiles;
     std::vector<std::string> KernelFiles;
+    std::vector<std::string> RegularFiles;
 
     llvm::outs() << "Stage0: Check input files ...\n";
     RefactoringTool Tool0(OptionsParser.getCompilations(), UserInputFiles);
-    Stage0_ConsumerFactory Stage0(InputFiles,KernelFiles);
+    Stage0_ConsumerFactory Stage0(InputFiles,RegularFiles);
     if (Tool0.runAndSave(newFrontendActionFactory(&Stage0))) {
         llvm::errs() << "Stage0 failed - exit.\n";
         return 1;
     }
 
+    if (!RegularFiles.empty()) {
+        llvm::outs() << WARNING
+                     << "Source code has no directives, enter clang mode.\n";
+
+        SmallVector<const char *, 256> cli;
+
+        std::string ClangPath = InstallPath + "/build-dev/bin/clang-3.3";
+
+        cli.push_back("-Wall");
+
+        for (std::vector<std::string>::iterator
+                 II = RegularFiles.begin(),
+                 EE = RegularFiles.end(); II != EE; ++II)
+            cli.push_back(II->c_str());
+
+        if (ExtraArgsStartPos)
+            for (int i=ExtraArgsStartPos+1; i<argc; ++i)
+                cli.push_back(argv[i]);
+
+        llvm::outs() << DEBUG
+                     << "Invoke clang as: " << ClangPath << " ";
+        for (size_t i=0; i<cli.size(); ++i)
+            llvm::outs() << cli[i] << " ";
+        llvm::outs() << "\n";
+
+        runClang(ClangPath,cli);
+
+        llvm::outs() << DEBUG
+                     << "Exit clang mode.\n";
+
+        return 0;
+    }
+
     if (InputFiles.empty()) {
-        llvm::outs() << "Source code has no directives, nothing to do - exit.\n";
+        llvm::outs() << "UNEXPECTED ERROR: Source code has no directives, nothing to do - exit.\n";
         return 1;
     }
 
