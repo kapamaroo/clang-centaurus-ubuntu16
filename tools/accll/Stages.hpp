@@ -43,7 +43,7 @@ CreateNewArgFrom(clang::Expr *E, clang::openacc::ClauseInfo *ImplicitCI,
 class Stage0_ASTVisitor : public clang::RecursiveASTVisitor<Stage0_ASTVisitor> {
 private:
     std::vector<std::string> &InputFiles;
-    std::vector<std::string> &KernelFiles;
+    std::vector<std::string> &RegularFiles;
     bool hasDirectives;
     bool hasDeviceCode;
     bool hasRuntimeCalls;
@@ -52,8 +52,8 @@ public:
     void Finish(clang::ASTContext *Context);
 
     explicit Stage0_ASTVisitor(std::vector<std::string> &InputFiles,
-                               std::vector<std::string> &KernelFiles) :
-        InputFiles(InputFiles), KernelFiles(KernelFiles),
+                               std::vector<std::string> &RegularFiles) :
+        InputFiles(InputFiles), RegularFiles(RegularFiles),
         hasDirectives(false), hasDeviceCode(false), hasRuntimeCalls(false) {}
 
     bool VisitAccStmt(clang::AccStmt *ACC);
@@ -67,8 +67,8 @@ private:
 
 public:
     explicit Stage0_ASTConsumer(std::vector<std::string> &InputFiles,
-                                std::vector<std::string> &KernelFiles) :
-        Visitor(InputFiles,KernelFiles) {}
+                                std::vector<std::string> &RegularFiles) :
+        Visitor(InputFiles,RegularFiles) {}
 
     virtual void HandleTranslationUnit(clang::ASTContext &Context) {
         clang::SourceManager &SM = Context.getSourceManager();
@@ -90,15 +90,15 @@ public:
 class Stage0_ConsumerFactory {
 private:
     std::vector<std::string> &InputFiles;
-    std::vector<std::string> &KernelFiles;
+    std::vector<std::string> &RegularFiles;
 
 public:
     Stage0_ConsumerFactory(std::vector<std::string> &InputFiles,
-                           std::vector<std::string> &KernelFiles) :
-        InputFiles(InputFiles), KernelFiles(KernelFiles) {}
+                           std::vector<std::string> &RegularFiles) :
+        InputFiles(InputFiles), RegularFiles(RegularFiles) {}
 
     clang::ASTConsumer *newASTConsumer() {
-        return new Stage0_ASTConsumer(InputFiles,KernelFiles);
+        return new Stage0_ASTConsumer(InputFiles,RegularFiles);
     }
 };
 
