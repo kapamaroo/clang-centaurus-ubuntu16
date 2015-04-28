@@ -162,7 +162,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         //PreDef += "#include \"" + II->getKey().str() + "\"\n";
     }
     __offline += UserTypes;
-    PreDef += UserTypes;
+    //PreDef += UserTypes;
 
     llvm::SmallSetVector<clang::FunctionDecl *,sizeof(clang::FunctionDecl *)> Deps;
     findCallDeps(FD,CG,Deps);
@@ -711,27 +711,6 @@ Stage1_ASTVisitor::TraverseAccStmt(AccStmt *S) {
     }
     RStack.ExitRegion(S->getDirective());
 
-    return true;
-}
-
-bool
-Stage1_ASTVisitor::TraverseMemberExpr(MemberExpr *S) {
-    TRY_TO(WalkUpFromMemberExpr(S));
-
-    //skip children (Base)
-    return true;
-}
-
-bool
-Stage1_ASTVisitor::TraverseArraySubscriptExpr(ArraySubscriptExpr *S) {
-    TRY_TO(WalkUpFromArraySubscriptExpr(S));
-    //{ CODE; }
-    for (Stmt::child_range range = S->children(); range; ++range) {
-        //ignore BaseExpr
-        if (cast<Expr>(*range) == S->getBase())
-            continue;
-        TRY_TO(TraverseStmt(*range));
-    }
     return true;
 }
 
@@ -1528,13 +1507,44 @@ Stage1_ASTVisitor::Finish() {
 }
 
 bool
-Stage1_ASTVisitor::VisitRecordDecl(RecordDecl *R) {
-    SourceLocation Loc = R->getSourceRange().getBegin();
+Stage1_ASTVisitor::VisitVarDecl(VarDecl *VD) {
+    if (!CurrentFunction || !Context->isOpenCLKernel(CurrentFunction))
+        return true;
+
+    const Type *Ty = (cast<ValueDecl>(VD))->getType().getTypePtr();
+
+    std::string DeclStr;
+    raw_string_ostream OS(DeclStr);
+    SourceLocation Loc;
+    if (const TagType *TT = Ty->getAs<TagType>()) {
+        const TagDecl *Tag = cast<TagDecl>(TT->getDecl());
+        Tag->print(OS);
+        Loc = Tag->getSourceRange().getBegin();
+    }
+    else if (const TypedefType *TT = dyn_cast<TypedefType>(Ty)) {
+        TT->getDecl()->print(OS);
+        Loc = TT->getDecl()->getSourceRange().getBegin();
+    }
+    else
+        return true;
+
+    OS.str();
+
+    if (Loc.isInvalid())
+        return true;
+
     assert(!Loc.isInvalid());
 
     SourceManager &SM = Context->getSourceManager();
     if (SM.isInSystemHeader(Loc))
         return true;
+
+    PresumedLoc PLoc = SM.getPresumedLoc(Loc);
+    llvm::outs() << DEBUG
+                 << "inside kernel '" << CurrentFunction->getNameAsString()
+                 << "' from symbol definition '" << VD->getNameAsString() << "'\n       "
+                 << "found type '" << (cast<ValueDecl>(VD))->getType().getAsString() << "' defined at "
+                 << GetBasename(PLoc.getFilename()) << ":" << PLoc.getLine() << "\n";
 
     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
     //llvm::outs() << DEBUG
@@ -1544,82 +1554,14 @@ Stage1_ASTVisitor::VisitRecordDecl(RecordDecl *R) {
     if (!SM.isFromMainFile(Loc)) {
         if (TrackThisHeader(DefFile))
             DepHeaders[DefFile] = true;
-        return true;
     }
-
-    std::string Tmp;
-    raw_string_ostream OS(Tmp);
-    R->print(OS);
-    UserTypes += OS.str() + ";\n\n";
+    else
+        UserTypes += DeclStr + ";\n\n";
 
     return true;
 }
 
-bool
-Stage1_ASTVisitor::VisitEnumDecl(EnumDecl *E) {
-    SourceLocation Loc = E->getSourceRange().getBegin();
-    assert(!Loc.isInvalid());
-
-    SourceManager &SM = Context->getSourceManager();
-    if (SM.isInSystemHeader(Loc))
-        return true;
-
-    std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
-    //llvm::outs() << DEBUG
-    //             << "user defined enum '" << E->getNameAsString() << "' from file :" << DefFile << "\n";
-
-    //maybe the implementation headers are not in system directories
-    if (!SM.isFromMainFile(Loc)) {
-        if (TrackThisHeader(DefFile))
-            DepHeaders[DefFile] = true;
-        return true;
-    }
-
-    std::string Tmp;
-    raw_string_ostream OS(Tmp);
-    E->print(OS);
-    UserTypes += OS.str() + ";\n\n";
-
-    return true;
-}
-
-bool
-Stage1_ASTVisitor::VisitTypedefDecl(TypedefDecl *T) {
-    SourceLocation Loc = T->getSourceRange().getBegin();
-
-    //compiler defined typedef
-    if (Loc.isInvalid())
-        return true;
-
-    SourceManager &SM = Context->getSourceManager();
-    if (SM.isInSystemHeader(Loc))
-        return true;
-
-    const FileEntry *F = SM.getFileEntryForID(SM.getFileID(Loc));
-    if(!F) {
-        // if we -include a file from the command line, FileEntry is 0
-        //llvm::outs() << "BUG: UnknownFile for typedef '" << T->getNameAsString() << "'\n";
-        return true;
-    }
-    std::string DefFile = F->getName();
-    //llvm::outs() << DEBUG
-    //             << "user defined typedef '" << T->getNameAsString() << "' from file :" << DefFile << "\n";
-
-    //maybe the implementation headers are not in system directories
-    if (!SM.isFromMainFile(Loc)) {
-        if (TrackThisHeader(DefFile))
-            DepHeaders[DefFile] = true;
-        return true;
-    }
-
-    std::string Tmp;
-    raw_string_ostream OS(Tmp);
-    T->print(OS);
-    UserTypes += OS.str() + ";\n\n";
-
-    return true;
-}
-
+#if 0
 struct UniqueArgVector : ArgVector {
     bool isUnique(Arg *Target) const {
         for (const_iterator II = begin(), EE = end(); II != EE; ++II)
@@ -1628,3 +1570,4 @@ struct UniqueArgVector : ArgVector {
         return true;
     }
 };
+#endif

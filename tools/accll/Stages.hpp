@@ -170,8 +170,6 @@ public:
     //////
 
     bool TraverseAccStmt(clang::AccStmt *S);
-    bool TraverseMemberExpr(clang::MemberExpr *S);
-    bool TraverseArraySubscriptExpr(clang::ArraySubscriptExpr *S);
     bool TraverseFunctionDecl(clang::FunctionDecl *FD);
 
     bool VisitAccStmt(clang::AccStmt *ACC);
@@ -179,9 +177,15 @@ public:
     bool VisitReturnStmt(clang::ReturnStmt *S);
     bool VisitBinaryOperator(clang::BinaryOperator *BO);
 
+#if 0
+    bool TraverseMemberExpr(clang::MemberExpr *S);
+    bool TraverseArraySubscriptExpr(clang::ArraySubscriptExpr *S);
+
     bool VisitEnumDecl(clang::EnumDecl *E);
     bool VisitTypedefDecl(clang::TypedefDecl *T);
     bool VisitRecordDecl(clang::RecordDecl *R);
+#endif
+    bool VisitVarDecl(clang::VarDecl *VD);
 };
 
 class Stage1_ASTConsumer : public clang::ASTConsumer {

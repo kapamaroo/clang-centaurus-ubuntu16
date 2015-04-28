@@ -486,7 +486,7 @@ int main(int argc, const char **argv) {
                 //ldcli.push_back("-lOpenCL");
 
                 // ... and nvidia-ml path
-                std::string NVMLPath("/usr/lib/nvidia-340");
+                std::string NVMLPath("/usr/lib/nvidia-346");
                 std::string NVMLPathFlag("-L" + NVMLPath);
                 ldcli.push_back("-lnvidia-ml");
 
