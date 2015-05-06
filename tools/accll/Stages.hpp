@@ -186,6 +186,7 @@ public:
     bool VisitRecordDecl(clang::RecordDecl *R);
 #endif
     bool VisitVarDecl(clang::VarDecl *VD);
+    bool VisitCallExpr(clang::CallExpr *CE);
 };
 
 class Stage1_ASTConsumer : public clang::ASTConsumer {

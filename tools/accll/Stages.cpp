@@ -1561,6 +1561,46 @@ Stage1_ASTVisitor::VisitVarDecl(VarDecl *VD) {
     return true;
 }
 
+bool
+Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
+    if (!CurrentFunction || !Context->isOpenCLKernel(CurrentFunction))
+        return true;
+
+    FunctionDecl *FD = CE->getDirectCallee();
+    SourceLocation Loc = FD->getSourceRange().getBegin();
+
+    assert(!Loc.isInvalid());
+
+    SourceManager &SM = Context->getSourceManager();
+    if (SM.isInSystemHeader(Loc))
+        return true;
+
+    PresumedLoc PLoc = SM.getPresumedLoc(Loc);
+    llvm::outs() << DEBUG
+                 << "inside kernel '" << CurrentFunction->getNameAsString()
+                 << "' function call to '" << FD->getNameAsString() << "'\n       "
+                 << GetBasename(PLoc.getFilename()) << ":" << PLoc.getLine() << "\n";
+
+    std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
+    //llvm::outs() << DEBUG
+    //             << "user defined record '" << R->getNameAsString() << "' from file :" << DefFile << "\n";
+
+    //maybe the implementation headers are not in system directories
+    if (!SM.isFromMainFile(Loc)) {
+        if (TrackThisHeader(DefFile))
+            DepHeaders[DefFile] = true;
+    }
+    else {
+        std::string DeclStr;
+        raw_string_ostream OS(DeclStr);
+        FD->print(OS,Context->getPrintingPolicy());
+        OS.str();
+        UserTypes += DeclStr + ";\n\n";
+    }
+
+    return true;
+}
+
 #if 0
 struct UniqueArgVector : ArgVector {
     bool isUnique(Arg *Target) const {

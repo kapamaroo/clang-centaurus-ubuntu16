@@ -334,6 +334,14 @@ PlatformBin _compile(std::string src, std::string SymbolName, std::string Prefix
     // debug a failed .cl build
     std::vector<std::string> RawBuildLogs = ocltLogBuildInfo(clProgram, cdDevices, device_num);
     if(errcode != CL_SUCCESS) {
+        std::cout << DEBUG
+                  << src << "\n";
+        for (std::vector<std::string>::iterator
+                 II = RawBuildLogs.begin(), EE = RawBuildLogs.end(); II != EE; ++II)
+            std::cout << DEBUG
+                      << "LOG:\n" << *II << "\n";
+        checkError(errcode, CL_SUCCESS);
+
         return PlatformBin();
     }
 
