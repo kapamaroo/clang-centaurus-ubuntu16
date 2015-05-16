@@ -853,7 +853,7 @@ def note_pragma_acc_found_clause : Note<
 def note_pragma_acc_found_directive : Note<
   "found directive">;
 
-def note_pragma_acc_parser_test : Note<
+def note_pragma_acc_parser_test : Warning<
   "%0">;
 
 // OpenCL Section 6.8.g
