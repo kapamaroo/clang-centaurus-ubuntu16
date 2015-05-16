@@ -136,7 +136,7 @@ public:
     bool isICE() const { return ValidICE; }
     void setValidICE(bool value) { ValidICE = value; }
 
-    std::string getPrettyArg(const PrintingPolicy &) const;
+    std::string getPrettyArg() const;
 };
 
 class RawExprArg : public Arg {
@@ -202,7 +202,7 @@ public:
 
 class LabelArg : public Arg {
 public:
-    LabelArg(CommonInfo *Parent, Expr *E);
+    LabelArg(CommonInfo *Parent, Expr *E, clang::ASTContext *Context);
 
     std::string getLabel() const;
     std::string getQuotedLabel() const;

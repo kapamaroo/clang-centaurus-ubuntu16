@@ -100,7 +100,9 @@ CommonInfo::getAsDirective() {
     return DI;
 }
 
-std::string Arg::getPrettyArg(const PrintingPolicy &Policy) const {
+std::string Arg::getPrettyArg() const {
+    const PrintingPolicy &Policy = Context->getPrintingPolicy();
+
     std::string StrExpr;
     llvm::raw_string_ostream OS(StrExpr);
 
@@ -136,7 +138,7 @@ static std::string printArgList(const ArgVector &Args, const PrintingPolicy &Pol
         if (IA != Args.begin())
             StrList += ", ";
         Arg *A = *IA;
-        StrList += A->getPrettyArg(Policy);
+        StrList += A->getPrettyArg();
     }
     return StrList;
 }

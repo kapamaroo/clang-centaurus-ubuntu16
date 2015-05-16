@@ -329,21 +329,24 @@ ArrayElementArg::ArrayElementArg(CommonInfo *Parent, Expr *E, clang::ASTContext 
 SubArrayArg::SubArrayArg(CommonInfo *Parent, Expr *firstASE, Expr *length, clang::ASTContext *Context) :
     Arg(A_SubArray,Parent,firstASE,Context), Length(length) {}
 
-LabelArg::LabelArg(CommonInfo *Parent, Expr *E) :
-    Arg(A_Label,Parent,E) {}
+LabelArg::LabelArg(CommonInfo *Parent, Expr *E, clang::ASTContext *Context) :
+    Arg(A_Label,Parent,E,Context) {}
 
 FunctionArg::FunctionArg(CommonInfo *Parent, FunctionDecl *FD) :
         Arg(A_Function,Parent), FD(FD) {}
 
 std::string
 LabelArg::getLabel() const {
-    StringLiteral *SL = cast<StringLiteral>(getExpr());
-    return SL->getString().str();
+    if (StringLiteral *SL = dyn_cast<StringLiteral>(getExpr()))
+        return SL->getString().str();
+    return getPrettyArg();
 }
 
 std::string
 LabelArg::getQuotedLabel() const {
-    return "\"" + getLabel() + "\"";
+    if (StringLiteral *SL = dyn_cast<StringLiteral>(getExpr()))
+        return "\"" + getLabel() + "\"";
+    return getPrettyArg();
 }
 
 bool

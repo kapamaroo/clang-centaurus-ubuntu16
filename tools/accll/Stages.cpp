@@ -388,7 +388,7 @@ private:
         for (ClauseList::iterator
                  II = CList.begin(), EE = CList.end(); II != EE; ++II)
             if ((*II)->getKind() == CK_SIGNIFICANT)
-                return (*II)->getArg()->getPrettyArg(Context->getPrintingPolicy());
+                return (*II)->getArg()->getPrettyArg();
 #warning FIXME:  default task significance
         return "0";
     }
@@ -513,7 +513,7 @@ void GeometrySrc::init(DirectiveInfo *DI, clang::ASTContext *Context) {
     std::string global_init_list;
     for (ArgVector::iterator
              IA = Groups->getArgs().begin(), EA = Groups->getArgs().end(); IA != EA; ++IA) {
-        global_init_list += (*IA)->getPrettyArg(Context->getPrintingPolicy());
+        global_init_list += (*IA)->getPrettyArg();
         if ((*IA) != Groups->getArgs().back())
             global_init_list += ",";
     }
@@ -521,7 +521,7 @@ void GeometrySrc::init(DirectiveInfo *DI, clang::ASTContext *Context) {
     std::string local_init_list;
     for (ArgVector::iterator
              IA = Workers->getArgs().begin(), EA = Workers->getArgs().end(); IA != EA; ++IA) {
-        local_init_list += (*IA)->getPrettyArg(Context->getPrintingPolicy());
+        local_init_list += (*IA)->getPrettyArg();
         if ((*IA) != Workers->getArgs().back())
             local_init_list += ",";
     }
@@ -824,9 +824,9 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         if (ClauseLabel)
             QLabel = ClauseLabel->getArgAs<LabelArg>()->getQuotedLabel();
         if (ClauseRatio)
-            Ratio = ClauseRatio->getArg()->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
+            Ratio = ClauseRatio->getArg()->getPrettyArg();
         if (ClauseEnergy_joule)
-            Energy = ClauseEnergy_joule->getArg()->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
+            Energy = ClauseEnergy_joule->getArg()->getPrettyArg();
 
         std::string NewCode;
         if (ClauseOn) {
@@ -1072,7 +1072,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         if (A->getExpr()->getType()->isPointerType()) {
             llvm::outs() << WARNING
                          << "argument " << toString(Index + 1) << " '"
-                         << A->getPrettyArg(Context->getPrintingPolicy())
+                         << A->getPrettyArg()
                          << "' not found in data clauses - treat as 'in' dependency\n";
         }
     }
@@ -1083,13 +1083,13 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
             assert(0 && "Unexpected nesting");
             //abort creation of device buffer, we created it previously
             llvm::outs() << "abort new buffer (use existing) for '"
-                         << A->getPrettyArg(Context->getPrintingPolicy())
+                         << A->getPrettyArg()
                          << "' in Clause '" << A->getParent()->getAsClause()->getAsString() << "'\n";
             return ObjRefDef();
         }
     }
 
-    std::string OrigName = A->getPrettyArg(PrintingPolicy(Context->getLangOpts()));
+    std::string OrigName = A->getPrettyArg();
 
     std::string NewName = "__accll_arg_" + toString(Index);
     //llvm::outs() << "orig name: " << OrigName << "  new name: " << NewName << "\n";
@@ -1121,7 +1121,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
 
     if (A->getExpr()->getType().getUnqualifiedType().getAsString().compare("cl_mem") == 0) {
         llvm::outs() << "Found user defined low level cl_mem object '"
-                     << A->getPrettyArg(Context->getPrintingPolicy()) << "' as '"
+                     << A->getPrettyArg() << "' as '"
                      << A->getParent()->getAsClause()->getAsString() << "' data dependency.\n";
 
         std::string NewCode = Prologue + "struct _memory_object " + NewName + " = {"
@@ -1150,7 +1150,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
                          << "'" << OrigName << "' pointer's data size not found automatically\n";
             llvm::outs() << NOTE
                          << "use malloc_usable_size(void *)\n";
-            SizeExpr = "malloc_usable_size(" + A->getPrettyArg(Context->getPrintingPolicy()) + ")";
+            SizeExpr = "malloc_usable_size(" + A->getPrettyArg() + ")";
         }
     }
     else if (isa<ArrayArg>(A)) {
@@ -1249,7 +1249,7 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
             llvm::outs() << WARNING
                          << "ignore invalid '" << (*II)->getParent()->getAsClause()->getAsString()
                          << "' data dependency for pass-by-value argument '"
-                         << (*II)->getPrettyArg(PrintingPolicy(Context->getLangOpts())) << "' (" << (*II)->getKindAsString() << ")\n";
+                         << (*II)->getPrettyArg() << "' (" << (*II)->getKindAsString() << ")\n";
 
 #if 0
     SmallVector<Expr*,8> PtrArgs;
