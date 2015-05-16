@@ -702,11 +702,14 @@ Parser::ParseClauseWrapper(DirectiveInfo *DI) {
 
     ConsumeParen();
 
-    if (!PARSER_CALL(ParseClause[CK])(DK,CI))
+    if (!PARSER_CALL(ParseClause[CK])(DK,CI)) {
+        CList.pop_back();
         return false;
+    }
 
     if (Tok.isNot(tok::r_paren)) {
         PP.Diag(Tok,diag::warn_pragma_expected_rparen) << ExtensionName;
+        CList.pop_back();
         return false;
     }
     ClauseEndLoc = ConsumeParen();
