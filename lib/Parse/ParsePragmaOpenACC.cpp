@@ -300,19 +300,52 @@ bool Parser::ParseArgList(DirectiveKind DK, CommonInfo *Common, bool AllowSubArr
 
 bool
 Parser::ParseClauseLabel(DirectiveKind DK, ClauseInfo *CI) {
-    ExprResult E = ParseExpression();
-    if (!E.isUsable())
+    ExprResult _E = ParseExpression();
+    if (!_E.isUsable())
         return false;
 
-    if (StringLiteral *SL = dyn_cast<StringLiteral>(E.get())) {
+    Expr *E = _E.get();
+
+    if (StringLiteral *SL = dyn_cast<StringLiteral>(E)) {
+        //PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "string-literal";
         //PP.Diag(Tok,diag::note_pragma_acc_parser_test) << SL->getString();
-        Arg *A = new (Actions.getASTContext()) LabelArg(CI,SL);
+        Arg *A = new (Actions.getASTContext()) LabelArg(CI,SL,&Actions.getASTContext());
         CI->setArg(A);
         return true;
     }
 
-    PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "expected string-literal";
-    return false;
+    const QualType QTy = E->getType();
+    const Type *Ty = E->getType().getTypePtr();
+
+    bool Valid = false;
+    if (const ConstantArrayType *CAT = Actions.getASTContext().getAsConstantArrayType(QTy)) {
+        if (CAT->getElementType()->isCharType()) {
+            Valid = true;
+            //PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "isConstantArrayType of CharType";
+        }
+    }
+    else if (const ArrayType *AT = Actions.getASTContext().getAsArrayType(QTy)) {
+        if (AT->getElementType()->isCharType()) {
+            Valid = true;
+            //PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "isArrayType of CharType";
+        }
+    }
+    else if (const PointerType *PT = Ty->getAs<PointerType>()) {
+        if (PT->getPointeeType()->isCharType()) {
+            Valid = true;
+            //PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "isPointerType to CharType";
+        }
+    }
+
+    if (!Valid) {
+        PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "invalid argument type";
+        return false;
+    }
+
+    Arg *A = new (Actions.getASTContext()) LabelArg(CI,E,&Actions.getASTContext());
+    CI->setArg(A);
+
+    return true;
 }
 
 bool
