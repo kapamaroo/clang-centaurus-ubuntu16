@@ -718,6 +718,10 @@ bool
 Stage1_ASTVisitor::UpdateDynamicSize(std::string key, Expr *E) {
     std::string SizeStr;
 
+#if 1
+    return false;
+#endif
+
     if (CallExpr *CE = dyn_cast<CallExpr>(E)) {
         FunctionDecl *FD = CE->getDirectCallee();
         std::string Name = FD->getNameAsString();
