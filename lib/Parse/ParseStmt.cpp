@@ -814,9 +814,10 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
 #warning FIXME: first directive inside compound statement
       StmtResult LeadingWaitDI = StmtEmpty();
       //get any pending wait directive
-      if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASK))
-          Actions.getACCInfo()->WarnOnDirective(DI);
-      else if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASKWAIT))
+      //if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASK))
+      //    Actions.getACCInfo()->WarnOnDirective(DI);
+      //else
+      if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASKWAIT))
           LeadingWaitDI = Actions.getACCInfo()->CreateRegion(DI);
       if (!LeadingWaitDI.isUsable())
           break;
@@ -866,6 +867,11 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
     if (getLangOpts().MicrosoftExt && (Tok.is(tok::kw___if_exists) ||
         Tok.is(tok::kw___if_not_exists))) {
       ParseMicrosoftIfExistsStatement(Stmts);
+      continue;
+    }
+
+    if (Tok.is(tok::annot_pragma_acc)) {
+      HandlePragmaOpenACC();
       continue;
     }
 
