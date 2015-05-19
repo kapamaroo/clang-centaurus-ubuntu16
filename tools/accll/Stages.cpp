@@ -719,6 +719,8 @@ Stage1_ASTVisitor::UpdateDynamicSize(std::string key, Expr *E) {
     std::string SizeStr;
 
 #if 1
+    // we need to put every size into a separate global variable
+    // in case we need it out of the scope the allocation took place
     return false;
 #endif
 
