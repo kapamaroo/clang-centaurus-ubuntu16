@@ -390,7 +390,7 @@ private:
             if ((*II)->getKind() == CK_SIGNIFICANT)
                 return (*II)->getArg()->getPrettyArg();
 #warning FIXME:  default task significance
-        return "0";
+        return "100";
     }
 };
 
