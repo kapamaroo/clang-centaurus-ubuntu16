@@ -1066,7 +1066,15 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
                               RegionStack &RStack, const int Index) {
     //declare a new var here for the accelerator
 
-    E = E->IgnoreParenCasts();
+    E = E->IgnoreParenImpCasts();
+    if (E->getType()->isConstantArrayType() ||
+        E->getType()->isArrayType()) {
+        llvm::outs() << WARNING
+                     << "argument " << toString(Index + 1) << " '"
+                     << getPrettyExpr(Context,E)
+                     << "' is not heap-allocated\n";
+        return ObjRefDef();
+    }
 
     ClauseInfo TmpCI(CK_IN,DI);  //default data dependency
     Arg *TmpA = CreateNewArgFrom(E,&TmpCI,Context);
@@ -1152,6 +1160,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
             + ")*(" + getPrettyExpr(Context,SA->getLength()) + ")";
     }
     else if (Ty->isPointerType()) {
+#if 0
         SizeExpr = DynSizeMap.lookup(OrigName);
         if (!SizeExpr.size()) {
             llvm::outs() << WARNING
@@ -1160,6 +1169,9 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
                          << "use malloc_usable_size(void *)\n";
             SizeExpr = "malloc_usable_size(" + A->getPrettyArg() + ")";
         }
+#else
+        SizeExpr = "malloc_usable_size(" + A->getPrettyArg() + ")";
+#endif
     }
     else if (isa<ArrayArg>(A)) {
         SizeExpr = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
@@ -1577,17 +1589,34 @@ Stage1_ASTVisitor::VisitVarDecl(VarDecl *VD) {
 
 bool
 Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
-    if (!CurrentFunction || !Context->isOpenCLKernel(CurrentFunction))
+    if (!CurrentFunction)
         return true;
 
     FunctionDecl *FD = CE->getDirectCallee();
-    SourceLocation Loc = FD->getSourceRange().getBegin();
-
-    assert(!Loc.isInvalid());
+    std::string Name = FD->getNameAsString();
 
     SourceManager &SM = Context->getSourceManager();
+
+    if (Name.compare("free") == 0) {
+        SourceLocation Loc = CE->getLocStart();
+        std::string NewCode = "acl_garbage_collect(" + getPrettyExpr(Context,CE->getArg(0)) + ");";
+        Replacement R(SM,Loc,0,NewCode);
+        applyReplacement(ReplacementPool,R);
+        return true;
+    }
+
+    SourceLocation Loc = FD->getSourceRange().getBegin();
+
     if (SM.isInSystemHeader(Loc))
         return true;
+
+    if (!Context->isOpenCLKernel(CurrentFunction)) {
+        return true;
+    }
+
+    // inside kernel function
+
+    assert(!Loc.isInvalid());
 
     PresumedLoc PLoc = SM.getPresumedLoc(Loc);
     llvm::outs() << DEBUG
