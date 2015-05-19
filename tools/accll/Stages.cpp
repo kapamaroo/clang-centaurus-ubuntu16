@@ -836,7 +836,9 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
 
         std::string NewCode;
         if (ClauseOn) {
-            assert(0 && "Unsupported feature: IMPLEMENT ME:  wait_on()");
+            llvm::outs() << DEBUG
+                         << "Unsupported feature: IMPLEMENT ME:  wait_on()";
+            return true;
         }
         else if (ClauseLabel && ClauseRatio) {
             NewCode = "acl_taskwait_label_ratio(" + QLabel + "," + Ratio + ");";
