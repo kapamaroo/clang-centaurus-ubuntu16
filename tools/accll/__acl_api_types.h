@@ -90,7 +90,7 @@ size_t get_group_id ( uint dimindx);
 size_t get_local_id ( uint dimindx);
 size_t get_local_size ( uint dimindx);
 size_t get_num_groups ( uint dimindx);
-uint get_work_dim ();
+uint get_work_dim ( void );
 
 size_t get_global_id ( uint dimindx) { (void)dimindx; return 0; }
 size_t get_global_size ( uint dimindx) { (void)dimindx; return 0; }
@@ -98,7 +98,7 @@ size_t get_group_id ( uint dimindx) { (void)dimindx; return 0; }
 size_t get_local_id ( uint dimindx) { (void)dimindx; return 0; }
 size_t get_local_size ( uint dimindx) { (void)dimindx; return 0; }
 size_t get_num_groups ( uint dimindx) { (void)dimindx; return 0; }
-uint get_work_dim () { return 0; }
+uint get_work_dim ( void ) { return 0; }
 
 typedef uint cl_mem_fence_flags;
 
