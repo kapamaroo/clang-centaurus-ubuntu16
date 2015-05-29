@@ -84,20 +84,34 @@ typedef cl_double16 double16;
 #endif
 
 // implement built in functions
-size_t get_global_id ( uint dimindx) { return 0; }
-size_t get_global_size ( uint dimindx) { return 0; }
-size_t get_group_id ( uint dimindx) { return 0; }
-size_t get_local_id ( uint dimindx) { return 0; }
-size_t get_local_size ( uint dimindx) { return 0; }
-size_t get_num_groups ( uint dimindx) { return 0; }
+size_t get_global_id ( uint dimindx);
+size_t get_global_size ( uint dimindx);
+size_t get_group_id ( uint dimindx);
+size_t get_local_id ( uint dimindx);
+size_t get_local_size ( uint dimindx);
+size_t get_num_groups ( uint dimindx);
+uint get_work_dim ();
+
+size_t get_global_id ( uint dimindx) { (void)dimindx; return 0; }
+size_t get_global_size ( uint dimindx) { (void)dimindx; return 0; }
+size_t get_group_id ( uint dimindx) { (void)dimindx; return 0; }
+size_t get_local_id ( uint dimindx) { (void)dimindx; return 0; }
+size_t get_local_size ( uint dimindx) { (void)dimindx; return 0; }
+size_t get_num_groups ( uint dimindx) { (void)dimindx; return 0; }
 uint get_work_dim () { return 0; }
 
 typedef uint cl_mem_fence_flags;
 
-void prefetch ( const __global void *p, size_t num_elements) {}
-void mem_fence ( cl_mem_fence_flags flags) {}
-void read_mem_fence ( cl_mem_fence_flags flags) {}
-void write_mem_fence ( cl_mem_fence_flags flags) {}
-void barrier ( cl_mem_fence_flags flags) {}
+void prefetch ( const __global void *p, size_t num_elements);
+void mem_fence ( cl_mem_fence_flags flags);
+void read_mem_fence ( cl_mem_fence_flags flags);
+void write_mem_fence ( cl_mem_fence_flags flags);
+void barrier ( cl_mem_fence_flags flags);
+
+void prefetch ( const __global void *p, size_t num_elements) { (void)p; (void)num_elements; }
+void mem_fence ( cl_mem_fence_flags flags) { (void)flags; }
+void read_mem_fence ( cl_mem_fence_flags flags) { (void)flags; }
+void write_mem_fence ( cl_mem_fence_flags flags) { (void)flags; }
+void barrier ( cl_mem_fence_flags flags) { (void)flags; }
 
 #endif
