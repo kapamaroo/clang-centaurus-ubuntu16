@@ -106,6 +106,14 @@ ObjRefDef printFunction(clang::FunctionDecl *FD, clang::ASTContext *Context,
     return ObjRefDef(Ref,OS.str());
 }
 
+static ClauseInfo *getClauseOfKind(const ClauseList &CList, ClauseKind CK) {
+    for (ClauseList::const_iterator
+             II = CList.begin(), EE = CList.end(); II != EE; ++II)
+        if ((*II)->getKind() == CK)
+            return *II;
+    return 0;
+}
+
 KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, clang::CallGraph *CG,
                            std::string &Extensions, std::string &UserTypes,
                            const enum PrintSubtaskType SubtaskPrintMode)
@@ -326,9 +334,11 @@ struct KernelSrc {
         Definition = AccurateKernel->HostCode.Definition;
         if (ApproximateKernel)
             Definition += ApproximateKernel->HostCode.Definition;
+        std::string DeviceType = setDeviceType(DI);
         Definition += "struct _task_executable " + NameRef + " = {"
             //+ ".UID = " + toString(TaskUID)
-            + ".kernel_accurate = &" + AccurateKernel->HostCode.NameRef
+            + ".device_type = " + DeviceType
+            + ",.kernel_accurate = &" + AccurateKernel->HostCode.NameRef
             + ",.kernel_approximate = " + ApproxName
             + "};";
     }
@@ -338,7 +348,19 @@ private:
                       clang::openacc::DirectiveInfo *DI,
                       std::string &Extensions, std::string &UserTypes);
 
-    void setDeviceType(const DirectiveInfo *DI) {}
+    std::string setDeviceType(const DirectiveInfo *DI) {
+        std::string DeviceType = "(unsigned int)";
+        if (const ClauseInfo *CI = getClauseOfKind(DI->getClauseList(),CK_SUGGEST)) {
+            DeviceType += CI->getArg()->getPrettyArg();
+        }
+        else if (const ClauseInfo *CI = getClauseOfKind(DI->getClauseList(),CK_BIND)) {
+            DeviceType += "((unsigned int)" + CI->getArg()->getPrettyArg() + " | 0x1)";
+        }
+        else {
+            DeviceType += "ACL_DEV_ALL";
+        }
+        return DeviceType;
+    }
 };
 
 struct TaskSrc {
@@ -790,14 +812,6 @@ Stage1_ASTVisitor::VisitDeclStmt(DeclStmt *DS) {
                     UpdateDynamicSize(static_cast<NamedDecl*>(VD)->getNameAsString(),
                                       Init->IgnoreParenCasts());
     return true;
-}
-
-static ClauseInfo *getClauseOfKind(ClauseList &CList, ClauseKind CK) {
-    for (ClauseList::iterator
-             II = CList.begin(), EE = CList.end(); II != EE; ++II)
-        if ((*II)->getKind() == CK)
-            return *II;
-    return 0;
 }
 
 bool
