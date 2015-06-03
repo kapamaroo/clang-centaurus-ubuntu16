@@ -368,6 +368,7 @@ public:
 
     DirectiveKind getKind() const { return DK; }
     ClauseList &getClauseList() { return CList; }
+    const ClauseList &getClauseList() const { return CList; }
     void setAccStmt(AccStmt *Acc) { ACC = Acc; }
     AccStmt *getAccStmt() const { assert(ACC); return ACC; }
 
