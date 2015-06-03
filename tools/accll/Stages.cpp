@@ -404,65 +404,66 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, Direct
     assert(SubStmt && "Null SubStmt");
 
     //create device code
-    if (CallExpr *CE = dyn_cast<CallExpr>(SubStmt)) {
-        FunctionDecl *AccurateFun = CE->getDirectCallee();
-        FunctionDecl *ApproxFun = getApproxFunctionDecl(DI);
+    CallExpr *CE = dyn_cast<CallExpr>(SubStmt);
+    if (!CE)
+        return;
 
-        assert(AccurateFun);
+    FunctionDecl *AccurateFun = CE->getDirectCallee();
+    FunctionDecl *ApproxFun = getApproxFunctionDecl(DI);
 
-        llvm::DenseMap<FunctionDecl *, KernelRefDef *>::iterator Kref;
+    assert(AccurateFun);
 
-        //top level kernel call
-        if (Context->isFunctionWithSubtasks(AccurateFun)) {
-            assert(!ApproxFun);
+    llvm::DenseMap<FunctionDecl *, KernelRefDef *>::iterator Kref;
 
-            llvm::outs() << "Kernel '" << AccurateFun->getNameAsString() << "' has subtasks\n";
+    //top level kernel call
+    if (Context->isFunctionWithSubtasks(AccurateFun)) {
+        assert(!ApproxFun);
 
-            Kref = KernelAccuratePool.find(AccurateFun);
-            if (Kref != KernelAccuratePool.end())
-                AccurateKernel = Kref->second;
-            else {
-                AccurateKernel = new KernelRefDef(Context,AccurateFun,CG,
-                                                  Extensions,UserTypes,
-                                                  K_PRINT_ACCURATE_SUBTASK);
-                KernelAccuratePool[AccurateFun] = AccurateKernel;
-            }
+        llvm::outs() << "Kernel '" << AccurateFun->getNameAsString() << "' has subtasks\n";
 
-            Kref = KernelApproximatePool.find(AccurateFun);
+        Kref = KernelAccuratePool.find(AccurateFun);
+        if (Kref != KernelAccuratePool.end())
+            AccurateKernel = Kref->second;
+        else {
+            AccurateKernel = new KernelRefDef(Context,AccurateFun,CG,
+                                              Extensions,UserTypes,
+                                              K_PRINT_ACCURATE_SUBTASK);
+            KernelAccuratePool[AccurateFun] = AccurateKernel;
+        }
+
+        Kref = KernelApproximatePool.find(AccurateFun);
+        if (Kref != KernelApproximatePool.end())
+            ApproximateKernel = Kref->second;
+        else {
+            ApproximateKernel = new KernelRefDef(Context,AccurateFun,CG,
+                                                 Extensions,UserTypes,
+                                                 K_PRINT_APPROXIMATE_SUBTASK);
+            KernelApproximatePool[AccurateFun] = ApproximateKernel;
+        }
+    }
+    else {
+        Kref = KernelAccuratePool.find(AccurateFun);
+        if (Kref != KernelAccuratePool.end())
+            AccurateKernel = Kref->second;
+        else {
+            AccurateKernel = new KernelRefDef(Context,AccurateFun,CG,
+                                              Extensions,UserTypes,
+                                              K_PRINT_ACCURATE_SUBTASK);
+            KernelAccuratePool[AccurateFun] = AccurateKernel;
+        }
+        if (ApproxFun) {
+            Kref = KernelApproximatePool.find(ApproxFun);
             if (Kref != KernelApproximatePool.end())
                 ApproximateKernel = Kref->second;
             else {
-                ApproximateKernel = new KernelRefDef(Context,AccurateFun,CG,
+                ApproximateKernel = new KernelRefDef(Context,ApproxFun,CG,
                                                      Extensions,UserTypes,
                                                      K_PRINT_APPROXIMATE_SUBTASK);
-                KernelApproximatePool[AccurateFun] = ApproximateKernel;
+                KernelApproximatePool[ApproxFun] = ApproximateKernel;
             }
         }
-        else {
-            Kref = KernelAccuratePool.find(AccurateFun);
-            if (Kref != KernelAccuratePool.end())
-                AccurateKernel = Kref->second;
-            else {
-                AccurateKernel = new KernelRefDef(Context,AccurateFun,CG,
-                                                  Extensions,UserTypes,
-                                                  K_PRINT_ACCURATE_SUBTASK);
-                KernelAccuratePool[AccurateFun] = AccurateKernel;
-            }
-            if (ApproxFun) {
-                Kref = KernelApproximatePool.find(ApproxFun);
-                if (Kref != KernelApproximatePool.end())
-                    ApproximateKernel = Kref->second;
-                else {
-                    ApproximateKernel = new KernelRefDef(Context,ApproxFun,CG,
-                                                         Extensions,UserTypes,
-                                                         K_PRINT_APPROXIMATE_SUBTASK);
-                    KernelApproximatePool[ApproxFun] = ApproximateKernel;
-                }
-            }
-        }
-
-        return;
     }
+
 }
 
 std::string TaskSrc::HostCall() {
