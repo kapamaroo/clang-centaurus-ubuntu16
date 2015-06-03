@@ -338,11 +338,7 @@ private:
                       clang::openacc::DirectiveInfo *DI,
                       std::string &Extensions, std::string &UserTypes);
 
-    std::string ref(std::string Name) const {
-        if (Name.compare("NULL") == 0 || Name.compare("0") == 0)
-            return Name;
-        return "&" + Name;
-    }
+    void setDeviceType(const DirectiveInfo *DI) {}
 };
 
 struct TaskSrc {
@@ -463,7 +459,6 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, Direct
             }
         }
     }
-
 }
 
 std::string TaskSrc::HostCall() {
