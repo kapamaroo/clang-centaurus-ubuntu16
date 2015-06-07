@@ -494,7 +494,30 @@ OpenACC::isValidClauseWrapper(DirectiveKind DK, ClauseInfo *CI) {
 //http://www.parashift.com/c++-faq-lite/pointers-to-members.html
 #define ACC_CALL(method) ((*this).*(method))
 
-    return ACC_CALL(isValidClause[CI->getKind()])(DK,CI);
+    if (!ACC_CALL(isValidClause[CI->getKind()])(DK,CI))
+        return false;
+
+    bool status = true;
+    if (CI->isDataClause()) {
+        ArgVector &Args = CI->getArgs();
+        for (ArgVector::iterator II = Args.begin(), EE = Args.end(); II != EE; ++II) {
+            Arg *A = *II;
+            Expr *E = A->getExpr()->IgnoreParenImpCasts();
+
+            if (BinaryOperator *BO = dyn_cast<BinaryOperator>(E)) {
+                if (BO->getOpcode() )
+            }
+
+            if (E->getType()->isConstantArrayType() ||
+                E->getType()->isArrayType()) {
+                S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
+                    << "argument '" << A->getPrettyArg() << "' is not heap-allocated\n";
+                status = false;
+            }
+        }
+    }
+
+    return status;
 }
 
 bool
