@@ -345,6 +345,7 @@ LabelArg::getLabel() const {
 std::string
 LabelArg::getQuotedLabel() const {
     if (StringLiteral *SL = dyn_cast<StringLiteral>(getExpr()))
+        (void)SL;
         return "\"" + getLabel() + "\"";
     return getPrettyArg();
 }
