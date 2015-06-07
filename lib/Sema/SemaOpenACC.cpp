@@ -555,11 +555,23 @@ OpenACC::isValidClauseOn(DirectiveKind DK, ClauseInfo *CI) {
 
 bool
 OpenACC::isValidClauseWorkers(DirectiveKind DK, ClauseInfo *CI) {
+    if (CI->getArgs().size() > 3) {
+        S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
+            << "support up to 3 dimensions";
+        return false;
+    }
+
     return true;
 }
 
 bool
 OpenACC::isValidClauseGroups(DirectiveKind DK, ClauseInfo *CI) {
+    if (CI->getArgs().size() > 3) {
+        S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
+            << "support up to 3 dimensions";
+        return false;
+    }
+
     return true;
 }
 
@@ -600,8 +612,12 @@ OpenACC::isValidDirectiveTask(DirectiveInfo *DI) {
             Groups = CI;
     }
 
-    if (Workers->getArgs().size() != Groups->getArgs().size())
-        return false;
+    bool status = true;
+    if (Workers->getArgs().size() != Groups->getArgs().size()) {
+        S.Diag(DI->getLocStart(),diag::err_pragma_acc_test)
+            << "workers and groups dimensions mismatch";
+        status = false;
+    }
 
     return true;
 }
@@ -641,7 +657,7 @@ OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
         return false;
     }
 
-    return true;
+    return status;
 }
 
 bool
