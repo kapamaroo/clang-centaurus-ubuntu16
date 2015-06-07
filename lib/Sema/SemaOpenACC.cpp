@@ -471,6 +471,7 @@ OpenACC::isValidDirectiveWrapper(DirectiveInfo *DI) {
 //http://www.parashift.com/c++-faq-lite/pointers-to-members.html
 #define ACC_CALL(method) ((*this).*(method))
 #if 0
+    // false positive on nested subtasks
     if (DI->getKind() == DK_SUBTASK && !S.getLangOpts().OpenCL) {
         WarnOnDirective(DI);
         return false;
