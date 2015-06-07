@@ -6388,6 +6388,12 @@ def note_pragma_acc_invalid_nesting : Note<
 def note_pragma_acc_test : Note<
   "%0">;
 
+def warn_pragma_acc_test : Warning<
+  "%0">;
+
+def err_pragma_acc_test : Error<
+  "%0">;
+
 def err_pragma_acc_taskwait_clauses : Error<
   "%0">;
 
