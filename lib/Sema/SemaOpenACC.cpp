@@ -738,10 +738,10 @@ OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
             return StmtEmpty();
 
         //allow any statement that contains a CallExpr
-#warning check if SubStmt contains a CallExpr
         if (CallExpr *CE = dyn_cast<CallExpr>(SubStmt)) {
             if (S.getASTContext().isOpenCLKernel(CE->getDirectCallee()))
-#warning FIXME: add error message
+                S.Diag(SubStmt->getLocStart(),diag::err_pragma_acc_test)
+                    << "nested parallelism is not supported";
                 return StmtEmpty();
         }
         else if (BinaryOperator *BO = dyn_cast<BinaryOperator>(SubStmt)) {
@@ -749,9 +749,16 @@ OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
             if (CallExpr *CE = dyn_cast<CallExpr>(RHS))
                 (void)CE;  //ok
             else {
-#warning FIXME: add error message
+                S.Diag(SubStmt->getLocStart(),diag::err_pragma_acc_test)
+                    << "expected call expression after '=' operator";
                 return StmtEmpty();
             }
+        }
+        else {
+#warning check if SubStmt contains a CallExpr
+            S.Diag(SubStmt->getLocStart(),diag::err_pragma_acc_test)
+                << "unsupported statement kind after subtask directive";
+            return StmtEmpty();
         }
 
         ACC->setSubStmt(SubStmt);
