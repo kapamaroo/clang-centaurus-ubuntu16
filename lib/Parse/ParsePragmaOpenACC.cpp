@@ -17,6 +17,8 @@ const unsigned DirectiveInfo::ValidDirective[DK_END] = {
     BITMASK(CK_LABEL) |
         BITMASK(CK_SIGNIFICANT) |
         BITMASK(CK_APPROXFUN) |
+        BITMASK(CK_EVALFUN) |
+        BITMASK(CK_ESTIMATION) |
         BITMASK(CK_BUFFER) |
         BITMASK(CK_IN) |
         BITMASK(CK_OUT) |
@@ -31,6 +33,8 @@ const unsigned DirectiveInfo::ValidDirective[DK_END] = {
 
         //taskwait
         BITMASK(CK_LABEL) |
+        BITMASK(CK_EVALFUN) |
+        BITMASK(CK_ESTIMATION) |
         BITMASK(CK_ON) |
         BITMASK(CK_ENERGY_JOULE) |
         BITMASK(CK_RATIO),
@@ -51,6 +55,8 @@ const std::string ClauseInfo::Name[CK_END] = {
     "label",
     "significant",
     "approxfun",
+    "evalfun",
+    "estimation",
     "buffer",
     "in",
     "out",
@@ -204,6 +210,8 @@ static bool mustBeUnique(ClauseKind CK) {
     case CK_LABEL:
     case CK_SIGNIFICANT:
     case CK_APPROXFUN:
+    case CK_EVALFUN:
+    case CK_ESTIMATION:
     case CK_WORKERS:
     case CK_GROUPS:
     case CK_BIND:
@@ -386,12 +394,74 @@ Parser::ParseClauseApproxfun(DirectiveKind DK, ClauseInfo *CI) {
 }
 
 bool
+Parser::ParseClauseEvalfun(DirectiveKind DK, ClauseInfo *CI) {
+    if (DK == DK_TASKWAIT) {
+        ExprResult E = ParseCastExpression(false,false,NotTypeCast);
+        // ExprResult E = ParseExpression();
+        if (!E.isUsable())
+            return false;
+
+        Arg *A = new (Actions.getASTContext()) RawExprArg(CI,E.get(),&Actions.getASTContext());
+        CI->setArg(A);
+
+        return true;
+    }
+
+    if (Tok.isNot(tok::identifier)) {
+        PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "not an identifier";
+        return false;
+    }
+
+    StringRef FunctionName = Tok.getIdentifierInfo()->getNameStart();
+
+    LookupResult R(Actions,&Actions.Context.Idents.get(FunctionName),
+                   Tok.getLocation(),Sema::LookupOrdinaryName);
+    if (!Actions.LookupName(R,Actions.TUScope,/*AllowBuiltinCreation=*/false)) {
+        PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "lookup failed";
+        return false;
+    }
+
+    FunctionDecl *ApproxFun = R.getAsSingle<FunctionDecl>();
+    if (!ApproxFun) {
+        PP.Diag(Tok,diag::err_pragma_acc_function_not_found) << FunctionName;
+        return false;
+    }
+
+    //PP.Diag(Tok,diag::note_pragma_acc_parser_test) << ApproxFun->getNameInfo().getName().getAsString();
+    Arg *A = new (Actions.getASTContext()) FunctionArg(CI,ApproxFun);
+    CI->setArg(A);
+
+    ConsumeToken();
+    return true;
+}
+
+bool
+Parser::ParseClauseEstimation(DirectiveKind DK, ClauseInfo *CI) {
+    ExprResult Expr = ParseCastExpression(false,false,NotTypeCast);
+
+    if (!Expr.isUsable())
+        return false;
+
+    const Type *ETy = Expr.get()->getType().getTypePtr();
+    if (const PointerType *PT = dyn_cast<PointerType>(Expr.get()->getType()))
+        ETy = PT->getPointeeType().getTypePtr();
+    if (!ETy->isFloatingType()) {
+        PP.Diag(CI->getLocStart(),diag::err_pragma_acc_parser_test)
+            << "expected expression of floating type";
+        return false;
+    }
+
+    Arg *A = Actions.getACCInfo()->CreateArg(Expr.get(),CI);
+    CI->setArg(A);
+
+    return true;
+}
+
+bool
 Parser::ParseClauseBuffer(DirectiveKind DK, ClauseInfo *CI) {
     if (!ParseArgList(DK,CI))
         return false;
     bool status = true;
-    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
-        status = false;
     return status;
 }
 
@@ -400,8 +470,6 @@ Parser::ParseClauseIn(DirectiveKind DK, ClauseInfo *CI) {
     if (!ParseArgList(DK,CI))
         return false;
     bool status = true;
-    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
-        status = false;
     return status;
 }
 
@@ -410,8 +478,6 @@ Parser::ParseClauseOut(DirectiveKind DK, ClauseInfo *CI) {
     if (!ParseArgList(DK,CI))
         return false;
     bool status = true;
-    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
-        status = false;
     return status;
 }
 
@@ -420,8 +486,6 @@ Parser::ParseClauseInout(DirectiveKind DK, ClauseInfo *CI) {
     if (!ParseArgList(DK,CI))
         return false;
     bool status = true;
-    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
-        status = false;
     return status;
 }
 
@@ -430,8 +494,6 @@ Parser::ParseClauseDevice_in(DirectiveKind DK, ClauseInfo *CI) {
     if (!ParseArgList(DK,CI))
         return false;
     bool status = true;
-    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
-        status = false;
     return status;
 }
 
@@ -440,8 +502,6 @@ Parser::ParseClauseDevice_out(DirectiveKind DK, ClauseInfo *CI) {
     if (!ParseArgList(DK,CI))
         return false;
     bool status = true;
-    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
-        status = false;
     return status;
 }
 
@@ -450,8 +510,6 @@ Parser::ParseClauseDevice_inout(DirectiveKind DK, ClauseInfo *CI) {
     if (!ParseArgList(DK,CI))
         return false;
     bool status = true;
-    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
-        status = false;
     return status;
 }
 
@@ -460,8 +518,6 @@ Parser::ParseClauseOn(DirectiveKind DK, ClauseInfo *CI) {
     if (!ParseArgList(DK,CI))
         return false;
     bool status = true;
-    if (Actions.getACCInfo()->WarnOnArgKind(CI->getArgs(),A_RawExpr))
-        status = false;
     return status;
 }
 

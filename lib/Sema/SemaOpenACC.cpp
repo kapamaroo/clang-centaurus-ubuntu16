@@ -10,6 +10,33 @@
 using namespace clang;
 using namespace openacc;
 
+namespace {
+    bool HelperMatchExpressions(Expr *E1, Expr *E2, OpenACC *ACC) {
+        DirectiveInfo TmpDI(DK_TASK,E1->getLocStart());  //the directive type here is not important
+        ClauseInfo TmpCI(CK_IN,&TmpDI);  //the clause type here is not important
+        Arg *A1 = ACC->CreateArg(E1,&TmpCI);
+        if (A1) {
+            bool status = A1->Matches(E2,ACC);
+            delete A1;
+            return status;
+        }
+        return false;
+    }
+}
+
+bool
+Arg::Matches(Expr *E, OpenACC *ACC) {
+    DirectiveInfo TmpDI(DK_TASK,E->getLocStart());  //the directive type here is not important
+    ClauseInfo TmpCI(CK_IN,&TmpDI);  //the clause type here is not important
+    Arg *Target = ACC->CreateArg(E,&TmpCI);
+    if (Target) {
+        bool status = Matches(Target);
+        delete Target;
+        return status;
+    }
+    return false;
+}
+
 bool
 Arg::Matches(Arg *Target) {
     //Exact Match
@@ -228,6 +255,8 @@ OpenACC::OpenACC(Sema &s) : S(s), PendingDirective(0), Valid(false),
     isValidClause[CK_LABEL] =        &OpenACC::isValidClauseLabel;
     isValidClause[CK_SIGNIFICANT] =  &OpenACC::isValidClauseSignificant;
     isValidClause[CK_APPROXFUN] =    &OpenACC::isValidClauseApproxfun;
+    isValidClause[CK_EVALFUN] =      &OpenACC::isValidClauseEvalfun;
+    isValidClause[CK_ESTIMATION] =   &OpenACC::isValidClauseEstimation;
     isValidClause[CK_BUFFER] =       &OpenACC::isValidClauseBuffer;
     isValidClause[CK_IN] =           &OpenACC::isValidClauseIn;
     isValidClause[CK_OUT] =          &OpenACC::isValidClauseOut;
@@ -268,20 +297,26 @@ Arg::Arg(ArgKind K, CommonInfo *p, Expr *expr, clang::ASTContext *Context) :
     if (isa<ArrayElementArg>(this) || isa<SubArrayArg>(this) ||
         isa<VarArg>(this) || isa<ArrayArg>(this)) {
 
-        Expr *BaseExpr = E;
+        Expr *BaseExpr = E->IgnoreParenImpCasts();
+
+        while (UnaryOperator *UO = dyn_cast<UnaryOperator>(BaseExpr))
+            BaseExpr = UO->getSubExpr()->IgnoreParenImpCasts();
 
         if (isa<ArrayElementArg>(this) || isa<SubArrayArg>(this)) {
             ArraySubscriptExpr *ASE = cast<ArraySubscriptExpr>(BaseExpr);
-            BaseExpr = ASE->getBase()->IgnoreParenCasts();
+            BaseExpr = ASE->getBase()->IgnoreParenImpCasts();
         }
 
-        while (MemberExpr *ME = dyn_cast<MemberExpr>(BaseExpr->IgnoreParenImpCasts())) {
+        while (UnaryOperator *UO = dyn_cast<UnaryOperator>(BaseExpr))
+            BaseExpr = UO->getSubExpr()->IgnoreParenImpCasts();
+
+        while (MemberExpr *ME = dyn_cast<MemberExpr>(BaseExpr)) {
             FieldDecl *FD = dyn_cast<FieldDecl>(ME->getMemberDecl());
             Fields.push_back(FD);
             //RecordDecl *RD = FD->getParent();
             BaseExpr = ME->getBase()->IgnoreParenImpCasts();
             if (ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(BaseExpr))
-                BaseExpr = ASE->getBase()->IgnoreParenCasts();
+                BaseExpr = ASE->getBase()->IgnoreParenImpCasts();
         }
 
         DeclRefExpr *DF = cast<DeclRefExpr>(BaseExpr);
@@ -350,17 +385,48 @@ LabelArg::getQuotedLabel() const {
     return getPrettyArg();
 }
 
+static bool isStaticVarExpr(Expr *E, OpenACC *ACC) {
+    E = E->IgnoreParenImpCasts();
+
+    if (UnaryOperator *UO = dyn_cast<UnaryOperator>(E)) {
+        if (UO->getOpcode() == UO_AddrOf) {
+            E = UO->getSubExpr()->IgnoreParenImpCasts();
+            if (ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(E)) {
+                E = ASE->getBase()->IgnoreParenImpCasts();
+                if (!ACC->isArrayExpr(E))
+                    return true;
+                //S.Diag(E->getLocStart(),diag::err_pragma_acc_test)
+                //    << "expression is not dynamically-allocated\n";
+            }
+            else if (DeclRefExpr *DeclRef = dyn_cast<DeclRefExpr>(E)) {
+                if (isa<VarDecl>(DeclRef->getDecl()))
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool
 OpenACC::isVarExpr(Expr *E) {
+    E = E->IgnoreParenImpCasts();
+
     //ignore arrays, they must be recognized as ArrayArg only
     if (isArrayExpr(E))
         return false;
 
-    //Step 1: check if is declaration reference
-    //Step 2: check if it is a variable reference
-    if (DeclRefExpr *DeclRef = dyn_cast<DeclRefExpr>(E))
-        if (isa<VarDecl>(DeclRef->getDecl()))
+    if (DeclRefExpr *DeclRef = dyn_cast<DeclRefExpr>(E)) {
+        if (!isa<VarDecl>(DeclRef->getDecl()))
+            return false;
+        if (DeclRef->getType()->isPointerType())
             return true;
+    }
+#warning FIXME: add a new kind of Arg
+    else if (isStaticVarExpr(E,this))
+        return true;
+    else if (E->getType()->isPointerType())
+        return true;
+
     return false;
 }
 
@@ -369,8 +435,15 @@ OpenACC::isArrayExpr(Expr *E) {
     //this finds all the array variables (not elements)
     //if (const ArrayType *ATy = S.getASTContext().getAsArrayType(E->getType()))
     //S.Diag(E->getExprLoc(),diag::note_pragma_acc_test) << ATy->getTypeClassName();
-    if (S.getASTContext().getAsArrayType(E->getType()))
+    if (S.getASTContext().getAsArrayType(E->getType()) ||
+        S.getASTContext().getAsConstantArrayType(E->getType()))
         return true;
+    if (E->getType()->isConstantArrayType() ||
+        E->getType()->isArrayType() ||
+        E->getType()->isIncompleteArrayType() ||
+        E->getType()->isVariableArrayType())
+        return true;
+
     return false;
 }
 
@@ -497,22 +570,28 @@ OpenACC::isValidClauseWrapper(DirectiveKind DK, ClauseInfo *CI) {
     if (!ACC_CALL(isValidClause[CI->getKind()])(DK,CI))
         return false;
 
+    if (DK == DK_TASKWAIT)
+        return true;
+
     bool status = true;
     if (CI->isDataClause()) {
         ArgVector &Args = CI->getArgs();
         for (ArgVector::iterator II = Args.begin(), EE = Args.end(); II != EE; ++II) {
-            Arg *A = *II;
-            Expr *E = A->getExpr()->IgnoreParenImpCasts();
-
-            if (BinaryOperator *BO = dyn_cast<BinaryOperator>(E)) {
-                if (BO->getOpcode() )
-            }
-
-            if (E->getType()->isConstantArrayType() ||
-                E->getType()->isArrayType()) {
-                S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
-                    << "argument '" << A->getPrettyArg() << "' is not heap-allocated\n";
+            if ((!isa<SubArrayArg>(*II) && !isa<VarArg>(*II)) ||
+                (isa<VarArg>(*II) && isStaticVarExpr((*II)->getExpr(),this))) {
+                std::string _msg = "pass-by-value";
+                if (isa<ArrayArg>(*II))
+                    _msg = "non-dynamically allocated";
+                else if (UnaryOperator *UO = dyn_cast<UnaryOperator>((*II)->getExpr()->IgnoreParenImpCasts())) {
+                    if (UO->getOpcode() == UO_AddrOf)
+                        _msg = "non-dynamically allocated";
+                }
+                std::string msg = "invalid '" + (*II)->getParent()->getAsClause()->getAsString()
+                    + "' data dependency for " + _msg + " argument '"
+                    + (*II)->getPrettyArg() + "' (" + (*II)->getKindAsString() + ")\n";
+                S.Diag((*II)->getExpr()->getLocStart(),diag::err_pragma_acc_test) << msg;
                 status = false;
+                continue;
             }
         }
     }
@@ -532,7 +611,86 @@ OpenACC::isValidClauseSignificant(DirectiveKind DK, ClauseInfo *CI) {
 
 bool
 OpenACC::isValidClauseApproxfun(DirectiveKind DK, ClauseInfo *CI) {
-    //the parser takes care of this
+    Arg *A = CI->getArg();
+    FunctionArg *FA = dyn_cast<FunctionArg>(A);
+    FunctionDecl *FD = FA->getFunctionDecl();
+    if (!S.getASTContext().isOpenCLKernel(FD)) {
+        S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
+            << "expected OpenCL kernel";
+        return false;
+    }
+    return true;
+}
+
+bool
+OpenACC::isValidClauseEvalfun(DirectiveKind DK, ClauseInfo *CI) {
+    if (DK == DK_TASK) {
+        Arg *A = CI->getArg();
+        FunctionArg *FA = dyn_cast<FunctionArg>(A);
+        FunctionDecl *FD = FA->getFunctionDecl();
+       if (!S.getASTContext().isOpenCLKernel(FD)) {
+            S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
+                << "expected OpenCL kernel";
+            return false;
+        }
+       return true;
+    }
+    else if (DK == DK_TASKWAIT) {
+        bool status = true;
+
+        Expr *E = CI->getArg()->getExpr()->IgnoreParenImpCasts();
+        FunctionDecl *FD = NULL;
+
+        if (CallExpr *CE = dyn_cast<CallExpr>(E))
+            FD = CE->getDirectCallee();
+        else if (BinaryOperator *BO = dyn_cast<BinaryOperator>(E)) {
+            Expr *RHS = BO->getRHS()->IgnoreParenCasts();
+            CE = dyn_cast<CallExpr>(RHS);
+            if (CE)
+                FD = CE->getDirectCallee();
+
+            if (!BO->isAssignmentOp()) {
+                S.Diag(BO->getLocStart(),diag::err_pragma_acc_test)
+                    << "expected assignment operator";
+                status = false;
+            }
+        }
+
+        if (!FD) {
+            S.Diag(E->getLocStart(),diag::err_pragma_acc_test)
+                << "expected a C function call expression or assignment statement from a C function call";
+            status = false;
+        }
+        else if (S.getASTContext().isOpenCLKernel(FD)) {
+            S.Diag(E->getLocStart(),diag::err_pragma_acc_test)
+                << "expected a regular C function";
+            status = false;
+        }
+
+        return status;
+    }
+
+    return false;
+}
+
+bool
+OpenACC::isValidClauseEstimation(DirectiveKind DK, ClauseInfo *CI) {
+    if (DK == DK_TASK)
+        // let the clause wrapper handle this as common data clause
+        return true;
+    else if (DK == DK_TASKWAIT) {
+        if (isa<VarArg>(CI->getArg()))
+            ;  //ok
+        else if (isa<RawExprArg>(CI->getArg()) && isa<UnaryOperator>(CI->getArg()->getExpr()))
+            ;  //ok
+        else {
+            std::string msg = "invalid '" + std::string(CI->getArg()->getKindAsString())
+                + "' argument for estimation() clause, expected address";
+            S.Diag(CI->getArg()->getExpr()->getLocStart(),diag::err_pragma_acc_test) << msg;
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -626,6 +784,9 @@ OpenACC::isValidDirectiveTask(DirectiveInfo *DI) {
     ClauseInfo *Workers = NULL;
     ClauseInfo *Groups = NULL;
 
+    ClauseInfo *EvalFun = NULL;
+    ClauseInfo *Estimation = NULL;
+
     ClauseList &CList = DI->getClauseList();
     for (ClauseList::iterator II = CList.begin(), EE = CList.end(); II != EE; ++II) {
         ClauseInfo *CI = *II;
@@ -633,6 +794,10 @@ OpenACC::isValidDirectiveTask(DirectiveInfo *DI) {
             Workers = CI;
         else if (!Groups && CI->getKind() == CK_GROUPS)
             Groups = CI;
+        else if (!EvalFun && CI->getKind() == CK_EVALFUN)
+            EvalFun = CI;
+        else if (!Estimation && CI->getKind() == CK_ESTIMATION)
+            Estimation = CI;
     }
 
     bool status = true;
@@ -642,7 +807,27 @@ OpenACC::isValidDirectiveTask(DirectiveInfo *DI) {
         status = false;
     }
 
-    return true;
+    if (!EvalFun && !Estimation)
+        return true;  //ok
+#if 0
+    // postpone check for CreateRgion() method, when SubStmt is known
+    else if (!EvalFun) {
+        S.Diag(DI->getLocStart(),diag::err_pragma_acc_test)
+            << "missing evalfun() clause";
+        S.Diag(Estimation->getLocStart(),diag::note_pragma_acc_test)
+            << "to be combined with this clause";
+        status = false;
+    }
+#endif
+    else if (!Estimation) {
+        S.Diag(DI->getLocStart(),diag::err_pragma_acc_test)
+            << "missing estimation() clause";
+        S.Diag(EvalFun->getLocStart(),diag::note_pragma_acc_test)
+            << "to be combined with evalfun() clause";
+        status = false;
+    }
+
+    return status;
 }
 
 bool
@@ -656,17 +841,25 @@ OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
     bool hasRatioClause(false);
     bool hasLabelClause(false);
     bool hasEnergy_jouleClause(false);
+
+    ClauseInfo *EvalFun = NULL;
+    ClauseInfo *Estimation = NULL;
+
     ClauseList &CList = DI->getClauseList();
     for (ClauseList::iterator II = CList.begin(), EE = CList.end(); II != EE; ++II) {
         ClauseInfo *CI = *II;
         if (CI->getKind() == CK_ON)
             hasOnClause = true;
-        if (CI->getKind() == CK_RATIO)
+        else if (CI->getKind() == CK_RATIO)
             hasRatioClause = true;
-        if (CI->getKind() == CK_LABEL)
+        else if (CI->getKind() == CK_LABEL)
             hasLabelClause = true;
-        if (CI->getKind() == CK_ENERGY_JOULE)
+        else if (CI->getKind() == CK_ENERGY_JOULE)
             hasEnergy_jouleClause = true;
+        else if (CI->getKind() == CK_EVALFUN)
+            EvalFun = CI;
+        else if (CI->getKind() == CK_ESTIMATION)
+            Estimation = CI;
     }
 
     if ((hasOnClause && (hasLabelClause || hasRatioClause || hasEnergy_jouleClause)) ||
@@ -676,8 +869,91 @@ OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
         //and ratio clauses(). ratio() clause is unique.
 
         S.Diag(DI->getLocStart(),diag::err_pragma_acc_taskwait_clauses)
-            << "invalit combination of clauses";
+            << "invalid combination of clauses";
         return false;
+    }
+
+    ////////////////////////////////////////////////
+    if (!EvalFun && !Estimation)
+        return true;  //ok
+    else if (!EvalFun) {
+        S.Diag(DI->getLocStart(),diag::err_pragma_acc_test)
+            << "missing evalfun() clause";
+        //S.Diag(Estimation->getLocStart(),diag::note_pragma_acc_test)
+        //    << "to be combined with estimation() clause";
+        return false;
+    }
+    else if (!Estimation) {
+        S.Diag(DI->getLocStart(),diag::err_pragma_acc_test)
+            << "missing estimation() clause";
+        //S.Diag(EvalFun->getLocStart(),diag::note_pragma_acc_test)
+        //    << "to be combined with evalfun() clause";
+        return false;
+    }
+
+    ////////////////////////////////////////////////
+    bool status = true;
+
+    //EvalFun->getArg()->getExpr()->dump();
+    Expr *AssignEst = NULL;
+    Expr *E = EvalFun->getArg()->getExpr()->IgnoreParenImpCasts();
+    CallExpr *CE = dyn_cast<CallExpr>(E);
+    if (!CE)
+        if (BinaryOperator *BO = dyn_cast<BinaryOperator>(E)) {
+            if (!BO->isAssignmentOp()) {
+                S.Diag(BO->getLocStart(),diag::err_pragma_acc_test)
+                    << "expected assignment operator";
+                status = false;
+            }
+
+            Expr *LHS = BO->getLHS()->IgnoreParenCasts();
+            Expr *RHS = BO->getRHS()->IgnoreParenCasts();
+
+            AssignEst = LHS;
+            if (UnaryOperator *UO = dyn_cast<UnaryOperator>(AssignEst)) {
+                if (UO->getOpcode() == UO_Deref) {
+                    AssignEst = UO->getSubExpr()->IgnoreParenImpCasts();
+                }
+            }
+
+            Expr *Est = Estimation->getArg()->getExpr()->IgnoreParenImpCasts();
+            if (UnaryOperator *UO = dyn_cast<UnaryOperator>(Est)) {
+                if (UO->getOpcode() == UO_AddrOf) {
+                    Est = UO->getSubExpr()->IgnoreParenImpCasts();
+                }
+            }
+
+            if (!HelperMatchExpressions(AssignEst,Est,this)) {
+                S.Diag(EvalFun->getLocStart(),diag::err_pragma_acc_test)
+                    << "assignment to different variable than estimation() argument";
+                status = false;
+            }
+            CE = dyn_cast<CallExpr>(RHS);
+        }
+
+    if (!CE) {
+        if (isValidClauseEstimation(DI->getKind(),Estimation)) {
+            std::string msg = "expected call to estimation function that sets value to '"
+                + Estimation->getArg()->getPrettyArg() + "'";
+            S.Diag(EvalFun->getLocStart(),diag::err_pragma_acc_test) << msg;
+        }
+        status = false;
+    }
+    else {
+        Expr *PassByRefEst = NULL;
+        for (CallExpr::arg_iterator II = CE->arg_begin(), EE = CE->arg_end(); II != EE; ++II) {
+            Expr *E = (*II)->IgnoreParenImpCasts();
+            if (Estimation->getArg()->Matches(E,this)) {
+                PassByRefEst = *II;
+                break;
+            }
+        }
+        if (!PassByRefEst && !AssignEst) {
+            std::string msg = "evaluation function does not set estimation() argument  --  "
+                + std::string(Estimation->getArg()->getKindAsString());
+            S.Diag(EvalFun->getLocStart(),diag::err_pragma_acc_test) << msg;
+            status = false;
+        }
     }
 
     return status;
@@ -778,7 +1054,6 @@ OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
             }
         }
         else {
-#warning check if SubStmt contains a CallExpr
             S.Diag(SubStmt->getLocStart(),diag::err_pragma_acc_test)
                 << "unsupported statement kind after subtask directive";
             return StmtEmpty();
@@ -788,11 +1063,12 @@ OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
         S.getASTContext().markAsFunctionWithSubtasks(S.getCurFunctionDecl());
         break;
     }
-    case DK_TASKWAIT:
+    case DK_TASKWAIT: {
         assert(!SubStmt);
-        if (SubStmt)
-            return StmtEmpty();
+
+        //ACC->setSubStmt(SubStmt);
         break;
+    }
     }
 
     return S.Owned(ACC);
@@ -1080,8 +1356,21 @@ RegionStack::EnterRegion(DirectiveInfo *EnterDI) {
     assert(EnterDI && "Null EnterDI");
 
     //ignore non region directives
-    if (EnterDI->getKind() == DK_TASKWAIT)
+    if (EnterDI->getKind() == DK_TASKWAIT) {
+#if 0
+        openacc::ClauseInfo *Estimation = NULL;
+        ClauseList &CList = EnterDI->getClauseList();
+        for (ClauseList::iterator II = CList.begin(), EE = CList.end(); II != EE; ++II)
+            if ((*II)->getKind() == CK_ESTIMATION) {
+                Estimation = *II;
+                break;
+            }
+        if (!Estimation)
+            return;
+#else
         return;
+#endif
+    }
 
     push_back(EnterDI);
 }
@@ -1091,8 +1380,21 @@ RegionStack::ExitRegion(DirectiveInfo *ExpectedDI) {
     assert(ExpectedDI && "Null ExpectedDI");
 
     //ignore non region directives
-    if (ExpectedDI->getKind() == DK_TASKWAIT)
+    if (ExpectedDI->getKind() == DK_TASKWAIT) {
+#if 0
+        openacc::ClauseInfo *Estimation = NULL;
+        ClauseList &CList = ExpectedDI->getClauseList();
+        for (ClauseList::iterator II = CList.begin(), EE = CList.end(); II != EE; ++II)
+            if ((*II)->getKind() == CK_ESTIMATION) {
+                Estimation = *II;
+                break;
+            }
+        if (!Estimation)
+            return;
+#else
         return;
+#endif
+    }
 
     assert(!empty() && "Empty RegionStack");
 

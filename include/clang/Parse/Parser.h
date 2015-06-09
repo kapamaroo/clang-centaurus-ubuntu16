@@ -477,6 +477,8 @@ private:
     ParseClauseFn ParseClauseLabel;
     ParseClauseFn ParseClauseSignificant;
     ParseClauseFn ParseClauseApproxfun;
+    ParseClauseFn ParseClauseEvalfun;
+    ParseClauseFn ParseClauseEstimation;
     ParseClauseFn ParseClauseBuffer;
     ParseClauseFn ParseClauseIn;
     ParseClauseFn ParseClauseOut;

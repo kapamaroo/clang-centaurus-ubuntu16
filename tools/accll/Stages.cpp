@@ -158,7 +158,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         DepHeaders[DefFile] = true;
 
         llvm::outs() << DEBUG
-                     << FD->getNameAsString() << "-------------------kernel function from header, add header dependency\n";
+                     << FD->getNameAsString() << "-------------------kernel function from header, add header dependency -------------" << DefFile << "\n";
         DeviceCode.NameRef = AlternativeName;
     }
 
@@ -198,6 +198,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
             // it appears as it is, in both accurate and approximate
             // version (if exists), add it only once in the final *.cl file
             CommonFunctionsPool[DepFD] = Src.Definition;
+#warning FIXME: nested-subtask.c fails
             __offline += Src.Definition;
         }
         else {
@@ -740,7 +741,7 @@ Stage1_ASTVisitor::UpdateDynamicSize(std::string key, Expr *E) {
     // we need to put every size into a separate global variable
     // in case we need it out of the scope the allocation took place
     return false;
-#endif
+#else
 
     if (CallExpr *CE = dyn_cast<CallExpr>(E)) {
         FunctionDecl *FD = CE->getDirectCallee();
@@ -777,6 +778,7 @@ Stage1_ASTVisitor::UpdateDynamicSize(std::string key, Expr *E) {
 
     DynSizeMap[key] = SizeStr;
     return true;
+#endif
 }
 
 bool
@@ -1105,6 +1107,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
     else {
         delete TmpA;
 
+#if 0
         if (RStack.FindBufferObjectInRegionStack(A)) {
             assert(0 && "Unexpected nesting");
             //abort creation of device buffer, we created it previously
@@ -1113,6 +1116,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
                          << "' in Clause '" << A->getParent()->getAsClause()->getAsString() << "'\n";
             return ObjRefDef();
         }
+#endif
     }
 
     std::string OrigName = A->getPrettyArg();
@@ -1145,6 +1149,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         DataDepType = "D_PASS_BY_VALUE";
     }
 
+#if 0
     if (A->getExpr()->getType().getUnqualifiedType().getAsString().compare("cl_mem") == 0) {
         llvm::outs() << "Found user defined low level cl_mem object '"
                      << A->getPrettyArg() << "' as '"
@@ -1161,6 +1166,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
 
         return ObjRefDef(NewName,NewCode);
     }
+#endif
 
     if (SubArrayArg *SA = dyn_cast<SubArrayArg>(A)) {
         ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(SA->getExpr());
@@ -1268,18 +1274,17 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
         for (ArgVector::iterator
                  AI = CI->getArgs().begin(), AE = CI->getArgs().end(); AI != AE; ++AI) {
             Arg *A = *AI;
+            if (!isa<SubArrayArg>(*AI) && !isa<VarArg>(A)) {
+                llvm::outs() << WARNING
+                             << "[INTERNAL ERORR] invalid '" << (A)->getParent()->getAsClause()->getAsString()
+                             << "' data dependency for pass-by-value argument '"
+                             << (A)->getPrettyArg() << "' (" << (A)->getKindAsString() << ")\n";
+                assert(0);
+                continue;
+            }
             PragmaArgs.push_back(A);
         }
     }
-
-    for (SmallVector<Arg*,8>::iterator
-             II = PragmaArgs.begin(), EE = PragmaArgs.end(); II != EE; ++II)
-        if (!isa<SubArrayArg>(*II) && !isa<ArrayArg>(*II) &&
-            (!isa<VarArg>(*II) || !(*II)->getExpr()->getType()->isPointerType()))
-            llvm::outs() << WARNING
-                         << "ignore invalid '" << (*II)->getParent()->getAsClause()->getAsString()
-                         << "' data dependency for pass-by-value argument '"
-                         << (*II)->getPrettyArg() << "' (" << (*II)->getKindAsString() << ")\n";
 
 #if 0
     SmallVector<Expr*,8> PtrArgs;
@@ -1584,12 +1589,15 @@ Stage1_ASTVisitor::VisitVarDecl(VarDecl *VD) {
 
     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
     //llvm::outs() << DEBUG
-    //             << "user defined record '" << R->getNameAsString() << "' from file :" << DefFile << "\n";
+    //             << "user defined record '" << TT->getNameAsString() << "' from file :" << DefFile << "\n";
 
     //maybe the implementation headers are not in system directories
     if (!SM.isFromMainFile(Loc)) {
-        if (TrackThisHeader(DefFile))
+        if (TrackThisHeader(DefFile)) {
+            llvm::outs() << DEBUG
+                         << VD->getNameAsString() << " ------------------- " << DefFile << "\n";
             DepHeaders[DefFile] = true;
+        }
     }
     else
         UserTypes += DeclStr + ";\n\n";

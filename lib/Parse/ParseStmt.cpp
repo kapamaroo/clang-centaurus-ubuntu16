@@ -890,7 +890,28 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
             R = Actions.getACCInfo()->CreateRegion(DI,R.get());
         }
         else if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASKWAIT)) {
+#if 0
+            openacc::ClauseInfo *Estimation = NULL;
+            openacc::ClauseList &CList = DI->getClauseList();
+            for (openacc::ClauseList::iterator II = CList.begin(), EE = CList.end(); II != EE; ++II)
+                if ((*II)->getKind() == openacc::CK_ESTIMATION) {
+                    Estimation = *II;
+                    break;
+                }
+
+            if (!Estimation)
+                R = Actions.getACCInfo()->CreateRegion(DI);
+            else {
+                Actions.getACCInfo()->getRegionStack().EnterRegion(DI);
+                //bool OldValue = ProhibitExtensionPragmas();
+                R = ParseStatementOrDeclaration(Stmts, false);
+                //AllowExtensionPragmas(OldValue);
+                Actions.getACCInfo()->getRegionStack().ExitRegion(DI);
+                R = Actions.getACCInfo()->CreateRegion(DI,R.get());
+            }
+#else
             R = Actions.getACCInfo()->CreateRegion(DI);
+#endif
         }
         else
             R = ParseStatementOrDeclaration(Stmts, false);

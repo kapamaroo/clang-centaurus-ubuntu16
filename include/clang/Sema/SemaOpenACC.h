@@ -53,6 +53,8 @@ public:
     isValidClauseFn isValidClauseLabel;
     isValidClauseFn isValidClauseSignificant;
     isValidClauseFn isValidClauseApproxfun;
+    isValidClauseFn isValidClauseEvalfun;
+    isValidClauseFn isValidClauseEstimation;
     isValidClauseFn isValidClauseBuffer;
     isValidClauseFn isValidClauseIn;
     isValidClauseFn isValidClauseOut;

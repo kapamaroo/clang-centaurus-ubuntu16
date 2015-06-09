@@ -18,6 +18,8 @@ class ASTContext;
 
 namespace openacc {
 
+class OpenACC;
+
 enum PrintSubtaskType {
     K_PRINT_ALL,
     K_PRINT_ACCURATE_SUBTASK,
@@ -39,6 +41,8 @@ enum ClauseKind {
     CK_LABEL = 0,
     CK_SIGNIFICANT,
     CK_APPROXFUN,
+    CK_EVALFUN,
+    CK_ESTIMATION,
     CK_BUFFER,
     CK_IN,
     CK_OUT,
@@ -113,6 +117,7 @@ public:
     }
 
     bool Matches(Arg *Target);
+    bool Matches(Expr *E, OpenACC *ACC);
     bool Contains(Arg *Target);
 
     const char *getKindAsString() const {
@@ -312,6 +317,7 @@ public:
     }
     bool hasArgList() const {
         switch (CK) {
+        case CK_ESTIMATION:
         case CK_BUFFER:
         case CK_IN:
         case CK_OUT:
@@ -328,6 +334,7 @@ public:
     }
     bool isDataClause() const {
         switch (CK) {
+        case CK_ESTIMATION:
         case CK_BUFFER:
         case CK_IN:
         case CK_OUT:
