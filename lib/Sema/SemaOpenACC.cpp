@@ -614,10 +614,19 @@ OpenACC::isValidClauseApproxfun(DirectiveKind DK, ClauseInfo *CI) {
     Arg *A = CI->getArg();
     FunctionArg *FA = dyn_cast<FunctionArg>(A);
     FunctionDecl *FD = FA->getFunctionDecl();
-    if (!S.getASTContext().isOpenCLKernel(FD)) {
-        S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
-            << "expected OpenCL kernel";
-        return false;
+    if (DK == DK_TASK) {
+        if (!S.getASTContext().isOpenCLKernel(FD)) {
+            S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
+                << "expected OpenCL kernel";
+            return false;
+        }
+    }
+    else if (DK == DK_SUBTASK) {
+        if (S.getASTContext().isOpenCLKernel(FD)) {
+            S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
+                << "expected non OpenCL kernel";
+            return false;
+        }
     }
     return true;
 }
@@ -1038,10 +1047,11 @@ OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
 
         //allow any statement that contains a CallExpr
         if (CallExpr *CE = dyn_cast<CallExpr>(SubStmt)) {
-            if (S.getASTContext().isOpenCLKernel(CE->getDirectCallee()))
+            if (S.getASTContext().isOpenCLKernel(CE->getDirectCallee())) {
                 S.Diag(SubStmt->getLocStart(),diag::err_pragma_acc_test)
                     << "nested parallelism is not supported";
                 return StmtEmpty();
+            }
         }
         else if (BinaryOperator *BO = dyn_cast<BinaryOperator>(SubStmt)) {
             Expr *RHS = BO->getRHS()->IgnoreParenCasts();
