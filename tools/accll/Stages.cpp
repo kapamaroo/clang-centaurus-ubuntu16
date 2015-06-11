@@ -209,7 +209,6 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
             // it appears as it is, in both accurate and approximate
             // version (if exists), add it only once in the final *.cl file
             CommonFunctionsPool[DepFD] = Src.Definition;
-#warning FIXME: nested-subtask.c fails
             __offline += Src.Definition;
         }
         else {
