@@ -12,6 +12,7 @@
 //===----------------------------------------------------------------------===//
 #define DEBUG_TYPE "CallGraph"
 
+#include "clang/Basic/OpenACC.h"
 #include "clang/Analysis/CallGraph.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
@@ -62,6 +63,27 @@ public:
   void VisitCallExpr(CallExpr *CE) {
     if (Decl *D = getDeclFromCall(CE))
       addCalledDecl(D);
+  }
+
+  void VisitAccStmt(AccStmt *Acc) {
+      using namespace openacc;
+      switch (Acc->getDirective()->getKind()) {
+      case DK_SUBTASK: {
+          ClauseList &CList = Acc->getDirective()->getClauseList();
+          for (ClauseList::iterator
+                   II = CList.begin(), EE = CList.end(); II != EE; ++II) {
+              ClauseInfo *CI = *II;
+              if (CI->getKind() == CK_APPROXFUN) {
+                  FunctionArg *FA = CI->getArgAs<FunctionArg>();
+                  addCalledDecl(FA->getFunctionDecl());
+                  break;
+              }
+          }
+      }
+      case DK_TASK:
+          Visit(Acc->getSubStmt());
+      case DK_TASKWAIT:  break;
+      }
   }
 
   // Adds may-call edges for the ObjC message sends.
