@@ -870,11 +870,6 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
       continue;
     }
 
-    if (Tok.is(tok::annot_pragma_acc)) {
-      HandlePragmaOpenACC();
-      continue;
-    }
-
     StmtResult R;
     if (Tok.isNot(tok::kw___extension__)) {
         if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASK)) {
@@ -961,6 +956,15 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
 
     if (R.isUsable())
       Stmts.push_back(R.release());
+  }
+
+  // last taskwait on compound statement
+  if (Tok.is(tok::r_brace)) {
+      StmtResult R;
+      if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASKWAIT))
+          R = Actions.getACCInfo()->CreateRegion(DI);
+      if (R.isUsable())
+          Stmts.push_back(R.release());
   }
 
   SourceLocation CloseLoc = Tok.getLocation();
