@@ -114,4 +114,10 @@ void read_mem_fence ( cl_mem_fence_flags flags) { (void)flags; }
 void write_mem_fence ( cl_mem_fence_flags flags) { (void)flags; }
 void barrier ( cl_mem_fence_flags flags) { (void)flags; }
 
+int mul24(int x, int y);
+int mul24(int x, int y) { return x * y; }
+
+//float sqrt(float x);
+//float sqrt(float x) { return x; }
+
 #endif
