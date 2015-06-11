@@ -162,6 +162,17 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         DeviceCode.NameRef = AlternativeName;
     }
 
+#if 0
+        llvm::outs() << DEBUG
+                     << "kernel:" << FD->getNameAsString() << "\n"
+                     << DeviceCode.Definition << "\n";
+#endif
+
+#if 0
+        llvm::outs() << DEBUG
+                     << "usertypes:" << UserTypes << "\n";
+#endif
+
     std::string __offline = Extensions;
     std::string PreDef;  // = Extensions;
     for (StringMap<bool>::iterator
@@ -207,6 +218,12 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
             //             << DepFD->getNameAsString() << "-------------------function dep from header\n";
             continue;
         }
+
+#if 0
+        llvm::outs() << DEBUG
+                     << "dep:" << DepFD->getNameAsString() << "\n"
+                     << Src.Definition << "\n";
+#endif
     }
     __offline += DeviceCode.Definition;
     DeviceCode.Definition = PreDef + DeviceCode.Definition;
@@ -1352,12 +1369,12 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     for (llvm::SmallPtrSet<clang::FunctionDecl *, 32>::iterator
              II = Context->getKernelFunctions().begin(),
              EE = Context->getKernelFunctions().end(); II != EE; ++II) {
-        llvm::outs() << (*II)->getNameAsString() << " <-- kernel\n";
+        llvm::outs() << DEBUG << (*II)->getNameAsString() << " <-- kernel\n";
     }
     for (llvm::SmallPtrSet<clang::FunctionDecl *, 32>::iterator
              II = Context->getFunctionsWithSubtasks().begin(),
              EE = Context->getFunctionsWithSubtasks().end(); II != EE; ++II) {
-        llvm::outs() << (*II)->getNameAsString() << " <-- has subtasks\n";
+        llvm::outs() << DEBUG << (*II)->getNameAsString() << " <-- has subtasks\n";
     }
 #endif
 }
@@ -1543,8 +1560,6 @@ Stage1_ASTVisitor::Finish() {
     APIHeaderVector.clear();
     CommonFunctionsPool.clear();
     DepHeaders.clear();
-
-    //CG->dump();
 }
 
 bool
