@@ -1339,9 +1339,41 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
         + "struct _memory_object " + NameRef + "[" + NumArgs + "] = {" + InitList + "};";
 }
 
+static void updateNestedSubtasks(ASTContext *C, CallGraph *CG) {
+    bool repeat = true;
+    while (repeat) {
+        repeat = false;
+        CallGraphNode *Root = CG->getRoot();
+        for (CallGraphNode::const_iterator CI = Root->begin(),
+                 CE = Root->end(); CI != CE; ++CI) {
+            FunctionDecl *CurrentFD = dyn_cast<FunctionDecl>((*CI)->getDecl());
+            if (C->isFunctionWithSubtasks(CurrentFD))
+                continue;
+
+            CallGraphNode *CurrentNode = CG->getNode(CurrentFD);
+            if (!CurrentNode)
+                continue;
+            for (CallGraphNode::iterator
+                     NI = CurrentNode->begin(), NE = CurrentNode->end(); NI != NE; ++NI) {
+                FunctionDecl *NewFD = dyn_cast<FunctionDecl>((*NI)->getDecl());
+                if (NewFD == CurrentFD)
+                    continue;
+                if (C->isOpenCLKernel(NewFD))
+                    continue;
+                if (!C->isFunctionWithSubtasks(NewFD))
+                    continue;
+                C->markAsFunctionWithSubtasks(CurrentFD);
+                repeat = true;
+            }
+        }
+    }
+}
+
 void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     Context = C;
     CG = _CG;
+    updateNestedSubtasks(C,CG);
+    //CG->dump();
 
     APIHeaderVector.push_back("centaurus_common.h");
     APIHeaderVector.push_back("__acl_api_types.h");
@@ -1666,6 +1698,9 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
         if (TrackThisHeader(DefFile))
             DepHeaders[DefFile] = true;
     }
+#if 0
+    // we get them through call graph
+
     else {
         std::string DeclStr;
         raw_string_ostream OS(DeclStr);
@@ -1673,6 +1708,7 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
         OS.str();
         UserTypes += DeclStr + ";\n\n";
     }
+#endif
 
     return true;
 }
