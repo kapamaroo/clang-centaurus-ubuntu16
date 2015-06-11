@@ -1670,6 +1670,9 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
     }
 
     SourceLocation Loc = FD->getSourceRange().getBegin();
+    assert(!Loc.isInvalid());
+    if (Loc.isInvalid())
+        return true;
 
     if (SM.isInSystemHeader(Loc))
         return true;
@@ -1680,9 +1683,10 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
 
     // inside kernel function
 
-    assert(!Loc.isInvalid());
-
     PresumedLoc PLoc = SM.getPresumedLoc(Loc);
+    if (PLoc.isInvalid())
+        return true;
+
     llvm::outs() << DEBUG
                  << "inside kernel '" << CurrentFunction->getNameAsString()
                  << "' function call to '" << FD->getNameAsString() << "'\n       "
