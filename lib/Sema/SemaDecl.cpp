@@ -9067,7 +9067,9 @@ NamedDecl *Sema::ImplicitlyDefineFunction(SourceLocation Loc,
     diag_id = diag::ext_implicit_function_decl;
   else
     diag_id = diag::warn_implicit_function_decl;
-  Diag(Loc, diag_id) << &II;
+  if (!getASTContext().isOpenCLKernel(getCurFunctionDecl()) &&
+      !getASTContext().isFunctionWithSubtasks(getCurFunctionDecl()))
+      Diag(Loc, diag_id) << &II;
 
   // Because typo correction is expensive, only do it if the implicit
   // function declaration is going to be treated as an error.
