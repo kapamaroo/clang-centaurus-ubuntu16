@@ -1,6 +1,6 @@
 #ifndef __ACL_API_TYPES__
 #define __ACL_API_TYPES__
-
+ 
 #ifdef __APPLE__
 #include <OpenCL/opencl.h>
 #else
@@ -114,10 +114,20 @@ void read_mem_fence ( cl_mem_fence_flags flags) { (void)flags; }
 void write_mem_fence ( cl_mem_fence_flags flags) { (void)flags; }
 void barrier ( cl_mem_fence_flags flags) { (void)flags; }
 
-int mul24(int x, int y);
-int mul24(int x, int y) { return x * y; }
+//int mul24(int x, int y);
+//int mul24(int x, int y) { return x * y; }
 
-//float sqrt(float x);
-//float sqrt(float x) { return x; }
+// __attribute__((overloadable))
+#define OCL_DECLARE_BUILTIN_GENTYPE_2(name, gentype) gentype name ( gentype x , gentype y ) __attribute__((overloadable))
+#define OCL_DEFINE_BUILTIN_GENTYPE_2(name, gentype) gentype __attribute__((overloadable)) name ( gentype x , gentype y ) { (void)x; (void)y; return x; }
+#define OCL_SET_BUILTIN_GENTYPE_2(name, gentype) OCL_DECLARE_BUILTIN_GENTYPE_2(name, gentype); OCL_DEFINE_BUILTIN_GENTYPE_2(name, gentype)
+
+OCL_SET_BUILTIN_GENTYPE_2(max,short)
+OCL_SET_BUILTIN_GENTYPE_2(max,int)
+
+OCL_SET_BUILTIN_GENTYPE_2(min,short)
+OCL_SET_BUILTIN_GENTYPE_2(min,int)
+
+OCL_SET_BUILTIN_GENTYPE_2(mul24,int)
 
 #endif
