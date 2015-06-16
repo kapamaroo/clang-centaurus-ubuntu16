@@ -487,17 +487,24 @@ int main(int argc, const char **argv) {
 
                 // ... and nvidia-ml path
                 std::string NVMLPath("/usr/lib/nvidia-346");
-                std::string NVMLPathFlag("-L" + NVMLPath);
-                ldcli.push_back("-lnvidia-ml");
 
+                std::string NVMLPathFlag("-L" + NVMLPath);
                 ldcli.push_back(NVMLPathFlag.c_str());
+
+                ldcli.push_back("-lnvidia-ml");
                 ldcli.push_back("-lpthread");
                 ldcli.push_back("-ldl");
                 ldcli.push_back("-lrt");
                 ldcli.push_back("-fPIC");
                 ldcli.push_back("-lm");
-                std::string LibStaticRuntime(LibPath + "/libcentaurus.a");
-                ldcli.push_back(LibStaticRuntime.c_str());
+
+                std::string LibPathFlag("-L" + LibPath);
+                ldcli.push_back(LibPathFlag.c_str());
+                ldcli.push_back("-lcentaurus");
+                ldcli.push_back("-lcentaurusapi");
+
+                //std::string LibStaticRuntime(LibPath + "/libcentaurus.a");
+                //ldcli.push_back(LibStaticRuntime.c_str());
                 if (UserDefinedOutputFile.size()) {
                     ldcli.push_back("-o");
                     ldcli.push_back(UserDefinedOutputFile.c_str());
