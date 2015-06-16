@@ -584,7 +584,7 @@ static bool isRuntimeCall(const std::string Name) {
 }
 
 #warning FIXME: autodetect double extensions
-std::string accll::OpenCLExtensions = "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n#pragma cl_nv_compiler_options\n\n";
+std::string accll::OpenCLExtensions = "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n\n";
 
 #if 0
 std::string accll::KernelHeader =
