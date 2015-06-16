@@ -234,7 +234,6 @@ PlatformBin _compile(std::string src, std::string SymbolName, std::string Prefix
     cl_program       clProgram;
 
     size_t           dataBytes;
-    size_t           srcLength = src.size();
     cl_int           errcode;
 
     // Declare the supported options.
@@ -282,6 +281,7 @@ PlatformBin _compile(std::string src, std::string SymbolName, std::string Prefix
     if (PlatformName.find("NVIDIA") != std::string::npos) {
         BuildOptions += "-cl-nv-verbose";
         PlatformName = "NVIDIA";
+        src = "\n#pragma cl_nv_compiler_options\n\n" + src;
     }
     else if (PlatformName.find("Intel") != std::string::npos) {
         PlatformName = "INTEL";
@@ -292,6 +292,8 @@ PlatformBin _compile(std::string src, std::string SymbolName, std::string Prefix
     else {
         PlatformName = "UNKNOWN";
     }
+
+    size_t srcLength = src.size();
 
     std::string includesStr;
     std::string definesStr;
