@@ -1692,7 +1692,16 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
                  << "' function call to '" << FD->getNameAsString() << "'\n       "
                  << GetBasename(PLoc.getFilename()) << ":" << PLoc.getLine() << "\n";
 
-    std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
+    const FileEntry *FE = SM.getFileEntryForID(SM.getFileID(Loc));
+    if (!FE) {
+        // this happens when we include files through the cmd (-include option)
+        // if that happens, we already have the header's declarations
+
+        //llvm::outs() << DEBUG
+        //             << "implicit declaration of function '" << FD->getNameAsString() << "'\n";
+        return true;
+    }
+    std::string DefFile = FE->getName();
     //llvm::outs() << DEBUG
     //             << "user defined record '" << R->getNameAsString() << "' from file :" << DefFile << "\n";
 
