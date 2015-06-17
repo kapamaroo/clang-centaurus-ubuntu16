@@ -1626,12 +1626,16 @@ Stage1_ASTVisitor::VisitVarDecl(VarDecl *VD) {
     if (SM.isInSystemHeader(Loc))
         return true;
 
+#if 0
     PresumedLoc PLoc = SM.getPresumedLoc(Loc);
+    if (PLoc.isInvalid())
+        return true;
     llvm::outs() << DEBUG
                  << "inside kernel '" << CurrentFunction->getNameAsString()
                  << "' from symbol definition '" << VD->getNameAsString() << "'\n       "
                  << "found type '" << (cast<ValueDecl>(VD))->getType().getAsString() << "' defined at "
                  << GetBasename(PLoc.getFilename()) << ":" << PLoc.getLine() << "\n";
+#endif
 
     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
     //llvm::outs() << DEBUG
@@ -1683,6 +1687,7 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
 
     // inside kernel function
 
+#if 0
     PresumedLoc PLoc = SM.getPresumedLoc(Loc);
     if (PLoc.isInvalid())
         return true;
@@ -1691,6 +1696,7 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
                  << "inside kernel '" << CurrentFunction->getNameAsString()
                  << "' function call to '" << FD->getNameAsString() << "'\n       "
                  << GetBasename(PLoc.getFilename()) << ":" << PLoc.getLine() << "\n";
+#endif
 
     const FileEntry *FE = SM.getFileEntryForID(SM.getFileID(Loc));
     if (!FE) {
