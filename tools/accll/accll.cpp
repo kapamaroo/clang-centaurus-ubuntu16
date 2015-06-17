@@ -100,6 +100,14 @@ int main(int argc, const char **argv) {
         for (int i=ExtraArgsStartPos+1; i<argc; ++i)
             cli.push_back(argv[i]);
 
+        // -lpthread -lOpenCL -ldl -lrt -lm -lnvidia-ml -Lpapi-5.4.1/src/ -lpapi
+        cli.push_back("-lnvidia-ml");
+        cli.push_back("-lpthread");
+        cli.push_back("-ldl");
+        cli.push_back("-lrt");
+        cli.push_back("-lm");
+        cli.push_back("-lpapi");
+
         llvm::outs() << DEBUG
                      << "Invoke clang as: " << ClangPath << " ";
         for (size_t i=0; i<cli.size(); ++i)
@@ -153,7 +161,7 @@ int main(int argc, const char **argv) {
         return 1;
     }
 
-    //After Stage0, proccess only the files that contain OpenACC Directives
+    //After Stage0, proccess only the files that contain OpenACC Directives and main() function
     std::vector<std::string> InputFiles;
     std::vector<std::string> LibOCLFiles;
     std::vector<std::string> KernelFiles;
@@ -476,27 +484,15 @@ int main(int argc, const char **argv) {
                 ldcli.push_back(ClangPath.c_str());
                 ldcli.push_back(ObjFile.c_str());
 
-                // the runtime linker flags
-                //-lpthread -lOpenCL -ldl -lrt -fPIC -lm -lnvidia-ml
-
-                // we also need the path to OpenCL library
-                //std::string OCLPath("/usr/local/cuda-6.5/targets/x86_64-linux/lib");
-                //std::string OCLPathFlag("-L" + OCLPath);
-                //ldcli.push_back(OCLPathFlag.c_str());
-                //ldcli.push_back("-lOpenCL");
-
-                // ... and nvidia-ml path
-                std::string NVMLPath("/usr/lib/nvidia-346");
-
-                std::string NVMLPathFlag("-L" + NVMLPath);
-                ldcli.push_back(NVMLPathFlag.c_str());
+                //std::string NVMLPathFlag("-L/usr/lib/nvidia-346");
+                //ldcli.push_back(NVMLPathFlag.c_str());
 
                 ldcli.push_back("-lnvidia-ml");
                 ldcli.push_back("-lpthread");
                 ldcli.push_back("-ldl");
                 ldcli.push_back("-lrt");
-                ldcli.push_back("-fPIC");
                 ldcli.push_back("-lm");
+                ldcli.push_back("-lpapi");
 
                 std::string LibPathFlag("-L" + LibPath);
                 ldcli.push_back(LibPathFlag.c_str());
