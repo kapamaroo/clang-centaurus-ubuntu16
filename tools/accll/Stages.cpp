@@ -679,13 +679,23 @@ Stage0_ASTVisitor::VisitCallExpr(CallExpr *CE) {
     return true;
 }
 
+bool
+Stage0_ASTVisitor::VisitFunctionDecl(FunctionDecl *FD) {
+    if (FD->isMain()) {
+        hasMain = true;
+        return true;
+    }
+
+    return true;
+}
+
 void
 Stage0_ASTVisitor::Finish(ASTContext *Context) {
     SourceManager &SM = Context->getSourceManager();
     std::string FileName = SM.getFileEntryForID(SM.getMainFileID())->getName();
     llvm::outs() << "Found                   : '" << FileName << "'\n";
 
-    if (!hasDirectives && !hasRuntimeCalls) {
+    if (!hasDirectives && !hasRuntimeCalls && !hasMain) {
         llvm::outs() << DEBUG
                      << "treat as regular file: '"
                      << FileName << "'\n";

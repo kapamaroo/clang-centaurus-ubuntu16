@@ -47,6 +47,7 @@ private:
     bool hasDirectives;
     bool hasDeviceCode;
     bool hasRuntimeCalls;
+    bool hasMain;
 
 public:
     void Finish(clang::ASTContext *Context);
@@ -54,10 +55,11 @@ public:
     explicit Stage0_ASTVisitor(std::vector<std::string> &InputFiles,
                                std::vector<std::string> &RegularFiles) :
         InputFiles(InputFiles), RegularFiles(RegularFiles),
-        hasDirectives(false), hasDeviceCode(false), hasRuntimeCalls(false) {}
+        hasDirectives(false), hasDeviceCode(false), hasRuntimeCalls(false), hasMain(false) {}
 
     bool VisitAccStmt(clang::AccStmt *ACC);
     bool VisitCallExpr(clang::CallExpr *CE);
+    bool VisitFunctionDecl(clang::FunctionDecl *FD);
 
 };
 
