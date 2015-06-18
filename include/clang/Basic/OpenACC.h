@@ -103,7 +103,7 @@ public:
     Expr *getExpr() const { return E; }
 
     template<class T>
-    T *getAs() const { return cast<T>(this); }
+    T *getAs() { return cast<T>(this); }
 
     SourceLocation getLocStart() const { return StartLoc; }
     SourceLocation getLocEnd() const { return EndLoc; }
@@ -250,7 +250,7 @@ public:
     Arg *getArg() const { return Args.back(); }
 
     template<class T>
-    T *getArgAs() const { return cast<T>(getArg()); }
+    T *getArgAs() { return getArg()->getAs<T>(); }
 
     const SourceLocation &getLocStart() const { return StartLoc; }
     const SourceLocation &getLocEnd() const { return EndLoc; }
