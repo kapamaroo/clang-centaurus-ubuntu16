@@ -14,6 +14,8 @@ using namespace clang::openacc;
 using namespace accll;
 
 namespace {
+    bool ProfileMode = false;
+
     std::vector<std::string> APIHeaderVector;
     llvm::StringMap<bool> DepHeaders;
     bool TrackThisHeader(std::string &Header) {
@@ -28,6 +30,7 @@ namespace {
     llvm::StringMap<std::string> DynSizeMap;
     llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelAccuratePool;
     llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelApproximatePool;
+    llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelEvaluatePool;
     llvm::DenseMap<FunctionDecl *,std::string> CommonFunctionsPool;
     llvm::SmallPtrSet<FunctionDecl *,32> EraseFunctionDeclPool;
 }
@@ -247,6 +250,8 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         PrefixDef += "__ACCR__";
     else if (SubtaskPrintMode == K_PRINT_APPROXIMATE_SUBTASK)
         PrefixDef += "__APRX__";
+    else
+        PrefixDef += "__EVAL__";
     compile(__offline,DeviceCode.NameRef,PrefixDef,BuildOptions);
 
     // On Linux the driver caches compiled kernels in ~/.nv/ComputeCache.
@@ -337,26 +342,57 @@ struct KernelSrc {
 
     KernelRefDef *AccurateKernel;
     KernelRefDef *ApproximateKernel;
+    KernelRefDef *EvaluationKernel;
 
     KernelSrc(clang::ASTContext *Context, clang::CallGraph *CG,
               DirectiveInfo *DI, int TaskUID,
               std::string &Extensions, std::string &UserTypes) :
         Context(Context),
-        AccurateKernel(0), ApproximateKernel(0)
+        AccurateKernel(0), ApproximateKernel(0), EvaluationKernel(0)
     {
         CreateKernel(Context,CG,DI,Extensions,UserTypes);
 
-        std::string ApproxName = ApproximateKernel ? std::string("&" + ApproximateKernel->HostCode.NameRef) : "NULL";
+        std::string DeviceType = setDeviceType(DI);
         NameRef = "__accll_task_exe";
         Definition = AccurateKernel->HostCode.Definition;
+
+        std::string ApproxName = ApproximateKernel ? std::string("&" + ApproximateKernel->HostCode.NameRef) : "NULL";
         if (ApproximateKernel)
             Definition += ApproximateKernel->HostCode.Definition;
-        std::string DeviceType = setDeviceType(DI);
+
+        std::string EstimationName = "NULL";
+        std::string EstimationCode;
+        std::string EvalfunName = EvaluationKernel ? std::string("&" + EvaluationKernel->HostCode.NameRef) : "NULL";
+
+        if (ProfileMode) {
+            if (EvaluationKernel) {
+                Definition += EvaluationKernel->HostCode.Definition;
+
+                ClauseInfo *ClauseEstimation = getClauseOfKind(DI->getClauseList(),CK_ESTIMATION);
+                ClauseInfo *ClauseEvalfun = getClauseOfKind(DI->getClauseList(),CK_EVALFUN);
+                // see SemaOpenACC.cpp
+                unsigned Index = ClauseEvalfun->getArgAs<FunctionArg>()->getFunctionDecl()->getNumParams() - 1;
+
+                EstimationName = "__accll_arg_estimation";
+                EstimationCode = "struct _memory_object " + EstimationName + " = {"
+                    + ".cl_obj = 0"
+                    + ",.index = " + toString(Index)
+                    + ",.dependency = D_ESTIMATION"
+                    + ",.host_ptr = (void*)" + ClauseEstimation->getArg()->getPrettyArg()
+                    + ",.start_offset = 0"
+                    + ",.size = sizeof(double)"
+                    + "};";
+            }
+        }
+
+        Definition += EstimationCode;
         Definition += "struct _task_executable " + NameRef + " = {"
             //+ ".UID = " + toString(TaskUID)
             + ".device_type = " + DeviceType
             + ",.kernel_accurate = &" + AccurateKernel->HostCode.NameRef
             + ",.kernel_approximate = " + ApproxName
+            + ",.kernel_evalfun = " + EvalfunName
+            + ",.estimation = &" + EstimationName
             + "};";
     }
 
@@ -495,6 +531,25 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, Direct
                                                      Extensions,UserTypes,
                                                      K_PRINT_APPROXIMATE_SUBTASK);
                 KernelApproximatePool[ApproxFun] = ApproximateKernel;
+            }
+        }
+    }
+
+    ClauseInfo *ClauseEvalfun = getClauseOfKind(DI->getClauseList(),CK_EVALFUN);
+    //ClauseInfo *ClauseEstimation = getClauseOfKind(DI->getClauseList(),CK_ESTIMATION);
+
+    assert((bool)(~((bool)ClauseEvalfun ^ (bool)ClauseEstimation))
+           && "UNEXPECTED ERROR: evalfun() and estimation()");
+
+    if (ProfileMode) {
+        if (ClauseEvalfun) {
+            FunctionDecl *Evalfun = ClauseEvalfun->getArgAs<FunctionArg>()->getFunctionDecl();
+            Kref = KernelEvaluatePool.find(Evalfun);
+            if (Kref != KernelEvaluatePool.end())
+                EvaluationKernel = Kref->second;
+            else {
+                EvaluationKernel = new KernelRefDef(Context,Evalfun,CG,Extensions,UserTypes);
+                KernelEvaluatePool[Evalfun] = EvaluationKernel;
             }
         }
     }
@@ -860,8 +915,10 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         ClauseInfo *ClauseLabel = getClauseOfKind(CList,CK_LABEL);
         ClauseInfo *ClauseRatio = getClauseOfKind(CList,CK_RATIO);
         ClauseInfo *ClauseEnergy_joule = getClauseOfKind(CList,CK_ENERGY_JOULE);
+        ClauseInfo *ClauseEvalfun = getClauseOfKind(CList,CK_EVALFUN);
+        ClauseInfo *ClauseEstimation = getClauseOfKind(CList,CK_ESTIMATION);
 
-        std::string QLabel;
+        std::string QLabel = "NULL";
         std::string Ratio;
         std::string Energy;
 
@@ -889,6 +946,19 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         }
         else {
             NewCode = "acl_taskwait_all();";
+        }
+
+        assert((bool)(~((bool)ClauseEvalfun ^ (bool)ClauseEstimation))
+               && "UNEXPECTED ERROR: evalfun() and estimation()");
+
+        if (ProfileMode) {
+            if (ClauseEvalfun) {
+                std::string EstValue = ClauseEstimation->getArg()->getPrettyArg();
+                if (ClauseEstimation->getArg()->getExpr()->getType()->isPointerType())
+                    EstValue = "*" + EstValue;
+                NewCode += getPrettyExpr(Context,ClauseEvalfun->getArg()->getExpr()->IgnoreParens()) + ";";
+                NewCode += "acl_set_group_quality(" + QLabel + "," + EstValue + ");";
+            }
         }
 
         if (!NewCode.empty()) {
@@ -1495,6 +1565,20 @@ Stage1_ASTVisitor::Finish() {
                 }
             }
         }
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelEvaluatePool.begin(), EE = KernelEvaluatePool.end(); II != EE; ++II) {
+            dst << II->second->InlineDeviceCode.HeaderDecl;
+            std::vector<PlatformBin> &Platforms = II->second->Binary;
+            for (std::vector<PlatformBin>::iterator
+                     BI = Platforms.begin(), BE = Platforms.end(); BI != BE; ++BI) {
+                PlatformBin &Platform = *BI;
+                for (std::vector<DeviceBin>::iterator
+                         DI = Platform.begin(), DE = Platform.end(); DI != DE; ++DI) {
+                    DeviceBin &Device = *DI;
+                    dst << Device.Bin.HeaderDecl;
+                }
+            }
+        }
         dst << "\n";
         dst.flush();
     }
@@ -1522,6 +1606,20 @@ Stage1_ASTVisitor::Finish() {
         }
         for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
                  II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
+            dst << II->second->InlineDeviceCode.Definition;
+            std::vector<PlatformBin> &Platforms = II->second->Binary;
+            for (std::vector<PlatformBin>::iterator
+                     BI = Platforms.begin(), BE = Platforms.end(); BI != BE; ++BI) {
+                PlatformBin &Platform = *BI;
+                for (std::vector<DeviceBin>::iterator
+                         DI = Platform.begin(), DE = Platform.end(); DI != DE; ++DI) {
+                    DeviceBin &Device = *DI;
+                    dst << Device.Bin.Definition;
+                }
+            }
+        }
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelEvaluatePool.begin(), EE = KernelEvaluatePool.end(); II != EE; ++II) {
             dst << II->second->InlineDeviceCode.Definition;
             std::vector<PlatformBin> &Platforms = II->second->Binary;
             for (std::vector<PlatformBin>::iterator
@@ -1566,6 +1664,12 @@ Stage1_ASTVisitor::Finish() {
                  SM.isFromMainFile((*II).first->getLocStart()))
                 dst << (*II).second->DeviceCode.Definition;
         }
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelEvaluatePool.begin(), EE = KernelEvaluatePool.end(); II != EE; ++II) {
+            if (Context->isFunctionWithSubtasks((*II).first) ||
+                 SM.isFromMainFile((*II).first->getLocStart()))
+                dst << (*II).second->DeviceCode.Definition;
+        }
         dst.flush();
     }
     KernelFiles.push_back(NewDeviceImpl);
@@ -1582,6 +1686,11 @@ Stage1_ASTVisitor::Finish() {
             delete (*II).second;
         }
         KernelApproximatePool.clear();
+        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+                 II = KernelEvaluatePool.begin(), EE = KernelEvaluatePool.end(); II != EE; ++II) {
+            delete (*II).second;
+        }
+        KernelEvaluatePool.clear();
     }
 
     for (SmallPtrSet<FunctionDecl*,32>::iterator
