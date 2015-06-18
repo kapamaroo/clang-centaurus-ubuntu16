@@ -29,12 +29,33 @@ Arg::Matches(Expr *E, OpenACC *ACC) {
     DirectiveInfo TmpDI(DK_TASK,E->getLocStart());  //the directive type here is not important
     ClauseInfo TmpCI(CK_IN,&TmpDI);  //the clause type here is not important
     Arg *Target = ACC->CreateArg(E,&TmpCI);
-    if (Target) {
-        bool status = Matches(Target);
-        delete Target;
-        return status;
+    if (!Target)
+        return false;
+
+    bool status = true;
+    if (isa<RawExprArg>(this) && isa<RawExprArg>(Target)) {
+        UnaryOperator *UO = dyn_cast<UnaryOperator>(getExpr()->IgnoreParenCasts());
+        UnaryOperator *TargetUO = dyn_cast<UnaryOperator>(Target->getExpr()->IgnoreParenCasts());
+
+        if (!UO && !TargetUO) {
+
+        }
+        else if (!UO || !TargetUO)
+            status = false;
+        else if (UO->getOpcode() != TargetUO->getOpcode())
+            status = false;
+        else if (UO->getOpcode() != UO_AddrOf && UO->getOpcode() != UO_Deref)
+            status = false;
+        else
+            status = HelperMatchExpressions(UO->getSubExpr()->IgnoreParenCasts()
+                                            ,TargetUO->getSubExpr()->IgnoreParenCasts()
+                                            ,ACC);
     }
-    return false;
+    else
+        status = Matches(Target);
+
+    delete Target;
+    return status;
 }
 
 bool
@@ -90,8 +111,6 @@ Arg::Matches(Arg *Target) {
     if (getKind() != Target->getKind())
         return false;
 
-    assert(getKind() != A_RawExpr && "bad call on Arg::Matches()");
-
     if (LabelArg *LA = dyn_cast<LabelArg>(this)) {
         LabelArg *LT = cast<LabelArg>(Target);
         return LA->getLabel().compare(LT->getLabel()) == 0;
@@ -107,6 +126,9 @@ Arg::Matches(Arg *Target) {
 
     //different VarDecls
     if (Target->getVarDecl() != this->getVarDecl())
+        return false;
+
+    if (!getVarDecl())
         return false;
 
     FieldNesting &AFN = this->getFieldNesting();
@@ -294,35 +316,35 @@ Arg::Arg(ArgKind K, CommonInfo *p, Expr *expr, clang::ASTContext *Context) :
         if (E->isIntegerConstantExpr(ICE, *Context))
             setValidICE(true);
 
-    if (isa<ArrayElementArg>(this) || isa<SubArrayArg>(this) ||
-        isa<VarArg>(this) || isa<ArrayArg>(this)) {
+    //if (isa<ArrayElementArg>(this) || isa<SubArrayArg>(this) ||
+    //    isa<VarArg>(this) || isa<ArrayArg>(this)) {
 
-        Expr *BaseExpr = E->IgnoreParenImpCasts();
+    Expr *BaseExpr = E->IgnoreParenImpCasts();
 
-        while (UnaryOperator *UO = dyn_cast<UnaryOperator>(BaseExpr))
-            BaseExpr = UO->getSubExpr()->IgnoreParenImpCasts();
+    while (UnaryOperator *UO = dyn_cast<UnaryOperator>(BaseExpr))
+        BaseExpr = UO->getSubExpr()->IgnoreParenImpCasts();
 
-        if (isa<ArrayElementArg>(this) || isa<SubArrayArg>(this)) {
-            ArraySubscriptExpr *ASE = cast<ArraySubscriptExpr>(BaseExpr);
-            BaseExpr = ASE->getBase()->IgnoreParenImpCasts();
-        }
-
-        while (UnaryOperator *UO = dyn_cast<UnaryOperator>(BaseExpr))
-            BaseExpr = UO->getSubExpr()->IgnoreParenImpCasts();
-
-        while (MemberExpr *ME = dyn_cast<MemberExpr>(BaseExpr)) {
-            FieldDecl *FD = dyn_cast<FieldDecl>(ME->getMemberDecl());
-            Fields.push_back(FD);
-            //RecordDecl *RD = FD->getParent();
-            BaseExpr = ME->getBase()->IgnoreParenImpCasts();
-            if (ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(BaseExpr))
-                BaseExpr = ASE->getBase()->IgnoreParenImpCasts();
-        }
-
-        DeclRefExpr *DF = cast<DeclRefExpr>(BaseExpr);
-        VarDecl *VD = cast<VarDecl>(DF->getDecl());
-        V = VD;
+    if (isa<ArrayElementArg>(this) || isa<SubArrayArg>(this)) {
+        ArraySubscriptExpr *ASE = cast<ArraySubscriptExpr>(BaseExpr);
+        BaseExpr = ASE->getBase()->IgnoreParenImpCasts();
     }
+
+    while (UnaryOperator *UO = dyn_cast<UnaryOperator>(BaseExpr))
+        BaseExpr = UO->getSubExpr()->IgnoreParenImpCasts();
+
+    while (MemberExpr *ME = dyn_cast<MemberExpr>(BaseExpr)) {
+        FieldDecl *FD = dyn_cast<FieldDecl>(ME->getMemberDecl());
+        Fields.push_back(FD);
+        //RecordDecl *RD = FD->getParent();
+        BaseExpr = ME->getBase()->IgnoreParenImpCasts();
+        if (ArraySubscriptExpr *ASE = dyn_cast<ArraySubscriptExpr>(BaseExpr))
+            BaseExpr = ASE->getBase()->IgnoreParenImpCasts();
+    }
+
+    if (DeclRefExpr *DF = dyn_cast<DeclRefExpr>(BaseExpr))
+        if (VarDecl *VD = dyn_cast<VarDecl>(DF->getDecl()))
+            V = VD;
+        //}
 }
 
 Arg::Arg(ArgKind K, CommonInfo *p, unsigned Value) :
@@ -748,8 +770,15 @@ OpenACC::isValidClauseEstimation(DirectiveKind DK, ClauseInfo *CI) {
     else if (DK == DK_TASKWAIT) {
         if (isa<VarArg>(CI->getArg()))
             ;  //ok
-        else if (isa<RawExprArg>(CI->getArg()) && isa<UnaryOperator>(CI->getArg()->getExpr()))
-            ;  //ok
+        else if (isa<RawExprArg>(CI->getArg())) {
+            if (UnaryOperator *UO = dyn_cast<UnaryOperator>(CI->getArg()->getExpr())) {
+                if (UO->getOpcode() != UO_AddrOf && UO->getOpcode() != UO_Deref) {
+                    S.Diag(UO->getOperatorLoc(),diag::err_pragma_acc_test)
+                        << "invalid unary operator, expected '*' or '&'";
+                    return false;
+                }
+            }
+        }
         else {
             std::string msg = "invalid '" + std::string(CI->getArg()->getKindAsString())
                 + "' argument for estimation() clause, expected address";
@@ -959,7 +988,6 @@ OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
     }
 
     ////////////////////////////////////////////////
-    bool status = true;
 
     //EvalFun->getArg()->getExpr()->dump();
     Expr *AssignEst = NULL;
@@ -970,11 +998,12 @@ OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
             if (!BO->isAssignmentOp()) {
                 S.Diag(BO->getLocStart(),diag::err_pragma_acc_test)
                     << "expected assignment operator";
-                status = false;
+                return false;
             }
 
             Expr *LHS = BO->getLHS()->IgnoreParenCasts();
             Expr *RHS = BO->getRHS()->IgnoreParenCasts();
+            CE = dyn_cast<CallExpr>(RHS);
 
             AssignEst = LHS;
             if (UnaryOperator *UO = dyn_cast<UnaryOperator>(AssignEst)) {
@@ -985,45 +1014,43 @@ OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
 
             Expr *Est = Estimation->getArg()->getExpr()->IgnoreParenImpCasts();
             if (UnaryOperator *UO = dyn_cast<UnaryOperator>(Est)) {
-                if (UO->getOpcode() == UO_AddrOf) {
-                    Est = UO->getSubExpr()->IgnoreParenImpCasts();
-                }
+                // see estimation clause semantic checks for the allowd unary operators
+                Est = UO->getSubExpr()->IgnoreParenImpCasts();
             }
 
             if (!HelperMatchExpressions(AssignEst,Est,this)) {
                 S.Diag(EvalFun->getLocStart(),diag::err_pragma_acc_test)
                     << "assignment to different variable than estimation() argument";
-                status = false;
+                // do not check for parameters
+                return false;
             }
-            CE = dyn_cast<CallExpr>(RHS);
         }
 
     if (!CE) {
         if (isValidClauseEstimation(DI->getKind(),Estimation)) {
-            std::string msg = "expected call to estimation function that sets value to '"
+            std::string msg = "expected call to evalfun that sets value to '"
                 + Estimation->getArg()->getPrettyArg() + "'";
             S.Diag(EvalFun->getLocStart(),diag::err_pragma_acc_test) << msg;
         }
-        status = false;
-    }
-    else {
-        Expr *PassByRefEst = NULL;
-        for (CallExpr::arg_iterator II = CE->arg_begin(), EE = CE->arg_end(); II != EE; ++II) {
-            Expr *E = (*II)->IgnoreParenImpCasts();
-            if (Estimation->getArg()->Matches(E,this)) {
-                PassByRefEst = *II;
-                break;
-            }
-        }
-        if (!PassByRefEst && !AssignEst) {
-            std::string msg = "evaluation function does not set estimation() argument  --  "
-                + std::string(Estimation->getArg()->getKindAsString());
-            S.Diag(EvalFun->getLocStart(),diag::err_pragma_acc_test) << msg;
-            status = false;
-        }
+        return false;
     }
 
-    return status;
+    Expr *PassByRefEst = NULL;
+    for (CallExpr::arg_iterator II = CE->arg_begin(), EE = CE->arg_end(); II != EE; ++II) {
+        Expr *E = (*II)->IgnoreParenImpCasts();
+        if (Estimation->getArg()->Matches(E,this)) {
+            PassByRefEst = *II;
+            break;
+        }
+    }
+    if (!PassByRefEst && !AssignEst) {
+        std::string msg = "evaluation function does not set estimation() argument  --  "
+            + std::string(Estimation->getArg()->getKindAsString());
+        S.Diag(EvalFun->getLocStart(),diag::err_pragma_acc_test) << msg;
+        return false;
+    }
+
+    return true;
 }
 
 bool
