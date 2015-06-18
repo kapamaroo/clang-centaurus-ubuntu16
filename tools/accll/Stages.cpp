@@ -366,15 +366,15 @@ private:
                       std::string &Extensions, std::string &UserTypes);
 
     std::string setDeviceType(const DirectiveInfo *DI) {
-        std::string DeviceType = "(unsigned int)";
+        std::string DeviceType;
         if (const ClauseInfo *CI = getClauseOfKind(DI->getClauseList(),CK_SUGGEST)) {
-            DeviceType += CI->getArg()->getPrettyArg();
+            DeviceType += "((unsigned int)" + CI->getArg()->getPrettyArg() + " << 1) | 0x0";
         }
         else if (const ClauseInfo *CI = getClauseOfKind(DI->getClauseList(),CK_BIND)) {
-            DeviceType += "((unsigned int)" + CI->getArg()->getPrettyArg() + " | 0x1)";
+            DeviceType += "((unsigned int)" + CI->getArg()->getPrettyArg() + " << 1) | 0x1";
         }
         else {
-            DeviceType += "ACL_DEV_ALL";
+            DeviceType += "((unsigned int)ACL_DEV_ALL << 1) | 0x0";
         }
         return DeviceType;
     }
