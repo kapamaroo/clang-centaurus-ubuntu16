@@ -36,7 +36,11 @@ using namespace accll;
 //                        Main Tool
 ///////////////////////////////////////////////////////////////////////////////
 
-static std::string InstallPath = "/opt/LLVM";
+namespace {
+    std::string InstallPath("/opt/LLVM");
+    std::string IncludePath(InstallPath + "/include");
+    std::string LibPath(InstallPath + "/lib");
+}
 
 int runClang(std::string Path, SmallVector<const char *, 256> &cli) {
     using namespace clang::driver;
@@ -112,6 +116,11 @@ int main(int argc, const char **argv) {
         cli.push_back("-lm");
         cli.push_back("-lpapi");
 
+        std::string LibPathFlag("-L" + LibPath);
+        cli.push_back(LibPathFlag.c_str());
+        cli.push_back("-lcentaurus");
+        cli.push_back("-lcentaurusapi");
+
         llvm::outs() << DEBUG
                      << "Invoke clang as: " << ClangPath << " ";
         for (size_t i=0; i<cli.size(); ++i)
@@ -129,9 +138,6 @@ int main(int argc, const char **argv) {
 
     for (int i=0; i<tool_argc; ++i)
         ARGV.push_back(argv[i]);
-
-    std::string IncludePath(InstallPath + "/include");
-    std::string LibPath(InstallPath + "/lib");
 
     std::string IncludeFlag("-I" + IncludePath);
     //std::string LibFlag("-L" + LibPath);
