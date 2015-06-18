@@ -537,7 +537,8 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, Direct
     }
 
     ClauseInfo *ClauseEvalfun = getClauseOfKind(DI->getClauseList(),CK_EVALFUN);
-    //ClauseInfo *ClauseEstimation = getClauseOfKind(DI->getClauseList(),CK_ESTIMATION);
+    ClauseInfo *ClauseEstimation = getClauseOfKind(DI->getClauseList(),CK_ESTIMATION);
+    (void)ClauseEstimation;
 
     assert((bool)(~((bool)ClauseEvalfun ^ (bool)ClauseEstimation))
            && "UNEXPECTED ERROR: evalfun() and estimation()");
