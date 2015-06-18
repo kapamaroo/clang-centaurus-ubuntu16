@@ -637,21 +637,40 @@ OpenACC::isValidClauseEvalfun(DirectiveKind DK, ClauseInfo *CI) {
         Arg *A = CI->getArg();
         FunctionArg *FA = dyn_cast<FunctionArg>(A);
         FunctionDecl *FD = FA->getFunctionDecl();
-       if (!S.getASTContext().isOpenCLKernel(FD)) {
+        if (!S.getASTContext().isOpenCLKernel(FD)) {
             S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
                 << "expected OpenCL kernel";
             return false;
         }
+        if (!FD->getNumParams()) {
+            S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
+                << "expected at least one parameter of type 'pointer to double'";
+            return false;
+        }
+        if (ParmVarDecl *PVD = FD->getParamDecl(FD->getNumParams() - 1)) {
+            QualType QTy = PVD->getOriginalType();
+            if (const PointerType *PTy = dyn_cast<PointerType>(QTy)) {
+                if (!PTy->getPointeeType()->isFloatingType()) {
+                    S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
+                        << "last parameter of evalfun expected to be of type 'pointer to double'";
+                    return false;
+                }
+            }
+            else {
+                S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
+                    << "last parameter of evalfun expected to be of type 'pointer to double'";
+                return false;
+            }
+        }
        return true;
     }
     else if (DK == DK_TASKWAIT) {
-        bool status = true;
-
         Expr *E = CI->getArg()->getExpr()->IgnoreParenImpCasts();
         FunctionDecl *FD = NULL;
 
-        if (CallExpr *CE = dyn_cast<CallExpr>(E))
+        if (CallExpr *CE = dyn_cast<CallExpr>(E)) {
             FD = CE->getDirectCallee();
+        }
         else if (BinaryOperator *BO = dyn_cast<BinaryOperator>(E)) {
             Expr *RHS = BO->getRHS()->IgnoreParenCasts();
             CE = dyn_cast<CallExpr>(RHS);
@@ -661,22 +680,61 @@ OpenACC::isValidClauseEvalfun(DirectiveKind DK, ClauseInfo *CI) {
             if (!BO->isAssignmentOp()) {
                 S.Diag(BO->getLocStart(),diag::err_pragma_acc_test)
                     << "expected assignment operator";
-                status = false;
+                return false;
+            }
+
+            Expr *LHS = BO->getLHS()->IgnoreParenCasts();
+            if (!LHS->getType()->isFloatingType()) {
+                S.Diag(E->getLocStart(),diag::err_pragma_acc_test)
+                    << "expected assingment to variable/member of double data type";
+                return false;
             }
         }
 
         if (!FD) {
             S.Diag(E->getLocStart(),diag::err_pragma_acc_test)
                 << "expected a C function call expression or assignment statement from a C function call";
-            status = false;
+            return false;
         }
         else if (S.getASTContext().isOpenCLKernel(FD)) {
             S.Diag(E->getLocStart(),diag::err_pragma_acc_test)
                 << "expected a regular C function";
-            status = false;
+            return false;
         }
 
-        return status;
+        QualType ReturnType = FD->getResultType();
+        if (!FD->getNumParams() && ReturnType->isVoidType()) {
+            S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
+                << "expected at least one parameter of type 'pointer to double' or return value of double type";
+            return false;
+        }
+        else if (ReturnType->isVoidType()) {
+            // check for at least one pointer to double param
+            bool hasDoublePtrParam = false;
+            for (FunctionDecl::param_iterator
+                     II = FD->param_begin(), EE = FD->param_end(); II != EE; II++) {
+                ParmVarDecl *PVD = *II;
+                QualType QTy = PVD->getOriginalType();
+                if (const PointerType *PTy = dyn_cast<PointerType>(QTy)) {
+                    if (PTy->getPointeeType()->isFloatingType()) {
+                        hasDoublePtrParam = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasDoublePtrParam) {
+                S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
+                    << "expected at least one parameter of evalfun to be of type 'pointer to double'";
+                return false;
+            }
+        }
+        else if (!ReturnType->isFloatingType()) {
+            S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
+                << "expectet evalfun with return type of double";
+            return false;
+        }
+
+        return true;
     }
 
     return false;
