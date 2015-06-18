@@ -383,6 +383,7 @@ struct KernelSrc {
                     + ",.size = sizeof(double)"
                     + "};";
             }
+            EstimationName = "&" + EstimationName;
         }
 
         Definition += EstimationCode;
@@ -392,7 +393,7 @@ struct KernelSrc {
             + ",.kernel_accurate = &" + AccurateKernel->HostCode.NameRef
             + ",.kernel_approximate = " + ApproxName
             + ",.kernel_evalfun = " + EvalfunName
-            + ",.estimation = &" + EstimationName
+            + ",.estimation = " + EstimationName
             + "};";
     }
 
