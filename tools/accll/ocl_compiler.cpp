@@ -288,6 +288,7 @@ PlatformBin _compile(std::string src, std::string SymbolName, std::string Prefix
     }
     else if (PlatformName.find("AMD") != std::string::npos) {
         PlatformName = "AMD";
+        BuildOptions += "-I.";
     }
     else {
         PlatformName = "UNKNOWN";
