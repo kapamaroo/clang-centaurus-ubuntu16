@@ -115,6 +115,14 @@ int main(int argc, const char *argv[]) {
                  EE = Config.ExtraCompilerFlags.end(); II != EE; ++II)
             cli.push_back(II->c_str());
 
+        if (Config.CompileOnly)
+            cli.push_back("-c");
+
+        if (Config.UserDefinedOutputFile.size()) {
+            cli.push_back("-o");
+            cli.push_back(Config.UserDefinedOutputFile.c_str());
+        }
+
         for (std::vector<std::string>::iterator
                  II = Config.ExtraLinkerFlags.begin(),
                  EE = Config.ExtraLinkerFlags.end(); II != EE; ++II)
@@ -221,6 +229,9 @@ int main(int argc, const char *argv[]) {
                  II = Config.ExtraCompilerFlags.begin(),
                  EE = Config.ExtraCompilerFlags.end(); II != EE; ++II)
             cli.push_back(II->c_str());
+
+        if (Config.CompileOnly)
+            cli.push_back("-c");
 
         for (std::vector<std::string>::iterator
                  II = Config.ExtraLinkerFlags.begin(),
