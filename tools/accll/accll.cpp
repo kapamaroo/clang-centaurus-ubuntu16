@@ -181,8 +181,6 @@ int main(int argc, const char *argv[]) {
 
     CommonOptionsParser OptionsParser(ARGC, ARGV.data());
 
-    llvm::outs() << DEBUG << "aoua\n";
-
     std::vector<std::string> UserInputFiles = OptionsParser.getSourcePathList();
 
     if (UserInputFiles.size() != 1) {
