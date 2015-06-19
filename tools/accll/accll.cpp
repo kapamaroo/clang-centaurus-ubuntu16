@@ -101,25 +101,27 @@ int main(int argc, const char **argv) {
         //std::string LinkerPath = "/usr/bin/ld";
         std::string ClangPath = InstallPath + "/build-dev/bin/clang-3.3";
 
+        cli.push_back("-lcentaurus");
+        cli.push_back("-lcentaurusapi");
+
         for (int i=ExtraArgsStartPos+1; i<argc; ++i)
             cli.push_back(argv[i]);
 
+        std::string LibPathFlag("-L" + LibPath);
+        cli.push_back(LibPathFlag.c_str());
+        cli.push_back("-lcentaurus");
+        cli.push_back("-lcentaurusapi");
+
         // -lpthread -lOpenCL -ldl -lrt -lm -lnvidia-ml -Lpapi-5.4.1/src/ -lpapi
 
-        //cli.push_back("-L/usr/lib/nvidia-346");
-        //cli.push_back("-L/usr/lib/nvidia-340");
+        cli.push_back("-L/usr/lib/nvidia-346");
+        cli.push_back("-L/usr/lib/nvidia-340");
 
         cli.push_back("-lnvidia-ml");
         cli.push_back("-lpthread");
         cli.push_back("-ldl");
         cli.push_back("-lrt");
         cli.push_back("-lm");
-        cli.push_back("-lpapi");
-
-        std::string LibPathFlag("-L" + LibPath);
-        cli.push_back(LibPathFlag.c_str());
-        cli.push_back("-lcentaurus");
-        cli.push_back("-lcentaurusapi");
 
         llvm::outs() << DEBUG
                      << "Invoke clang as: " << ClangPath << " ";
@@ -494,18 +496,18 @@ int main(int argc, const char **argv) {
                 ldcli.push_back(ClangPath.c_str());
                 ldcli.push_back(ObjFile.c_str());
 
-                //ldcli.push_back("-L/usr/lib/nvidia-346");
-                //ldcli.push_back("-L/usr/lib/nvidia-340");
+                std::string LibPathFlag("-L" + LibPath);
+                ldcli.push_back(LibPathFlag.c_str());
+
+                ldcli.push_back("-L/usr/lib/nvidia-346");
+                ldcli.push_back("-L/usr/lib/nvidia-340");
 
                 ldcli.push_back("-lnvidia-ml");
                 ldcli.push_back("-lpthread");
                 ldcli.push_back("-ldl");
                 ldcli.push_back("-lrt");
                 ldcli.push_back("-lm");
-                ldcli.push_back("-lpapi");
 
-                std::string LibPathFlag("-L" + LibPath);
-                ldcli.push_back(LibPathFlag.c_str());
                 ldcli.push_back("-lcentaurus");
                 ldcli.push_back("-lcentaurusapi");
 
