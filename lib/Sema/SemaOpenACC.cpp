@@ -838,7 +838,18 @@ OpenACC::isValidClauseWorkers(DirectiveKind DK, ClauseInfo *CI) {
         return false;
     }
 
-    return true;
+    bool status = true;
+    ArgVector &Pool = CI->getArgs();
+    for (ArgVector::iterator II = Pool.begin(), EE = Pool.end(); II != EE; ++II) {
+        Arg *A = *II;
+        if (!A->getExpr()->getType()->isIntegerType()) {
+            S.Diag(A->getLocStart(),diag::err_pragma_acc_test)
+                << "expected expression of integer type";
+            status = false;
+        }
+    }
+
+    return status;
 }
 
 bool
@@ -849,7 +860,18 @@ OpenACC::isValidClauseGroups(DirectiveKind DK, ClauseInfo *CI) {
         return false;
     }
 
-    return true;
+    bool status = true;
+    ArgVector &Pool = CI->getArgs();
+    for (ArgVector::iterator II = Pool.begin(), EE = Pool.end(); II != EE; ++II) {
+        Arg *A = *II;
+        if (!A->getExpr()->getType()->isIntegerType()) {
+            S.Diag(A->getLocStart(),diag::err_pragma_acc_test)
+                << "expected expression of integer type";
+            status = false;
+        }
+    }
+
+    return status;
 }
 
 bool

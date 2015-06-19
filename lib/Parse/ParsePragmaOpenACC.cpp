@@ -531,12 +531,15 @@ Parser::ParseClauseWorkers(DirectiveKind DK, ClauseInfo *CI) {
         if (!Expr.isUsable())
             return false;
 
+#if 0
+        // moved to sema
         const Type *ETy = Expr.get()->getType().getTypePtr();
         if (!ETy->isIntegerType()) {
             PP.Diag(CI->getLocStart(),diag::note_pragma_acc_parser_test)
                 << "expected expression of integer type";
             return false;
         }
+#endif
 
         Arg *A = new (Actions.getASTContext()) RawExprArg(CI,Expr.get(),&Actions.getASTContext());
         Args.push_back(A);
@@ -571,12 +574,15 @@ Parser::ParseClauseGroups(DirectiveKind DK, ClauseInfo *CI) {
         if (!Expr.isUsable())
             return false;
 
+#if 0
+        // moved to sema
         const Type *ETy = Expr.get()->getType().getTypePtr();
         if (!ETy->isIntegerType()) {
             PP.Diag(CI->getLocStart(),diag::note_pragma_acc_parser_test)
                 << "expected expression of integer type";
             return false;
         }
+#endif
 
         Arg *A = new (Actions.getASTContext()) RawExprArg(CI,Expr.get(),&Actions.getASTContext());
         Args.push_back(A);
