@@ -18,6 +18,7 @@
 
 #include "Common.hpp"
 #include "Stages.hpp"
+#include "CentaurusConfig.hpp"
 #include "ClangFormat.hpp"
 
 #include <iostream>
@@ -82,7 +83,8 @@ static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
 // A help message for this specific tool can be added afterwards.
 static cl::extrahelp MoreHelp("\nInvocation\n\t./acl input-files [-- compiler-flags]\n\n");
 
-int main(int argc, const char **argv) {
+int main(int argc, const char *argv[]) {
+#if 0
     int ExtraArgsStartPos = 0;
     for (int i=1; i<argc; ++i)
         if (strlen(argv[i]) == 2 && argv[i][0] == '-' && argv[i][1] == '-' && i + 1 < argc) {
@@ -90,8 +92,12 @@ int main(int argc, const char **argv) {
             break;
         }
     int tool_argc = ExtraArgsStartPos ? ExtraArgsStartPos : argc;
+#endif
 
-    if (ExtraArgsStartPos == 1) {
+    accll::CentaurusConfig Config(argc,argv);
+    Config.print();
+
+    if (!Config.InputFiles.size()) {
         //treat as raw clang invocation
         llvm::outs() << WARNING
                      << "no input files, enter clang mode.\n";
@@ -104,8 +110,15 @@ int main(int argc, const char **argv) {
         cli.push_back("-lcentaurus");
         cli.push_back("-lcentaurusapi");
 
-        for (int i=ExtraArgsStartPos+1; i<argc; ++i)
-            cli.push_back(argv[i]);
+        for (std::vector<std::string>::iterator
+                 II = Config.ExtraCompilerFlags.begin(),
+                 EE = Config.ExtraCompilerFlags.end(); II != EE; ++II)
+            cli.push_back(II->c_str());
+
+        for (std::vector<std::string>::iterator
+                 II = Config.ExtraLinkerFlags.begin(),
+                 EE = Config.ExtraLinkerFlags.end(); II != EE; ++II)
+            cli.push_back(II->c_str());
 
         std::string LibPathFlag("-L" + LibPath);
         cli.push_back(LibPathFlag.c_str());
@@ -138,8 +151,12 @@ int main(int argc, const char **argv) {
 
     SmallVector<const char *, 256> ARGV;
 
-    for (int i=0; i<tool_argc; ++i)
-        ARGV.push_back(argv[i]);
+    ARGV.push_back(argv[0]);
+
+    for (std::vector<std::string>::iterator
+             II = Config.InputFiles.begin(),
+             EE = Config.InputFiles.end(); II != EE; ++II)
+        ARGV.push_back(II->c_str());
 
     std::string IncludeFlag("-I" + IncludePath);
     //std::string LibFlag("-L" + LibPath);
@@ -150,13 +167,11 @@ int main(int argc, const char **argv) {
     ARGV.push_back("-include__acl_api_types.h");
     ARGV.push_back("-c");
 
-    if (ExtraArgsStartPos)
-        for (int i=ExtraArgsStartPos + 1; i<argc; ++i) {
-            // ignore linker specific arguments
-            if (strlen(argv[i]) >= 2 && argv[i][0] == '-' && (argv[i][1] == 'l' || argv[i][1] == 'L'))
-                continue;
-            ARGV.push_back(argv[i]);
-        }
+    for (std::vector<std::string>::iterator
+             II = Config.ExtraCompilerFlags.begin(),
+             EE = Config.ExtraCompilerFlags.end(); II != EE; ++II) {
+        ARGV.push_back(II->c_str());
+    }
 
     int ARGC = ARGV.size();
     llvm::outs() << "debug: Invoke Stages as: ";
@@ -165,6 +180,8 @@ int main(int argc, const char **argv) {
     llvm::outs() << "\n";
 
     CommonOptionsParser OptionsParser(ARGC, ARGV.data());
+
+    llvm::outs() << DEBUG << "aoua\n";
 
     std::vector<std::string> UserInputFiles = OptionsParser.getSourcePathList();
 
@@ -181,7 +198,7 @@ int main(int argc, const char **argv) {
 
     llvm::outs() << "Stage0: Check input files ...\n";
     RefactoringTool Tool0(OptionsParser.getCompilations(), UserInputFiles);
-    Stage0_ConsumerFactory Stage0(InputFiles,RegularFiles);
+    Stage0_ConsumerFactory Stage0(Config,InputFiles,RegularFiles);
     if (Tool0.runAndSave(newFrontendActionFactory(&Stage0))) {
         llvm::errs() << "Stage0 failed - exit.\n";
         return 1;
@@ -202,9 +219,15 @@ int main(int argc, const char **argv) {
                  EE = RegularFiles.end(); II != EE; ++II)
             cli.push_back(II->c_str());
 
-        if (ExtraArgsStartPos)
-            for (int i=ExtraArgsStartPos+1; i<argc; ++i)
-                cli.push_back(argv[i]);
+        for (std::vector<std::string>::iterator
+                 II = Config.ExtraCompilerFlags.begin(),
+                 EE = Config.ExtraCompilerFlags.end(); II != EE; ++II)
+            cli.push_back(II->c_str());
+
+        for (std::vector<std::string>::iterator
+                 II = Config.ExtraLinkerFlags.begin(),
+                 EE = Config.ExtraLinkerFlags.end(); II != EE; ++II)
+            cli.push_back(II->c_str());
 
         llvm::outs() << DEBUG
                      << "Invoke clang as: " << ClangPath << " ";
@@ -227,7 +250,7 @@ int main(int argc, const char **argv) {
 
     llvm::outs() << "Stage1: Transform source code ...\n";
     RefactoringTool Tool1(OptionsParser.getCompilations(), InputFiles);
-    Stage1_ConsumerFactory Stage1(Tool1.getReplacements(),LibOCLFiles,KernelFiles);
+    Stage1_ConsumerFactory Stage1(Config,Tool1.getReplacements(),LibOCLFiles,KernelFiles);
     if (Tool1.runAndSave(newFrontendActionFactory(&Stage1))) {
         llvm::errs() << "Stage1 failed - exit.\n";
         return 1;
@@ -354,24 +377,10 @@ int main(int argc, const char **argv) {
         cli.push_back(IncludeFlag.c_str());
         cli.push_back("-c");
 
-        bool CompileOnly = false;
-        std::string UserDefinedOutputFile;
-        if (ExtraArgsStartPos)
-            for (int i=ExtraArgsStartPos+1; i<argc; ++i) {
-                if (strcmp(argv[i],"-c") == 0) {
-                    CompileOnly = true;
-                    continue;
-                }
-                else if (strcmp(argv[i],"-o") == 0 && i + 1 < argc) {
-                    UserDefinedOutputFile = argv[i+1];
-                    ++i;
-                    continue;
-                }
-                // ignore linker specific arguments
-                else if (strlen(argv[i]) >= 2 && argv[i][0] == '-' && (argv[i][1] == 'l' || argv[i][1] == 'L'))
-                    continue;
-                cli.push_back(argv[i]);
-            }
+        for (std::vector<std::string>::iterator
+                 II = Config.ExtraCompilerFlags.begin(),
+                 EE = Config.ExtraCompilerFlags.end(); II != EE; ++II)
+            cli.push_back(II->c_str());
 
         int Res = 0;
 
@@ -426,8 +435,8 @@ int main(int argc, const char **argv) {
         std::string ObjFile = RemoveDotExtension(UserInputFiles.front()) + ".o";
         ObjFile = GetBasename(ObjFile);
 
-        if (CompileOnly && UserDefinedOutputFile.size())
-            ObjFile = UserDefinedOutputFile;
+        if (Config.CompileOnly && Config.UserDefinedOutputFile.size())
+            ObjFile = Config.UserDefinedOutputFile;
 
         {
             std::string LinkerPath = "/usr/bin/ld";
@@ -482,7 +491,7 @@ int main(int argc, const char **argv) {
             llvm::outs() << "OK\n";
         }
 
-        if (!CompileOnly) {
+        if (!Config.CompileOnly) {
             llvm::outs() << "Link with runtime ... ";
 
 #if 1
@@ -513,16 +522,17 @@ int main(int argc, const char **argv) {
 
                 //std::string LibStaticRuntime(LibPath + "/libcentaurus.a");
                 //ldcli.push_back(LibStaticRuntime.c_str());
-                if (UserDefinedOutputFile.size()) {
+                if (Config.UserDefinedOutputFile.size()) {
                     ldcli.push_back("-o");
-                    ldcli.push_back(UserDefinedOutputFile.c_str());
+                    ldcli.push_back(Config.UserDefinedOutputFile.c_str());
                 }
 
                 //ldcli.push_back("-v");
 
-                if (ExtraArgsStartPos)
-                    for (int i=ExtraArgsStartPos + 1; i<argc; ++i)
-                        ldcli.push_back(argv[i]);
+                for (std::vector<std::string>::iterator
+                         II = Config.ExtraLinkerFlags.begin(),
+                         EE = Config.ExtraLinkerFlags.end(); II != EE; ++II)
+                    ldcli.push_back(II->c_str());
 
                 ldcli.push_back(0);
 
@@ -571,4 +581,71 @@ int main(int argc, const char **argv) {
     llvm::llvm_shutdown();
 
     return 0;
+}
+
+accll::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
+    ProfileMode(false), CompileOnly(false)
+{
+    int i = 1;
+
+    for (; i<argc; ++i) {
+        const std::string Option(argv[i]);
+        if (Option.compare("--") == 0)
+            break;
+        if (Option.compare("--profile") == 0)
+            ProfileMode = true;
+        else
+            InputFiles.push_back(Option);
+    }
+
+    ++i;
+    for (; i<argc; ++i) {
+        const std::string Option(argv[i]);
+        if (Option.compare("-o") == 0) {
+            if (i + 1 < argc) {
+                UserDefinedOutputFile = argv[i+1];
+                i++;
+            }
+        }
+        else if (Option.compare("-c") == 0) {
+            CompileOnly = true;
+        }
+        else if (Option.compare(0,2,"-l") == 0 || Option.compare(0,2,"-L") == 0)
+            ExtraLinkerFlags.push_back(Option);
+        else
+            ExtraCompilerFlags.push_back(Option);
+    }
+
+}
+
+void
+accll::CentaurusConfig::print() const {
+#define PRINT(x) #x << " = " << x << "\n"
+    llvm::outs() << DEBUG
+                 << "\nCentaurus Configuration:\n"
+                 << PRINT(ProfileMode)
+                 << PRINT(CompileOnly)
+                 << PRINT(UserDefinedOutputFile)
+                 << "\n"
+        ;
+
+    llvm::outs() << "\nExtra Compiler Flags\n";
+    for (std::vector<std::string>::const_iterator
+             II = ExtraCompilerFlags.begin(),
+             EE = ExtraCompilerFlags.end(); II != EE; ++II)
+        llvm::outs() << "\t" << *II << "\n";
+
+    llvm::outs() << "\nExtra Linker Flags\n";
+    for (std::vector<std::string>::const_iterator
+             II = ExtraLinkerFlags.begin(),
+             EE = ExtraLinkerFlags.end(); II != EE; ++II)
+        llvm::outs() << "\t" << *II << "\n";
+
+    llvm::outs() << "\nInput Files\n";
+    for (std::vector<std::string>::const_iterator
+             II = InputFiles.begin(),
+             EE = InputFiles.end(); II != EE; ++II)
+        llvm::outs() << "\t" << *II << "\n";
+
+#undef PRINT
 }

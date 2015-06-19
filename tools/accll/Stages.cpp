@@ -14,7 +14,7 @@ using namespace clang::openacc;
 using namespace accll;
 
 namespace {
-    bool ProfileMode = false;
+    accll::CentaurusConfig ACLConfig;
 
     std::vector<std::string> APIHeaderVector;
     llvm::StringMap<bool> DepHeaders;
@@ -363,7 +363,7 @@ struct KernelSrc {
         std::string EstimationName = "NULL";
         std::string EvalfunName = EvaluationKernel ? std::string("&" + EvaluationKernel->HostCode.NameRef) : "NULL";
 
-        if (ProfileMode) {
+        if (ACLConfig.ProfileMode) {
             if (EvaluationKernel) {
                 Definition += EvaluationKernel->HostCode.Definition;
 
@@ -542,7 +542,7 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, Direct
     assert((bool)(~((bool)ClauseEvalfun ^ (bool)ClauseEstimation))
            && "UNEXPECTED ERROR: evalfun() and estimation()");
 
-    if (ProfileMode) {
+    if (ACLConfig.ProfileMode) {
         if (ClauseEvalfun) {
             FunctionDecl *Evalfun = ClauseEvalfun->getArgAs<FunctionArg>()->getFunctionDecl();
             Kref = KernelEvaluatePool.find(Evalfun);
@@ -952,7 +952,7 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         assert((bool)(~((bool)ClauseEvalfun ^ (bool)ClauseEstimation))
                && "UNEXPECTED ERROR: evalfun() and estimation()");
 
-        if (ProfileMode) {
+        if (ACLConfig.ProfileMode) {
             if (ClauseEvalfun) {
                 std::string EstValue = ClauseEstimation->getArg()->getPrettyArg();
                 if (ClauseEstimation->getArg()->getExpr()->getType()->isPointerType())
@@ -1450,6 +1450,8 @@ static void updateNestedSubtasks(ASTContext *C, CallGraph *CG) {
 }
 
 void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
+    ACLConfig = Config;
+
     Context = C;
     CG = _CG;
     updateNestedSubtasks(C,CG);
@@ -1711,6 +1713,8 @@ Stage1_ASTVisitor::Finish() {
     APIHeaderVector.clear();
     CommonFunctionsPool.clear();
     DepHeaders.clear();
+
+    ACLConfig = accll::CentaurusConfig();
 }
 
 bool

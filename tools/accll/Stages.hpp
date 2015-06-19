@@ -13,6 +13,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "Types.hpp"
 #include "Common.hpp"
+#include "CentaurusConfig.hpp"
 
 //copy from RecursiveASTVisitor.h
 #define TRY_TO(CALL_EXPR)                                       \
@@ -42,6 +43,8 @@ CreateNewArgFrom(clang::Expr *E, clang::openacc::ClauseInfo *ImplicitCI,
 
 class Stage0_ASTVisitor : public clang::RecursiveASTVisitor<Stage0_ASTVisitor> {
 private:
+    CentaurusConfig Config;
+
     std::vector<std::string> &InputFiles;
     std::vector<std::string> &RegularFiles;
     bool hasDirectives;
@@ -52,9 +55,10 @@ private:
 public:
     void Finish(clang::ASTContext *Context);
 
-    explicit Stage0_ASTVisitor(std::vector<std::string> &InputFiles,
+    explicit Stage0_ASTVisitor(CentaurusConfig Config,
+                               std::vector<std::string> &InputFiles,
                                std::vector<std::string> &RegularFiles) :
-        InputFiles(InputFiles), RegularFiles(RegularFiles),
+        Config(Config), InputFiles(InputFiles), RegularFiles(RegularFiles),
         hasDirectives(false), hasDeviceCode(false), hasRuntimeCalls(false), hasMain(false) {}
 
     bool VisitAccStmt(clang::AccStmt *ACC);
@@ -68,9 +72,10 @@ private:
     Stage0_ASTVisitor Visitor;
 
 public:
-    explicit Stage0_ASTConsumer(std::vector<std::string> &InputFiles,
+    explicit Stage0_ASTConsumer(CentaurusConfig Config,
+                                std::vector<std::string> &InputFiles,
                                 std::vector<std::string> &RegularFiles) :
-        Visitor(InputFiles,RegularFiles) {}
+        Visitor(Config,InputFiles,RegularFiles) {}
 
     virtual void HandleTranslationUnit(clang::ASTContext &Context) {
         clang::SourceManager &SM = Context.getSourceManager();
@@ -91,16 +96,20 @@ public:
 //simply having the method newASTConsumer will be enough...
 class Stage0_ConsumerFactory {
 private:
+    CentaurusConfig Config;
+
     std::vector<std::string> &InputFiles;
     std::vector<std::string> &RegularFiles;
 
 public:
-    Stage0_ConsumerFactory(std::vector<std::string> &InputFiles,
+    Stage0_ConsumerFactory(CentaurusConfig Config,
+                           std::vector<std::string> &InputFiles,
                            std::vector<std::string> &RegularFiles) :
+        Config(Config),
         InputFiles(InputFiles), RegularFiles(RegularFiles) {}
 
     clang::ASTConsumer *newASTConsumer() {
-        return new Stage0_ASTConsumer(InputFiles,RegularFiles);
+        return new Stage0_ASTConsumer(Config,InputFiles,RegularFiles);
     }
 };
 
@@ -130,6 +139,8 @@ public:
 
 class Stage1_ASTVisitor : public clang::RecursiveASTVisitor<Stage1_ASTVisitor> {
 private:
+    CentaurusConfig Config;
+
     clang::tooling::Replacements &ReplacementPool;
     std::vector<std::string> &InputFiles;
     std::vector<std::string> &KernelFiles;
@@ -160,9 +171,11 @@ public:
     void Init(clang::ASTContext *C, clang::CallGraph *_CG);
     void Finish();
 
-    explicit Stage1_ASTVisitor(clang::tooling::Replacements &ReplacementPool,
+    explicit Stage1_ASTVisitor(CentaurusConfig Config,
+                               clang::tooling::Replacements &ReplacementPool,
                                std::vector<std::string> &InputFiles,
                                std::vector<std::string> &KernelFiles) :
+        Config(Config),
         ReplacementPool(ReplacementPool),
         InputFiles(InputFiles), KernelFiles(KernelFiles),
         Context(0), CG(0),
@@ -196,10 +209,11 @@ private:
     Stage1_ASTVisitor Visitor;
 
 public:
-    explicit Stage1_ASTConsumer(clang::tooling::Replacements &ReplacementPool,
+    explicit Stage1_ASTConsumer(CentaurusConfig Config,
+                                clang::tooling::Replacements &ReplacementPool,
                                 std::vector<std::string> &InputFiles,
                                 std::vector<std::string> &KernelFiles) :
-        Visitor(ReplacementPool,InputFiles,KernelFiles) {}
+        Visitor(Config,ReplacementPool,InputFiles,KernelFiles) {}
 
     virtual void HandleTranslationUnit(clang::ASTContext &Context) {
         clang::TranslationUnitDecl *TU = Context.getTranslationUnitDecl();
@@ -217,18 +231,22 @@ public:
 //simply having the method newASTConsumer will be enough...
 class Stage1_ConsumerFactory {
 private:
+    CentaurusConfig Config;
+
     clang::tooling::Replacements &ReplacementPool;
     std::vector<std::string> &InputFiles;
     std::vector<std::string> &KernelFiles;
 
 public:
-    Stage1_ConsumerFactory(clang::tooling::Replacements &ReplacementPool,
+    Stage1_ConsumerFactory(CentaurusConfig Config,
+                           clang::tooling::Replacements &ReplacementPool,
                            std::vector<std::string> &InputFiles,
                            std::vector<std::string> &KernelFiles) :
+        Config(Config),
         ReplacementPool(ReplacementPool),
         InputFiles(InputFiles), KernelFiles(KernelFiles) {}
     clang::ASTConsumer *newASTConsumer() {
-        return new Stage1_ASTConsumer(ReplacementPool,InputFiles,KernelFiles);
+        return new Stage1_ASTConsumer(Config,ReplacementPool,InputFiles,KernelFiles);
     }
 };
 
