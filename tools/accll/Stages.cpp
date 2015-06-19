@@ -361,7 +361,6 @@ struct KernelSrc {
             Definition += ApproximateKernel->HostCode.Definition;
 
         std::string EstimationName = "NULL";
-        std::string EstimationCode;
         std::string EvalfunName = EvaluationKernel ? std::string("&" + EvaluationKernel->HostCode.NameRef) : "NULL";
 
         if (ProfileMode) {
@@ -374,7 +373,7 @@ struct KernelSrc {
                 unsigned Index = ClauseEvalfun->getArgAs<FunctionArg>()->getFunctionDecl()->getNumParams() - 1;
 
                 EstimationName = "__accll_arg_estimation";
-                EstimationCode = "struct _memory_object " + EstimationName + " = {"
+                std::string EstimationCode = "struct _memory_object " + EstimationName + " = {"
                     + ".cl_obj = 0"
                     + ",.index = " + toString(Index)
                     + ",.dependency = D_ESTIMATION"
@@ -382,11 +381,11 @@ struct KernelSrc {
                     + ",.start_offset = 0"
                     + ",.size = sizeof(double)"
                     + "};";
+                Definition += EstimationCode;
+                EstimationName = "&" + EstimationName;
             }
-            EstimationName = "&" + EstimationName;
         }
 
-        Definition += EstimationCode;
         Definition += "struct _task_executable " + NameRef + " = {"
             //+ ".UID = " + toString(TaskUID)
             + ".device_type = " + DeviceType
