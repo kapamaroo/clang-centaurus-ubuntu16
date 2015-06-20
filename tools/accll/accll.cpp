@@ -95,7 +95,7 @@ int main(int argc, const char *argv[]) {
 #endif
 
     accll::CentaurusConfig Config(argc,argv);
-    Config.print();
+    //Config.print();
 
     if (!Config.InputFiles.size()) {
         //treat as raw clang invocation
