@@ -99,8 +99,7 @@ int main(int argc, const char *argv[]) {
 
     if (!Config.InputFiles.size()) {
         //treat as raw clang invocation
-        llvm::outs() << WARNING
-                     << "no input files, enter clang mode.\n";
+        //llvm::outs() << WARNING << "no input files, enter clang mode.\n";
 
         SmallVector<const char *, 256> cli;
 
@@ -144,15 +143,16 @@ int main(int argc, const char *argv[]) {
         cli.push_back("-lrt");
         cli.push_back("-lm");
 
-        llvm::outs() << DEBUG
-                     << "Invoke clang as: " << ClangPath << " ";
+#if 0
+        llvm::outs() << DEBUG << "Invoke clang as: " << ClangPath << " ";
         for (size_t i=0; i<cli.size(); ++i)
             llvm::outs() << cli[i] << " ";
         llvm::outs() << "\n";
+
+#endif
         runClang(ClangPath,cli);
 
-        llvm::outs() << DEBUG
-                     << "Exit clang mode.\n";
+        //llvm::outs() << DEBUG << "Exit clang mode.\n";
 
         return 0;
     }
@@ -211,8 +211,7 @@ int main(int argc, const char *argv[]) {
     }
 
     if (!RegularFiles.empty()) {
-        llvm::outs() << WARNING
-                     << "Source code has no directives, enter clang mode.\n";
+        //llvm::outs() << WARNING << "Source code has no directives, enter clang mode.\n";
 
         SmallVector<const char *, 256> cli;
 
@@ -238,16 +237,16 @@ int main(int argc, const char *argv[]) {
                  EE = Config.ExtraLinkerFlags.end(); II != EE; ++II)
             cli.push_back(II->c_str());
 
-        llvm::outs() << DEBUG
-                     << "Invoke clang as: " << ClangPath << " ";
+#if 0
+        llvm::outs() << DEBUG << "Invoke clang as: " << ClangPath << " ";
         for (size_t i=0; i<cli.size(); ++i)
             llvm::outs() << cli[i] << " ";
         llvm::outs() << "\n";
+#endif
 
         runClang(ClangPath,cli);
 
-        llvm::outs() << DEBUG
-                     << "Exit clang mode.\n";
+        //llvm::outs() << DEBUG << "Exit clang mode.\n";
 
         return 0;
     }
