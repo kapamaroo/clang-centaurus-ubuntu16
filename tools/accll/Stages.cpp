@@ -160,8 +160,10 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         std::string DefFile = SM.getFileEntryForID(SM.getFileID(FD->getLocStart()))->getName();
         DepHeaders[DefFile] = true;
 
+#if 0
         llvm::outs() << DEBUG
                      << FD->getNameAsString() << "-------------------kernel function from header, add header dependency -------------" << DefFile << "\n";
+#endif
         DeviceCode.NameRef = AlternativeName;
     }
 
@@ -752,9 +754,7 @@ Stage0_ASTVisitor::Finish(ASTContext *Context) {
     llvm::outs() << "Found                   : '" << FileName << "'\n";
 
     if (!hasDirectives && !hasRuntimeCalls && !hasMain) {
-        llvm::outs() << DEBUG
-                     << "treat as regular file: '"
-                     << FileName << "'\n";
+        //llvm::outs() << DEBUG << "treat as regular file: '" << FileName << "'\n";
         RegularFiles.push_back(FileName);
         return;
     }
