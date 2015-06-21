@@ -272,6 +272,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
 
         std::string PlatformDef;
 
+        bool CacheWarning = false;
         for (std::vector<DeviceBin>::iterator
                  DI = Platform.begin(), DE = Platform.end(); DI != DE; ++DI) {
             DeviceBin &Device = *DI;
@@ -284,14 +285,17 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
                 }
             }
             else {
-                llvm::outs() << WARNING
-                             << "[OpenCL cache]: found '" << Device.Bin.NameRef << "'  -  "
-                             << "delete cache directory '" << OpenCLCacheDir
-                             << "' to regenerate the build log.\n";
+                CacheWarning = true;
             }
 
             PlatformDef += Device.Definition;
         }
+
+        if (CacheWarning)
+            llvm::outs() << WARNING
+                //<< "[OpenCL cache]: found '" << Device.Bin.NameRef << "'  -  "
+                         << "delete cache directory '" << OpenCLCacheDir
+                         << "' to regenerate the build log.\n";
 
         PlatformDef += Platform.Definition;
         PreAPIDef += PlatformDef;
