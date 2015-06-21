@@ -556,7 +556,7 @@ ExprResult Sema::DefaultLvalueConversion(Expr *E) {
     return Owned(E);
 
   // OpenCL usually rejects direct accesses to values of 'half' type.
-  if (getLangOpts().OpenCL && !getOpenCLOptions().cl_khr_fp16 &&
+  if ((getLangOpts().OpenCL || getLangOpts().OpenACC) && !getOpenCLOptions().cl_khr_fp16 &&
       T->isHalfType()) {
     Diag(E->getExprLoc(), diag::err_opencl_half_load_store)
       << 0 << T;
@@ -2948,7 +2948,7 @@ ExprResult Sema::ActOnNumericConstant(const Token &Tok, Scope *UDLScope) {
     if (Ty == Context.DoubleTy) {
       if (getLangOpts().SinglePrecisionConstants) {
         Res = ImpCastExprToType(Res, Context.FloatTy, CK_FloatingCast).take();
-      } else if (getLangOpts().OpenCL && !getOpenCLOptions().cl_khr_fp64) {
+      } else if ((getLangOpts().OpenCL || getLangOpts().OpenACC) && !getOpenCLOptions().cl_khr_fp64) {
         Diag(Tok.getLocation(), diag::warn_double_const_requires_fp64);
         Res = ImpCastExprToType(Res, Context.FloatTy, CK_FloatingCast).take();
       }
@@ -4785,7 +4785,7 @@ ExprResult Sema::CheckExtVectorCast(SourceRange R, QualType DestTy,
   // (See OpenCL 6.2).
   if (SrcTy->isVectorType()) {
     if (Context.getTypeSize(DestTy) != Context.getTypeSize(SrcTy)
-        || (getLangOpts().OpenCL &&
+        || ((getLangOpts().OpenCL || getLangOpts().OpenACC) &&
             (DestTy.getCanonicalType() != SrcTy.getCanonicalType()))) {
       Diag(R.getBegin(),diag::err_invalid_conversion_between_ext_vectors)
         << DestTy << SrcTy << R;
@@ -4841,7 +4841,7 @@ Sema::ActOnCastExpr(Scope *S, SourceLocation LParenLoc,
   // i.e. all the elements are integer constants.
   ParenExpr *PE = dyn_cast<ParenExpr>(CastExpr);
   ParenListExpr *PLE = dyn_cast<ParenListExpr>(CastExpr);
-  if ((getLangOpts().AltiVec || getLangOpts().OpenCL)
+  if ((getLangOpts().AltiVec || (getLangOpts().OpenCL || getLangOpts().OpenACC))
        && castType->isVectorType() && (PE || PLE)) {
     if (PLE && PLE->getNumExprs() == 0) {
       Diag(PLE->getExprLoc(), diag::err_altivec_empty_initializer);
@@ -4931,7 +4931,7 @@ ExprResult Sema::BuildVectorLiteral(SourceLocation LParenLoc,
   else {
     // For OpenCL, when the number of initializers is a single value,
     // it will be replicated to all components of the vector.
-    if (getLangOpts().OpenCL &&
+    if ((getLangOpts().OpenCL || getLangOpts().OpenACC) &&
         VTy->getVectorKind() == VectorType::GenericVector &&
         numExprs == 1) {
         QualType ElemTy = Ty->getAs<VectorType>()->getElementType();
@@ -5028,11 +5028,11 @@ static bool checkCondition(Sema &S, Expr *Cond) {
   if (CondTy->isScalarType()) return false;
 
   // OpenCL v1.1 s6.3.i says the condition is allowed to be a vector or scalar.
-  if (S.getLangOpts().OpenCL && CondTy->isVectorType())
+  if ((S.getLangOpts().OpenCL || S.getLangOpts().OpenACC) && CondTy->isVectorType())
     return false;
 
   // Emit the proper error message.
-  S.Diag(Cond->getLocStart(), S.getLangOpts().OpenCL ?
+  S.Diag(Cond->getLocStart(), (S.getLangOpts().OpenCL || S.getLangOpts().OpenACC) ?
                               diag::err_typecheck_cond_expect_scalar :
                               diag::err_typecheck_cond_expect_scalar_or_vector)
     << CondTy;
@@ -5291,7 +5291,7 @@ QualType Sema::CheckConditionalOperands(ExprResult &Cond, ExprResult &LHS,
   // If the condition is a vector, and both operands are scalar,
   // attempt to implicity convert them to the vector type to act like the
   // built in select. (OpenCL v1.1 s6.3.i)
-  if (getLangOpts().OpenCL && CondTy->isVectorType())
+  if ((getLangOpts().OpenCL || getLangOpts().OpenACC) && CondTy->isVectorType())
     if (checkConditionalConvertScalarsToVectors(*this, LHS, RHS, CondTy))
       return QualType();
 
@@ -6865,7 +6865,7 @@ static void DiagnoseBadShiftValues(Sema& S, ExprResult &LHS, ExprResult &RHS,
                                    QualType LHSType) {
   // OpenCL 6.3j: shift values are effectively % word size of LHS (more defined),
   // so skip remaining warnings as we don't want to modify values within Sema.
-  if (S.getLangOpts().OpenCL)
+  if (S.getLangOpts().OpenCL || S.getLangOpts().OpenACC)
     return;
 
   llvm::APSInt Right;
@@ -7681,7 +7681,7 @@ QualType Sema::CheckVectorLogicalOperands(ExprResult &LHS, ExprResult &RHS,
   QualType vType = CheckVectorOperands(LHS, RHS, Loc, false);
   if (vType.isNull())
     return InvalidOperands(Loc, LHS, RHS);
-  if (getLangOpts().OpenCL && getLangOpts().OpenCLVersion < 120 &&
+  if (((getLangOpts().OpenCL && getLangOpts().OpenCLVersion < 120) || getLangOpts().OpenACC) &&
       vType->hasFloatingRepresentation())
     return InvalidOperands(Loc, LHS, RHS);
 
@@ -7762,8 +7762,8 @@ inline QualType Sema::CheckLogicalOperands( // C99 6.5.[13,14]
   if (!Context.getLangOpts().CPlusPlus) {
     // OpenCL v1.1 s6.3.g: The logical operators and (&&), or (||) do
     // not operate on the built-in scalar and vector float types.
-    if (Context.getLangOpts().OpenCL &&
-        Context.getLangOpts().OpenCLVersion < 120) {
+    if ((Context.getLangOpts().OpenCL &&
+         Context.getLangOpts().OpenCLVersion < 120) || Context.getLangOpts().OpenACC) {
       if (LHS.get()->getType()->isFloatingType() ||
           RHS.get()->getType()->isFloatingType())
         return InvalidOperands(Loc, LHS, RHS);
@@ -9191,7 +9191,7 @@ ExprResult Sema::CreateBuiltinUnaryOp(SourceLocation OpLoc,
     else if (resultType->hasIntegerRepresentation())
       break;
     else if (resultType->isExtVectorType()) {
-      if (Context.getLangOpts().OpenCL) {
+      if (Context.getLangOpts().OpenCL || Context.getLangOpts().OpenACC) {
         // OpenCL v1.1 s6.3.f: The bitwise operator not (~) does not operate
         // on vector float types.
         QualType T = resultType->getAs<ExtVectorType>()->getElementType();
@@ -9227,8 +9227,8 @@ ExprResult Sema::CreateBuiltinUnaryOp(SourceLocation OpLoc,
         // operand contextually converted to bool.
         Input = ImpCastExprToType(Input.take(), Context.BoolTy,
                                   ScalarTypeToBooleanCastKind(resultType));
-      } else if (Context.getLangOpts().OpenCL &&
-                 Context.getLangOpts().OpenCLVersion < 120) {
+      } else if ((Context.getLangOpts().OpenCL &&
+                  Context.getLangOpts().OpenCLVersion < 120) || Context.getLangOpts().OpenACC) {
         // OpenCL v1.1 6.3.h: The logical operator not (!) does not
         // operate on scalar float types.
         if (!resultType->isIntegerType())
@@ -9236,8 +9236,8 @@ ExprResult Sema::CreateBuiltinUnaryOp(SourceLocation OpLoc,
                            << resultType << Input.get()->getSourceRange());
       }
     } else if (resultType->isExtVectorType()) {
-      if (Context.getLangOpts().OpenCL &&
-          Context.getLangOpts().OpenCLVersion < 120) {
+        if ((Context.getLangOpts().OpenCL &&
+             Context.getLangOpts().OpenCLVersion < 120) || Context.getLangOpts().OpenACC) {
         // OpenCL v1.1 6.3.h: The logical operator not (!) does not
         // operate on vector float types.
         QualType T = resultType->getAs<ExtVectorType>()->getElementType();
