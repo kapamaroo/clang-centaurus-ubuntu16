@@ -480,6 +480,7 @@ private:
     ParseClauseFn ParseClauseEvalfun;
     ParseClauseFn ParseClauseEstimation;
     ParseClauseFn ParseClauseBuffer;
+    ParseClauseFn ParseClauseLocal_buffer;
     ParseClauseFn ParseClauseIn;
     ParseClauseFn ParseClauseOut;
     ParseClauseFn ParseClauseInout;

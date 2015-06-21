@@ -56,6 +56,7 @@ public:
     isValidClauseFn isValidClauseEvalfun;
     isValidClauseFn isValidClauseEstimation;
     isValidClauseFn isValidClauseBuffer;
+    isValidClauseFn isValidClauseLocal_buffer;
     isValidClauseFn isValidClauseIn;
     isValidClauseFn isValidClauseOut;
     isValidClauseFn isValidClauseInout;

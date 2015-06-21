@@ -20,6 +20,7 @@ const unsigned DirectiveInfo::ValidDirective[DK_END] = {
         BITMASK(CK_EVALFUN) |
         BITMASK(CK_ESTIMATION) |
         BITMASK(CK_BUFFER) |
+        BITMASK(CK_LOCAL_BUFFER) |
         BITMASK(CK_IN) |
         BITMASK(CK_OUT) |
         BITMASK(CK_INOUT) |
@@ -58,6 +59,7 @@ const std::string ClauseInfo::Name[CK_END] = {
     "evalfun",
     "estimation",
     "buffer",
+    "local_buffer",
     "in",
     "out",
     "inout",
@@ -459,6 +461,14 @@ Parser::ParseClauseEstimation(DirectiveKind DK, ClauseInfo *CI) {
 
 bool
 Parser::ParseClauseBuffer(DirectiveKind DK, ClauseInfo *CI) {
+    if (!ParseArgList(DK,CI))
+        return false;
+    bool status = true;
+    return status;
+}
+
+bool
+Parser::ParseClauseLocal_buffer(DirectiveKind DK, ClauseInfo *CI) {
     if (!ParseArgList(DK,CI))
         return false;
     bool status = true;

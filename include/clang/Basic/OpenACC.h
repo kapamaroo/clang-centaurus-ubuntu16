@@ -44,6 +44,7 @@ enum ClauseKind {
     CK_EVALFUN,
     CK_ESTIMATION,
     CK_BUFFER,
+    CK_LOCAL_BUFFER,
     CK_IN,
     CK_OUT,
     CK_INOUT,
@@ -319,6 +320,7 @@ public:
         switch (CK) {
         case CK_ESTIMATION:
         case CK_BUFFER:
+        case CK_LOCAL_BUFFER:
         case CK_IN:
         case CK_OUT:
         case CK_INOUT:
@@ -336,6 +338,7 @@ public:
         switch (CK) {
         case CK_ESTIMATION:
         case CK_BUFFER:
+        case CK_LOCAL_BUFFER:
         case CK_IN:
         case CK_OUT:
         case CK_INOUT:

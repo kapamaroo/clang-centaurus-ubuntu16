@@ -1236,6 +1236,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
     ClauseKind CK = A->getParent()->getAsClause()->getKind();
     switch (CK) {
     case CK_BUFFER:        DataDepType = "D_BUFFER";        break;
+    case CK_LOCAL_BUFFER:  DataDepType = "D_LOCAL_BUFFER";  break;
     case CK_IN:            DataDepType = "D_IN";            break;
     case CK_OUT:           DataDepType = "D_OUT";           break;
     case CK_INOUT:         DataDepType = "D_INOUT";         break;

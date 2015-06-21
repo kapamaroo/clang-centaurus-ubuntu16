@@ -280,6 +280,7 @@ OpenACC::OpenACC(Sema &s) : S(s), PendingDirective(0), Valid(false),
     isValidClause[CK_EVALFUN] =      &OpenACC::isValidClauseEvalfun;
     isValidClause[CK_ESTIMATION] =   &OpenACC::isValidClauseEstimation;
     isValidClause[CK_BUFFER] =       &OpenACC::isValidClauseBuffer;
+    isValidClause[CK_LOCAL_BUFFER] = &OpenACC::isValidClauseLocal_buffer;
     isValidClause[CK_IN] =           &OpenACC::isValidClauseIn;
     isValidClause[CK_OUT] =          &OpenACC::isValidClauseOut;
     isValidClause[CK_INOUT] =        &OpenACC::isValidClauseInout;
@@ -792,6 +793,11 @@ OpenACC::isValidClauseEstimation(DirectiveKind DK, ClauseInfo *CI) {
 
 bool
 OpenACC::isValidClauseBuffer(DirectiveKind DK, ClauseInfo *CI) {
+    return true;
+}
+
+bool
+OpenACC::isValidClauseLocal_buffer(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 

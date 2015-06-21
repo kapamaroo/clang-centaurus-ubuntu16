@@ -533,6 +533,7 @@ void Parser::Initialize() {
       ParseClause[CK_EVALFUN] = &Parser::ParseClauseEvalfun;
       ParseClause[CK_ESTIMATION] = &Parser::ParseClauseEstimation;
       ParseClause[CK_BUFFER] = &Parser::ParseClauseBuffer;
+      ParseClause[CK_LOCAL_BUFFER] = &Parser::ParseClauseLocal_buffer;
       ParseClause[CK_IN] = &Parser::ParseClauseIn;
       ParseClause[CK_OUT] = &Parser::ParseClauseOut;
       ParseClause[CK_INOUT] = &Parser::ParseClauseInout;
