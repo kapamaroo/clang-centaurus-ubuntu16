@@ -44,6 +44,13 @@ namespace {
 }
 
 int runClang(std::string Path, SmallVector<const char *, 256> &cli) {
+    llvm::outs() << DEBUG << Path << " ";
+    for (SmallVector<const char *, 256>::iterator
+             II = cli.begin(), EE = cli.end(); II != EE; ++II) {
+        llvm::outs() << *II << " ";
+    }
+    llvm::outs() << "\n";
+
     using namespace clang::driver;
 
     /////////////////////////////////////////////////////////////////////////////////////
@@ -381,7 +388,7 @@ int main(int argc, const char *argv[]) {
 
         //cli.push_back("-###");
         cli.push_back("-Wall");
-        cli.push_back("-fopenacc");
+        //cli.push_back("-fopenacc");
         cli.push_back(IncludeFlag.c_str());
         cli.push_back("-c");
 
@@ -394,7 +401,7 @@ int main(int argc, const char *argv[]) {
 
         std::vector<std::string> TmpObjList;
 
-        cli.push_back("-include__acl_api_types.h");
+        //cli.push_back("-include__acl_api_types.h");
         for (std::vector<std::string>::iterator
                  II = InputFiles.begin(),
                  EE = InputFiles.end(); II != EE; ++II) {
