@@ -600,7 +600,7 @@ OpenACC::isValidClauseWrapper(DirectiveKind DK, ClauseInfo *CI) {
     if (CI->isDataClause()) {
         ArgVector &Args = CI->getArgs();
         for (ArgVector::iterator II = Args.begin(), EE = Args.end(); II != EE; ++II) {
-            if ((!isa<SubArrayArg>(*II) && !isa<VarArg>(*II)) ||
+            if ((!isa<SubArrayArg>(*II) && !isa<VarArg>(*II) && !(isa<ArrayElementArg>(*II) && (*II)->getExpr()->getType()->isPointerType())) ||
                 (isa<VarArg>(*II) && isStaticVarExpr((*II)->getExpr(),this))) {
                 std::string _msg = "pass-by-value";
                 if (isa<ArrayArg>(*II))
