@@ -1478,8 +1478,8 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     APIHeaderVector.push_back("__acl_api_types.h");
     //APIHeaderVector.push_back("malloc.h");
 
-    HostHeader += "#include <centaurus_common.h>\n";
     HostHeader += "#include <__acl_api_types.h>\n";
+    HostHeader += "#include <centaurus_common.h>\n";
     HostHeader += "#include <malloc.h>\n";
     HostHeader += "#include <string.h>\n";
 
