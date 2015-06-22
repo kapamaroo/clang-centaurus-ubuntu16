@@ -1462,6 +1462,7 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     updateNestedSubtasks(C,CG);
     //CG->dump();
 
+    APIHeaderVector.push_back("CL/centaurus_cl_platform.h");
     APIHeaderVector.push_back("centaurus_common.h");
     APIHeaderVector.push_back("__acl_api_types.h");
     APIHeaderVector.push_back("malloc.h");
@@ -1474,15 +1475,15 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     NewHeader = RemoveDotExtension(FileName) + Suffix + ".h";
     HostHeader = CommonFileHeader;  // + "#include \"" + NewHeader + "\"\n";
 
-    for (std::vector<std::string>::iterator
-             II = APIHeaderVector.begin(), EE = APIHeaderVector.end(); II != EE; ++II)
-        HostHeader += "#include <" + *II + ">\n";
-
     HostHeader += "#define __kernel \n";
     HostHeader += "#define __global \n";
     HostHeader += "#define __local \n";
     HostHeader += "#define __constant \n";
     HostHeader += "#define __private \n";
+
+    for (std::vector<std::string>::iterator
+             II = APIHeaderVector.begin(), EE = APIHeaderVector.end(); II != EE; ++II)
+        HostHeader += "#include <" + *II + ">\n";
 
 #if 0
     for (llvm::SmallPtrSet<clang::FunctionDecl *, 32>::iterator
@@ -1526,9 +1527,17 @@ void
 Stage1_ASTVisitor::Finish() {
     SourceManager &SM = Context->getSourceManager();
 
+    for (SmallVector<SourceLocation,8>::iterator
+             II = SM.OpenCLIncludeDirectives.begin(),
+             EE = SM.OpenCLIncludeDirectives.end(); II != EE; ++II) {
+        SourceLocation Loc = *II;
+        Replacement R(SM,Loc,0,"//");
+        applyReplacement(ReplacementPool,R);
+    }
+
     if (!TaskSrc::TaskUID) {
         SourceLocation StartLocOfMainFile = SM.getLocForStartOfFile(SM.getMainFileID());
-        Replacement R(Context->getSourceManager(),StartLocOfMainFile,0,HostHeader);
+        Replacement R(SM,StartLocOfMainFile,0,HostHeader);
         applyReplacement(ReplacementPool,R);
         return;
     }
@@ -1538,7 +1547,7 @@ Stage1_ASTVisitor::Finish() {
     {
         std::string Headers = HostHeader + "#include \"" + NewHeader + "\"\n";
         SourceLocation StartLocOfMainFile = SM.getLocForStartOfFile(SM.getMainFileID());
-        Replacement R(Context->getSourceManager(),StartLocOfMainFile,0,Headers);
+        Replacement R(SM,StartLocOfMainFile,0,Headers);
         applyReplacement(ReplacementPool,R);
     }
 
@@ -1707,10 +1716,10 @@ Stage1_ASTVisitor::Finish() {
         if (!SM.isFromMainFile((*II)->getLocStart()))
             continue;
 
-        Replacement R1(Context->getSourceManager(),(*II)->getLocStart(),0,"\n#if 0\n");
+        Replacement R1(SM,(*II)->getLocStart(),0,"\n#if 0\n");
         applyReplacement(ReplacementPool,R1);
 
-        Replacement R2(Context->getSourceManager(),(*II)->getLocEnd().getLocWithOffset(1),0,"\n#endif\n");
+        Replacement R2(SM,(*II)->getLocEnd().getLocWithOffset(1),0,"\n#endif\n");
         applyReplacement(ReplacementPool,R2);
     }
     EraseFunctionDeclPool.clear();
