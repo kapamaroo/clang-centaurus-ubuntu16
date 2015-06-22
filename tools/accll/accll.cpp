@@ -44,12 +44,14 @@ namespace {
 }
 
 int runClang(std::string Path, SmallVector<const char *, 256> &cli) {
+#if 1
     llvm::outs() << DEBUG << Path << " ";
     for (SmallVector<const char *, 256>::iterator
              II = cli.begin(), EE = cli.end(); II != EE; ++II) {
         llvm::outs() << *II << " ";
     }
     llvm::outs() << "\n";
+#endif
 
     using namespace clang::driver;
 
@@ -401,7 +403,7 @@ int main(int argc, const char *argv[]) {
 
         std::vector<std::string> TmpObjList;
 
-        //cli.push_back("-include__acl_api_types.h");
+        cli.push_back("-include__acl_api_types.h");
         for (std::vector<std::string>::iterator
                  II = InputFiles.begin(),
                  EE = InputFiles.end(); II != EE; ++II) {
@@ -548,6 +550,15 @@ int main(int argc, const char *argv[]) {
                          II = Config.ExtraLinkerFlags.begin(),
                          EE = Config.ExtraLinkerFlags.end(); II != EE; ++II)
                     ldcli.push_back(II->c_str());
+
+#if 1
+                llvm::outs() << DEBUG;
+                for (SmallVector<const char *, 256>::iterator
+                         II = ldcli.begin(), EE = ldcli.end(); II != EE; ++II) {
+                    llvm::outs() << *II << " ";
+                }
+                llvm::outs() << "\n";
+#endif
 
                 ldcli.push_back(0);
 
