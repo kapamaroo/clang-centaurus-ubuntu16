@@ -262,7 +262,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
 
     std::string PreAPIDef;
     std::string PlatformTableName = PrefixDef + "PLATFORM_TABLE";
-    std::string PlatformTable = "struct _platform_bin *(*" + PlatformTableName + ")[ACL_SUPPORTED_PLATFORMS_NUM] = calloc(ACL_SUPPORTED_PLATFORMS_NUM,sizeof(struct _platform_bin *));";
+    std::string PlatformTable = "struct _platform_bin *" + PlatformTableName + " = calloc(ACL_SUPPORTED_PLATFORMS_NUM,sizeof(struct _platform_bin));";
 
     for (std::vector<PlatformBin>::iterator
              II = Binary.begin(), EE = Binary.end(); II != EE; ++II) {
@@ -299,7 +299,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
 
         PlatformDef += Platform.Definition;
         PreAPIDef += PlatformDef;
-        PlatformTable += "*" + PlatformTableName + "[" "PL_" + Platform.PlatformName + "] = &" + Platform.NameRef + ";";
+        PlatformTable += PlatformTableName + "[" "PL_" + Platform.PlatformName + "] = " + Platform.NameRef + ";";
 
         llvm::outs() << "\n#################################\n";
     }
@@ -1298,10 +1298,13 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         SizeExpr = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
         DataDepType = "D_PASS_BY_VALUE";
         std::string TypeName = A->getExpr()->getType().getAsString();
+
+        std::string AllocName = NewName + "__alloc__";
         std::string HiddenName = NewName + "__hidden__";
-        Prologue = TypeName + " *" + HiddenName + " = malloc(" + SizeExpr + ");";
-        Prologue += "memcpy(" + HiddenName + ",&" + OrigName + "," + SizeExpr + ");";
-        Address = HiddenName;
+        Prologue += TypeName + " " + HiddenName + " = " + OrigName + ";";
+        Prologue += TypeName + " *" + AllocName + " = malloc(" + SizeExpr + ");";
+        Prologue += "memcpy(" + AllocName + ",&" + HiddenName + "," + SizeExpr + ");";
+        Address = AllocName;
     }
 
     std::string NewCode = Prologue
