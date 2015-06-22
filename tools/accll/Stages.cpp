@@ -262,7 +262,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
 
     std::string PreAPIDef;
     std::string PlatformTableName = PrefixDef + "PLATFORM_TABLE";
-    std::string PlatformTable = "struct _platform_bin *" + PlatformTableName + "[ACL_SUPPORTED_PLATFORMS_NUM] = { NULL };";
+    std::string PlatformTable = "struct _platform_bin *(*" + PlatformTableName + ")[ACL_SUPPORTED_PLATFORMS_NUM] = calloc(ACL_SUPPORTED_PLATFORMS_NUM,sizeof(struct _platform_bin *));";
 
     for (std::vector<PlatformBin>::iterator
              II = Binary.begin(), EE = Binary.end(); II != EE; ++II) {
@@ -299,21 +299,21 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
 
         PlatformDef += Platform.Definition;
         PreAPIDef += PlatformDef;
-        PlatformTable += PlatformTableName + "[" "PL_" + Platform.PlatformName + "] = &" + Platform.NameRef + ";";
+        PlatformTable += "*" + PlatformTableName + "[" "PL_" + Platform.PlatformName + "] = &" + Platform.NameRef + ";";
 
         llvm::outs() << "\n#################################\n";
     }
 
     HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
     HostCode.Definition = PreAPIDef + PlatformTable
-        + "struct _kernel_struct " + HostCode.NameRef
-        + " = {"
+        + "struct _kernel_struct *" + HostCode.NameRef + " = malloc(sizeof(struct _kernel_struct));"
+        "*" + HostCode.NameRef + " = (struct _kernel_struct){"
         + ".UID = " + toString(getKernelUID(DeviceCode.NameRef))
         + ",.name = \"" + DeviceCode.NameRef + "\""
         + ",.name_size = " + toString(DeviceCode.NameRef.size())
         + ",.src = " + InlineDeviceCode.NameRef
         + ",.src_size = " + toString(__inline_definition.size())
-        + ",.platform_table = &" + PlatformTableName
+        + ",.platform_table = " + PlatformTableName
         + "};";
 }
 
@@ -362,12 +362,12 @@ struct KernelSrc {
         NameRef = "__accll_task_exe";
         Definition = AccurateKernel->HostCode.Definition;
 
-        std::string ApproxName = ApproximateKernel ? std::string("&" + ApproximateKernel->HostCode.NameRef) : "NULL";
+        std::string ApproxName = ApproximateKernel ? ApproximateKernel->HostCode.NameRef : "NULL";
         if (ApproximateKernel)
             Definition += ApproximateKernel->HostCode.Definition;
 
         std::string EstimationName = "NULL";
-        std::string EvalfunName = EvaluationKernel ? std::string("&" + EvaluationKernel->HostCode.NameRef) : "NULL";
+        std::string EvalfunName = EvaluationKernel ? EvaluationKernel->HostCode.NameRef : "NULL";
 
         if (ACLConfig.ProfileMode) {
             if (EvaluationKernel) {
@@ -395,7 +395,7 @@ struct KernelSrc {
         Definition += "struct _task_executable " + NameRef + " = {"
             //+ ".UID = " + toString(TaskUID)
             + ".device_type = " + DeviceType
-            + ",.kernel_accurate = &" + AccurateKernel->HostCode.NameRef
+            + ",.kernel_accurate = " + AccurateKernel->HostCode.NameRef
             + ",.kernel_approximate = " + ApproxName
             + ",.kernel_evalfun = " + EvalfunName
             + ",.estimation = " + EstimationName
@@ -1297,13 +1297,15 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
     else {
         SizeExpr = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
         DataDepType = "D_PASS_BY_VALUE";
+        std::string TypeName = A->getExpr()->getType().getAsString();
         std::string HiddenName = NewName + "__hidden__";
-        Prologue = A->getExpr()->getType().getAsString() + " "
-            + HiddenName + " = " + getPrettyExpr(Context,A->getExpr()) + ";";
-        Address = "&" + HiddenName;
+        Prologue = TypeName + " *" + HiddenName + " = malloc(" + SizeExpr + ");";
+        Prologue += "memcpy(" + HiddenName + ",&" + OrigName + "," + SizeExpr + ");";
+        Address = HiddenName;
     }
 
-    std::string NewCode = Prologue + "struct _memory_object " + NewName + " = {"
+    std::string NewCode = Prologue
+        + "struct _memory_object " + NewName + " = {"
         + ".cl_obj = 0"
         + ",.index = " + toString(Index)
         + ",.dependency = " + DataDepType
@@ -1462,11 +1464,6 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     updateNestedSubtasks(C,CG);
     //CG->dump();
 
-    APIHeaderVector.push_back("CL/centaurus_cl_platform.h");
-    APIHeaderVector.push_back("centaurus_common.h");
-    APIHeaderVector.push_back("__acl_api_types.h");
-    APIHeaderVector.push_back("malloc.h");
-
     SourceManager &SM = Context->getSourceManager();
     std::string FileName = SM.getFileEntryForID(SM.getMainFileID())->getName();
 
@@ -1481,9 +1478,15 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     HostHeader += "#define __constant \n";
     HostHeader += "#define __private \n";
 
-    for (std::vector<std::string>::iterator
-             II = APIHeaderVector.begin(), EE = APIHeaderVector.end(); II != EE; ++II)
-        HostHeader += "#include <" + *II + ">\n";
+    APIHeaderVector.push_back("CL/centaurus_cl_platform.h");
+    APIHeaderVector.push_back("centaurus_common.h");
+    APIHeaderVector.push_back("__acl_api_types.h");
+    //APIHeaderVector.push_back("malloc.h");
+
+    HostHeader += "#include <centaurus_common.h>\n";
+    HostHeader += "#include <__acl_api_types.h>\n";
+    HostHeader += "#include <malloc.h>\n";
+    HostHeader += "#include <string.h>\n";
 
 #if 0
     for (llvm::SmallPtrSet<clang::FunctionDecl *, 32>::iterator
