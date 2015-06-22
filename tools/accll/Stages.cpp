@@ -1381,14 +1381,6 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
         for (ArgVector::iterator
                  AI = CI->getArgs().begin(), AE = CI->getArgs().end(); AI != AE; ++AI) {
             Arg *A = *AI;
-            if (!isa<SubArrayArg>(*AI) && !isa<VarArg>(A)) {
-                llvm::outs() << WARNING
-                             << "[INTERNAL ERORR] invalid '" << (A)->getParent()->getAsClause()->getAsString()
-                             << "' data dependency for pass-by-value argument '"
-                             << (A)->getPrettyArg() << "' (" << (A)->getKindAsString() << ")\n";
-                assert(0);
-                continue;
-            }
             PragmaArgs.push_back(A);
         }
     }
