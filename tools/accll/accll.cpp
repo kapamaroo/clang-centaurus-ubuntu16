@@ -246,8 +246,8 @@ int main(int argc, const char *argv[]) {
                  EE = Config.ExtraLinkerFlags.end(); II != EE; ++II)
             cli.push_back(II->c_str());
 
-#if 0
-        llvm::outs() << DEBUG << "Invoke clang as: " << ClangPath << " ";
+#if 1
+        llvm::outs() << DEBUG;
         for (size_t i=0; i<cli.size(); ++i)
             llvm::outs() << cli[i] << " ";
         llvm::outs() << "\n";
@@ -352,6 +352,8 @@ int main(int argc, const char *argv[]) {
     }
     llvm::outs() << "OK\n";
 
+#if 1
+    //#error fixme with include files from command line
     llvm::outs() << "Check new generated source files ... ";
 
     {
@@ -379,6 +381,7 @@ int main(int argc, const char *argv[]) {
             return 1;
         }
     }
+#endif
 
     llvm::outs() << "OK\n";
     llvm::outs() << "Generate temporary object files ... ";
