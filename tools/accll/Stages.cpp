@@ -1467,18 +1467,16 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     NewHeader = RemoveDotExtension(FileName) + Suffix + ".h";
     HostHeader = CommonFileHeader;  // + "#include \"" + NewHeader + "\"\n";
 
-    HostHeader += "#define __kernel \n";
-    HostHeader += "#define __global \n";
-    HostHeader += "#define __local \n";
-    HostHeader += "#define __constant \n";
-    HostHeader += "#define __private \n";
-
+#if 1
+    APIHeaderVector.push_back("/opt/LLVM/include/");
+#else
     APIHeaderVector.push_back("CL/centaurus_cl_platform.h");
     APIHeaderVector.push_back("centaurus_common.h");
     APIHeaderVector.push_back("__acl_api_types.h");
-    //APIHeaderVector.push_back("malloc.h");
+    APIHeaderVector.push_back("include/clc/");
+    APIHeaderVector.push_back("include/math/");
+#endif
 
-    HostHeader += "#include <__acl_api_types.h>\n";
     HostHeader += "#include <centaurus_common.h>\n";
     HostHeader += "#include <malloc.h>\n";
     HostHeader += "#include <string.h>\n";
