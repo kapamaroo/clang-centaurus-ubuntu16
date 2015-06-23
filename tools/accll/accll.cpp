@@ -406,7 +406,6 @@ int main(int argc, const char *argv[]) {
 
         std::vector<std::string> TmpObjList;
 
-        cli.push_back("-include__acl_api_types.h");
         for (std::vector<std::string>::iterator
                  II = InputFiles.begin(),
                  EE = InputFiles.end(); II != EE; ++II) {
@@ -425,7 +424,6 @@ int main(int argc, const char *argv[]) {
             cli.pop_back();
             cli.pop_back();
         }
-        cli.pop_back();
 
         for (std::vector<std::string>::iterator
                  II = LibOCLFiles.begin(),
