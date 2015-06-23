@@ -629,7 +629,7 @@ OpenACC::isValidClauseLabel(DirectiveKind DK, ClauseInfo *CI) {
 
 bool
 OpenACC::isValidClauseSignificant(DirectiveKind DK, ClauseInfo *CI) {
-    return false;
+    return true;
 }
 
 bool
