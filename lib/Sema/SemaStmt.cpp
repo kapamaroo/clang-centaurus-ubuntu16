@@ -180,7 +180,7 @@ void Sema::DiagnoseUnusedExprResult(const Stmt *S) {
   // expression is a call to a function with the warn_unused_result attribute,
   // we warn no matter the location. Because of the order in which the various
   // checks need to happen, we factor out the macro-related test here.
-  bool ShouldSuppress = 
+  bool ShouldSuppress =
       SourceMgr.isMacroBodyExpansion(ExprLoc) ||
       SourceMgr.isInSystemMacro(ExprLoc);
 
@@ -196,6 +196,10 @@ void Sema::DiagnoseUnusedExprResult(const Stmt *S) {
   // false positive.
   if (isa<StmtExpr>(E) && Loc.isMacroID())
     return;
+
+  // do not warn on initializers like ( type )( value, value )
+  if (getLangOpts().OpenACC)
+      return;
 
   // Okay, we have an unused result.  Depending on what the base expression is,
   // we might want to make a more specific diagnostic.  Check for one of these
@@ -1578,7 +1582,7 @@ Sema::ActOnObjCForCollectionStmt(SourceLocation ForLoc,
       VarDecl *D = dyn_cast<VarDecl>(DS->getSingleDecl());
       if (!D || D->isInvalidDecl())
         return StmtError();
-      
+
       FirstType = D->getType();
       // C99 6.8.5p3: The declaration part of a 'for' statement shall only
       // declare identifiers for objects having storage class 'auto' or
