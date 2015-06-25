@@ -268,7 +268,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
              II = Binary.begin(), EE = Binary.end(); II != EE; ++II) {
         PlatformBin &Platform = *II;
         llvm::outs() << NOTE
-                     << "########    [" << Platform.PlatformName << "]'\n";
+                     << "########    [" << Platform.PlatformName << "]\n";
 
         std::string PlatformDef;
 
@@ -276,8 +276,8 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         for (std::vector<DeviceBin>::iterator
                  DI = Platform.begin(), DE = Platform.end(); DI != DE; ++DI) {
             DeviceBin &Device = *DI;
-            llvm::outs() << NOTE
-                << "########" << Device.Bin.NameRef << "' build log   ########\n";
+            //llvm::outs() << NOTE
+            //    << "########" << Device.Bin.NameRef << "' build log   ########\n";
             if (Device.Log.Raw.size()) {
                 llvm::outs() << Device.Log.Raw;
                 if (Device.PlatformName.compare("NVIDIA") == 0) {
@@ -301,7 +301,8 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         PreAPIDef += PlatformDef;
         PlatformTable += PlatformTableName + "[" "PL_" + Platform.PlatformName + "] = " + Platform.NameRef + ";";
 
-        llvm::outs() << "\n#################################\n";
+        llvm::outs() << "\n";
+        //llvm::outs() << "\n#################################\n";
     }
 
     HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;

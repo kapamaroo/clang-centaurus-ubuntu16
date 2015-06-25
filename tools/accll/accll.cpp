@@ -191,7 +191,7 @@ int main(int argc, const char *argv[]) {
     }
 
     int ARGC = ARGV.size();
-    llvm::outs() << "debug: Invoke Stages as: ";
+    llvm::outs() << DEBUG << "Invoke Stages as: ";
     for (size_t i=0; i<ARGV.size(); ++i)
         llvm::outs() << ARGV[i] + std::string(" ");
     llvm::outs() << "\n";
