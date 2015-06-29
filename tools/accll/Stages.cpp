@@ -457,7 +457,7 @@ private:
         for (ClauseList::iterator
                  II = CList.begin(), EE = CList.end(); II != EE; ++II)
             if ((*II)->getKind() == CK_LABEL)
-                return (*II)->getArgAs<LabelArg>()->getLabel();
+                return (*II)->getArgAs<LabelArg>()->getQuotedLabel();
         return "NULL";
     }
 
