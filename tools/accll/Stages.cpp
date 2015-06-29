@@ -568,7 +568,7 @@ std::string TaskSrc::HostCall() {
 #warning FIXME: dynamically generate SrcLocID to take care of possible iteration spaces
     std::string SrcLocID = GetBasename(FileName) + ":" + toString(PLoc.getLine());
 
-    std::string LabelDef = "const char __acl_group_label[] = \"" + Label + "\";";
+    std::string LabelDef = "const char *__acl_group_label = " + Label + ";";
     std::string SrcLocDef = "const char __acl_srcloc[] = \"" + SrcLocID + "\";";
     std::string call = LabelDef + SrcLocDef
         + "acl_create_task("
