@@ -395,14 +395,14 @@ FunctionArg::FunctionArg(CommonInfo *Parent, FunctionDecl *FD) :
 
 std::string
 LabelArg::getLabel() const {
-    if (StringLiteral *SL = dyn_cast<StringLiteral>(getExpr()))
+    if (StringLiteral *SL = dyn_cast<StringLiteral>(getExpr()->IgnoreParenImpCasts()))
         return SL->getString().str();
     return getPrettyArg();
 }
 
 std::string
 LabelArg::getQuotedLabel() const {
-    if (StringLiteral *SL = dyn_cast<StringLiteral>(getExpr())) {
+    if (StringLiteral *SL = dyn_cast<StringLiteral>(getExpr()->IgnoreParenImpCasts())) {
         (void)SL;
         return "\"" + getLabel() + "\"";
     }
