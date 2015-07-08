@@ -1148,9 +1148,29 @@ OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
             return StmtEmpty();
         }
 
-        if (!S.getASTContext().isOpenCLKernel(CE->getDirectCallee()))
+        FunctionDecl *AccurateFun = CE->getDirectCallee();
+        if (!S.getASTContext().isOpenCLKernel(AccurateFun)) {
+            S.Diag(CE->getLocStart(),diag::err_pragma_acc_test) << "expected OpenCL kernel function";
             return StmtEmpty();
+        }
 
+        FunctionArg *FA = 0;
+        {
+            ClauseList &CList = DI->getClauseList();
+            for (ClauseList::iterator
+                     II = CList.begin(), EE = CList.end(); II != EE; ++II)
+                if ((*II)->getKind() == CK_APPROXFUN) {
+                    if ((FA = dyn_cast<FunctionArg>((*II)->getArg())))
+                        break;
+                }
+        }
+        if (FA) {
+            FunctionDecl *ApproxFun = FA->getFunctionDecl();
+            if (!S.getASTContext().isOpenCLKernel(ApproxFun)) {
+                S.Diag(FA->getLocStart(),diag::err_pragma_acc_test) << "expected OpenCL kernel function";
+                return StmtEmpty();
+            }
+        }
         ACC->setSubStmt(SubStmt);
         break;
     }
