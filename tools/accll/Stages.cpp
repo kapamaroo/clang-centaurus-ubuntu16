@@ -34,7 +34,6 @@ namespace {
     llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelApproximatePool;
     llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelEvaluatePool;
     llvm::DenseMap<FunctionDecl *,std::string> CommonFunctionsPool;
-    llvm::SmallPtrSet<FunctionDecl *,32> EraseFunctionDeclPool;
 }
 
 std::string print(const PTXASInfo &info) {
@@ -996,10 +995,6 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         TaskSrc NewTask(Context,CG,DI,RStack,ReplacementPool,
                         accll::OpenCLExtensions,UserTypes);
 
-        EraseFunctionDeclPool.insert(CE->getDirectCallee());
-        if (FunctionDecl *ApproxFun = getApproxFunctionDecl(DI))
-            EraseFunctionDeclPool.insert(ApproxFun);
-
         std::string DirectiveSrc =
             DI->getPrettyDirective(Context->getPrintingPolicy(),false);
         std::string NewCode = "/*" + DirectiveSrc + "*/\n"
@@ -1100,10 +1095,10 @@ Stage1_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
 #if 0
     if (SM.isInSystemHeader(FD->getSourceRange().getBegin()))
         return true;
+#endif
 
     if (!SM.isFromMainFile(FD->getSourceRange().getBegin()))
         return true;
-#endif
 
     if (FD->isMain()) {
         std::string RuntimeInit = "acl_centaurus_init();";
@@ -1114,6 +1109,13 @@ Stage1_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
                       FD->getBody()->getLocStart().getLocWithOffset(1),0,
                       NewCode);
         applyReplacement(ReplacementPool,R);
+    }
+    else if (Context->isOpenCLKernel(FD) || Context->isFunctionWithSubtasks(FD)) {
+        Replacement R1(SM,(FD)->getLocStart(),0,"\n#if 0\n");
+        applyReplacement(ReplacementPool,R1);
+
+        Replacement R2(SM,(FD)->getLocEnd().getLocWithOffset(1),0,"\n#endif\n");
+        applyReplacement(ReplacementPool,R2);
     }
 
 #if 0
@@ -1679,20 +1681,6 @@ Stage1_ASTVisitor::Finish() {
         }
         KernelEvaluatePool.clear();
     }
-
-    for (SmallPtrSet<FunctionDecl*,32>::iterator
-             II = EraseFunctionDeclPool.begin(),
-             EE = EraseFunctionDeclPool.end(); II != EE; ++II) {
-        if (!SM.isFromMainFile((*II)->getLocStart()))
-            continue;
-
-        Replacement R1(SM,(*II)->getLocStart(),0,"\n#if 0\n");
-        applyReplacement(ReplacementPool,R1);
-
-        Replacement R2(SM,(*II)->getLocEnd().getLocWithOffset(1),0,"\n#endif\n");
-        applyReplacement(ReplacementPool,R2);
-    }
-    EraseFunctionDeclPool.clear();
 
     APIHeaderVector.clear();
     CommonFunctionsPool.clear();
