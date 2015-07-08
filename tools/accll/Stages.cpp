@@ -127,15 +127,6 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         return;
     }
 
-    if (!FD->getResultType()->isVoidType()) {
-        HostCode.NameRef = "NULL";
-        DeviceCode.NameRef = "NULL";
-        llvm::outs() << ERROR
-                     << "Function '" << FD->getNameAsString()
-                     << "' must have return type of void to define a task\n";
-        return;
-    }
-
     assert(SubtaskPrintMode != K_PRINT_ALL);
 
     // always set the AlternativeName for the top level kernel function
