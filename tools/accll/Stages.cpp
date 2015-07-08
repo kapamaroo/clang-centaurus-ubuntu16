@@ -980,18 +980,18 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
     else if (DI->getKind() == DK_TASK) {
         llvm::outs() << "  -  Create Kernel\n";
 
-        //extra semantic checking
+        // extra semantic checking
+        // we cannot move this into Sema, because we need information from the Call Graph
         CallExpr *CE = dyn_cast<CallExpr>(SubStmt);
         FunctionDecl *AccurateFun = CE->getDirectCallee();
         FunctionDecl *ApproxFun = getApproxFunctionDecl(DI);
         if (Context->isFunctionWithSubtasks(AccurateFun) && ApproxFun) {
-            llvm::outs() << ERROR
-                         << "Kernel with subtasks '"
-                         << AccurateFun->getNameAsString()
-                         << "' cannot have direct approximate version\n";
+            std::string msg = "Kernel with subtasks '"
+                + AccurateFun->getNameAsString()
+                + "' cannot have direct approximate version\n";
+            Diag(Context,AccurateFun->getLocStart(),diag::err_pragma_acc_test) << msg;
             return true;
         }
-        /////////////////////////
 
         TaskSrc NewTask(Context,CG,DI,RStack,ReplacementPool,
                         accll::OpenCLExtensions,UserTypes);
@@ -1367,10 +1367,10 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
         NameRef = "NULL";
         //Definition = "";
         NumArgs = "0";
-        llvm::outs() << ERROR
-                     << "number of pass-by-reference function arguments (" << PtrArgs.size()
-                     << ") and dependency data clause arguments (" << PragmaArgs.size()
-                     << ") mismatch\n";
+        std::string msg =  "number of pass-by-reference function arguments (" + toString(PtrArgs.size())
+            + ") and dependency data clause arguments (" + toString(PragmaArgs.size())
+            + ") mismatch\n";
+        Diag(Context,DI->getLocStart(),diag::err_pragma_acc_test) << msg;
         return;
     }
 #endif
