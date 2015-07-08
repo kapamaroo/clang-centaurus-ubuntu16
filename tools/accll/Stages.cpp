@@ -29,7 +29,6 @@ namespace {
         return true;
     }
 
-    llvm::StringMap<std::string> DynSizeMap;
     llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelAccuratePool;
     llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelApproximatePool;
     llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelEvaluatePool;
@@ -818,54 +817,6 @@ Stage1_ASTVisitor::TraverseAccStmt(AccStmt *S) {
 }
 
 bool
-Stage1_ASTVisitor::UpdateDynamicSize(std::string key, Expr *E) {
-    std::string SizeStr;
-
-#if 1
-    // we need to put every size into a separate global variable
-    // in case we need it out of the scope the allocation took place
-    return false;
-#else
-
-    if (CallExpr *CE = dyn_cast<CallExpr>(E)) {
-        FunctionDecl *FD = CE->getDirectCallee();
-        std::string Name = FD->getNameAsString();
-
-        if (Name.compare("malloc") == 0) {
-            //void *malloc(size_t size);
-            SizeStr = getPrettyExpr(Context,CE->getArg(0));
-        }
-        else if (Name.compare("calloc") == 0) {
-            //void *calloc(size_t nmemb, size_t size);
-            SizeStr = getPrettyExpr(Context,CE->getArg(0)) + "*" + getPrettyExpr(Context,CE->getArg(1));
-        }
-        else if (Name.compare("realloc") == 0) {
-            //void *realloc(void *ptr, size_t size);
-            SizeStr = getPrettyExpr(Context,CE->getArg(1));
-        }
-        else if (Name.compare("free") == 0) {
-            //void free(void *ptr);
-            SizeStr = "0";
-        }
-    }
-    else if (UnaryOperator *UOP = dyn_cast<UnaryOperator>(E)) {
-        if (UOP->getOpcode() == UO_AddrOf) {
-            Expr *Size = UOP->getSubExpr()->IgnoreParenCasts();
-            SizeStr = "sizeof(" + getPrettyExpr(Context,Size) + ")";
-        }
-    }
-    else {
-        //must have pointer type
-#warning FIXME: size from pointer to pointer assignment
-        //SizeStr = "sizeof(" + getPrettyExpr(Context,RHS) + ")";
-    }
-
-    DynSizeMap[key] = SizeStr;
-    return true;
-#endif
-}
-
-bool
 Stage1_ASTVisitor::VisitBinaryOperator(BinaryOperator *BO) {
     SourceManager &SM = Context->getSourceManager();
     if (SM.isInSystemHeader(BO->getSourceRange().getBegin())) {
@@ -878,25 +829,12 @@ Stage1_ASTVisitor::VisitBinaryOperator(BinaryOperator *BO) {
         return true;
 
     Expr *LHS = BO->getLHS()->IgnoreParenCasts();
-    Expr *RHS = BO->getRHS()->IgnoreParenCasts();
+    //Expr *RHS = BO->getRHS()->IgnoreParenCasts();
 
     QualType Ty = LHS->getType();
     if (!Ty->isPointerType())
         return true;
 
-    UpdateDynamicSize(getPrettyExpr(Context,LHS),RHS);
-    return true;
-}
-
-bool
-Stage1_ASTVisitor::VisitDeclStmt(DeclStmt *DS) {
-    for (DeclGroupRef::iterator
-             II = DS->decl_begin(), EE = DS->decl_end(); II != EE; ++II)
-        if (VarDecl *VD = dyn_cast<VarDecl>(*II))
-            if (static_cast<ValueDecl*>(VD)->getType()->isPointerType())
-                if (Expr *Init = VD->getInit())
-                    UpdateDynamicSize(static_cast<NamedDecl*>(VD)->getNameAsString(),
-                                      Init->IgnoreParenCasts());
     return true;
 }
 
@@ -1182,23 +1120,9 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
     }
     else {
         delete TmpA;
-
-#if 0
-        if (RStack.FindBufferObjectInRegionStack(A)) {
-            assert(0 && "Unexpected nesting");
-            //abort creation of device buffer, we created it previously
-            llvm::outs() << "abort new buffer (use existing) for '"
-                         << A->getPrettyArg()
-                         << "' in Clause '" << A->getParent()->getAsClause()->getAsString() << "'\n";
-            return ObjRefDef();
-        }
-#endif
     }
 
-    std::string OrigName = A->getPrettyArg();
-
     std::string NewName = "__accll_arg_" + toString(Index);
-    //llvm::outs() << "orig name: " << OrigName << "  new name: " << NewName << "\n";
 
     //generate new code
 
@@ -1208,7 +1132,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
     QualType Ty = A->getExpr()->getType();
     std::string SizeExpr;
     std::string Prologue;
-    std::string Address = OrigName;
+    std::string Address;
     std::string StartOffset = "0";
 
     std::string DataDepType;
@@ -1253,20 +1177,12 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
             + ")*(" + getPrettyExpr(Context,SA->getLength()) + ")";
     }
     else if (Ty->isPointerType()) {
-#if 0
-        SizeExpr = DynSizeMap.lookup(OrigName);
-        if (!SizeExpr.size()) {
-            llvm::outs() << WARNING
-                         << "'" << OrigName << "' pointer's data size not found automatically\n";
-            llvm::outs() << NOTE
-                         << "use malloc_usable_size(void *)\n";
-            SizeExpr = "malloc_usable_size(" + A->getPrettyArg() + ")";
-        }
-#else
-        SizeExpr = "malloc_usable_size(" + A->getPrettyArg() + ")";
-#endif
+        // ignore casts here, explicit cast to (void *)
+        Address = getPrettyExpr(Context,A->getExpr()->IgnoreParenCasts());
+        SizeExpr = "malloc_usable_size((void*)" + Address + ")";
     }
     else if (isa<ArrayArg>(A)) {
+        Address = getPrettyExpr(Context,A->getExpr()->IgnoreParenCasts());
         SizeExpr = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
     }
     else {
@@ -1274,6 +1190,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         DataDepType = "D_PASS_BY_VALUE";
         std::string TypeName = A->getExpr()->getType().getAsString();
 
+        std::string OrigName = A->getPrettyArg();
         std::string AllocName = NewName + "__alloc__";
         std::string HiddenName = NewName + "__hidden__";
         Prologue += TypeName + " " + HiddenName + " = " + OrigName + ";";

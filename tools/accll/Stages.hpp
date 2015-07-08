@@ -167,7 +167,6 @@ private:
 
     bool Stage1_TraverseTemplateArgumentLocsHelper(const clang::TemplateArgumentLoc *TAL,unsigned Count);
 
-    bool UpdateDynamicSize(std::string key, clang::Expr *E);
 public:
 
     void Init(clang::ASTContext *C, clang::CallGraph *_CG);
@@ -190,7 +189,6 @@ public:
     bool TraverseFunctionDecl(clang::FunctionDecl *FD);
 
     bool VisitAccStmt(clang::AccStmt *ACC);
-    bool VisitDeclStmt(clang::DeclStmt *DS);
     bool VisitBinaryOperator(clang::BinaryOperator *BO);
 
 #if 0
