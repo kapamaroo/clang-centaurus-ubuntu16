@@ -117,6 +117,7 @@ public:
 //                        Stage1
 ///////////////////////////////////////////////////////////////////////////////
 
+#if 0
 class VarDeclVector : public llvm::SmallVector<clang::VarDecl*,32> {
 public:
     class VarDeclVector *Prev;
@@ -136,6 +137,7 @@ public:
         return false;
     };
 };
+#endif
 
 class Stage1_ASTVisitor : public clang::RecursiveASTVisitor<Stage1_ASTVisitor> {
 private:
@@ -154,7 +156,7 @@ private:
     clang::openacc::RegionStack RStack;
     clang::FunctionDecl *CurrentFunction;
 
-    VarDeclVector *IgnoreVars;
+    //VarDeclVector *IgnoreVars;
 
     std::string UserTypes;
 
@@ -178,8 +180,8 @@ public:
         Config(Config),
         ReplacementPool(ReplacementPool),
         InputFiles(InputFiles), KernelFiles(KernelFiles),
-        Context(0), CG(0),
-        IgnoreVars(0)
+        Context(0), CG(0)
+        //,IgnoreVars(0)
         /*, DeviceOnlyVisibleVars(0)*/ {}
 
     //////
