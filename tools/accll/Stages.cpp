@@ -1109,9 +1109,12 @@ Stage1_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
 
     if (FD->isMain()) {
         std::string RuntimeInit = "acl_centaurus_init();";
+        std::string RuntimeFinish = "atexit(acl_centaurus_finish);";
+
+        std::string NewCode = RuntimeInit + RuntimeFinish;
         Replacement R(Context->getSourceManager(),
                       FD->getBody()->getLocStart().getLocWithOffset(1),0,
-                      RuntimeInit);
+                      NewCode);
         applyReplacement(ReplacementPool,R);
     }
 
@@ -1119,35 +1122,6 @@ Stage1_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
     if (FD->getResultType()->isVoidType()) {
     }
 #endif
-
-    return true;
-}
-
-bool
-Stage1_ASTVisitor::VisitReturnStmt(ReturnStmt *S) {
-    if (!CurrentFunction || !CurrentFunction->isMain())
-        return true;
-
-    std::string RuntimeFinish = "acl_centaurus_finish();";
-
-    //avoid subtle cases like:
-    //    if ( ... )
-    //        ReturnStmt;
-    //
-    //to become:
-    //
-    //    if ( ... )
-    //        RuntimeFinish
-    //    ReturnStmt;
-
-    std::string Return;
-    llvm::raw_string_ostream OS(Return);
-    S->printPretty(OS,/*Helper=*/0,Context->getPrintingPolicy(),/*Indentation=*/0);
-    OS.str();
-    Replacement R(Context->getSourceManager(),
-                  S->getLocStart(),0,
-                  "{" + RuntimeFinish + Return + "}\n//");
-    applyReplacement(ReplacementPool,R);
 
     return true;
 }
@@ -1480,6 +1454,7 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
 
     HostHeader += "#include <centaurus_common.h>\n";
     HostHeader += "#include <malloc.h>\n";
+    HostHeader += "#include <stdlib.h>\n";  //atexit()
     HostHeader += "#include <string.h>\n";
 
 #if 0

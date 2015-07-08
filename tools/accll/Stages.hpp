@@ -189,7 +189,6 @@ public:
 
     bool VisitAccStmt(clang::AccStmt *ACC);
     bool VisitDeclStmt(clang::DeclStmt *DS);
-    bool VisitReturnStmt(clang::ReturnStmt *S);
     bool VisitBinaryOperator(clang::BinaryOperator *BO);
 
 #if 0
