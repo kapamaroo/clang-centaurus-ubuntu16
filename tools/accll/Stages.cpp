@@ -16,23 +16,23 @@ using namespace clang::openacc;
 using namespace accll;
 
 namespace {
-    accll::CentaurusConfig ACLConfig;
+accll::CentaurusConfig ACLConfig;
 
-    std::vector<std::string> APIHeaderVector;
-    llvm::StringMap<bool> DepHeaders;
-    bool TrackThisHeader(std::string &Header) {
-        for (std::vector<std::string>::iterator
+std::vector<std::string> APIHeaderVector;
+llvm::StringMap<bool> DepHeaders;
+bool TrackThisHeader(std::string &Header) {
+    for (std::vector<std::string>::iterator
              II = APIHeaderVector.begin(), EE = APIHeaderVector.end(); II != EE; ++II)
-            // do not track internal api header files
-            if (Header.find(*II) != std::string::npos)
-                return false;
-        return true;
-    }
+        // do not track internal api header files
+        if (Header.find(*II) != std::string::npos)
+            return false;
+    return true;
+}
 
-    llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelAccuratePool;
-    llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelApproximatePool;
-    llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelEvaluatePool;
-    llvm::DenseMap<FunctionDecl *,std::string> CommonFunctionsPool;
+llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelAccuratePool;
+llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelApproximatePool;
+llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelEvaluatePool;
+llvm::DenseMap<FunctionDecl *,std::string> CommonFunctionsPool;
 }
 
 std::string print(const PTXASInfo &info) {
