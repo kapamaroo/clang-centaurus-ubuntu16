@@ -7,6 +7,8 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 
+#include "clang/Sema/SemaDiagnostic.h"
+
 using namespace llvm;
 using namespace clang;
 using namespace clang::tooling;
@@ -796,6 +798,11 @@ static std::string getPrettyExpr(clang::ASTContext *Context, Expr *E) {
     E->printPretty(OS,/*Helper=*/0,
                    Context->getPrintingPolicy(),/*Indentation=*/0);
     return OS.str();  //flush
+}
+
+static inline
+DiagnosticBuilder Diag(clang::ASTContext *Context, SourceLocation Loc, unsigned DiagID) {
+    return Context->getDiagnostics().Report(Loc, DiagID);
 }
 
 bool
