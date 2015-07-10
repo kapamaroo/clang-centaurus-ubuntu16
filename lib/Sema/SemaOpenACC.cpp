@@ -275,6 +275,7 @@ Arg::Contains(Arg *Target) {
 OpenACC::OpenACC(Sema &s) : S(s), PendingDirective(0), Valid(false),
                             ICEPool(0), ValidArg(false), LengthTmp(0) {
     isValidClause[CK_LABEL] =        &OpenACC::isValidClauseLabel;
+    isValidClause[CK_TASKID] =       &OpenACC::isValidClauseTaskid;
     isValidClause[CK_SIGNIFICANT] =  &OpenACC::isValidClauseSignificant;
     isValidClause[CK_APPROXFUN] =    &OpenACC::isValidClauseApproxfun;
     isValidClause[CK_EVALFUN] =      &OpenACC::isValidClauseEvalfun;
@@ -625,6 +626,11 @@ OpenACC::isValidClauseWrapper(DirectiveKind DK, ClauseInfo *CI) {
 
 bool
 OpenACC::isValidClauseLabel(DirectiveKind DK, ClauseInfo *CI) {
+    return true;
+}
+
+bool
+OpenACC::isValidClauseTaskid(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 

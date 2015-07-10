@@ -475,6 +475,7 @@ private:
     ParseDirectiveFnPtr ParseDirective[openacc::DK_END];
 
     ParseClauseFn ParseClauseLabel;
+    ParseClauseFn ParseClauseTaskid;
     ParseClauseFn ParseClauseSignificant;
     ParseClauseFn ParseClauseApproxfun;
     ParseClauseFn ParseClauseEvalfun;

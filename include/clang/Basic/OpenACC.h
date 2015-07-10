@@ -39,6 +39,7 @@ const unsigned DK_END = DK_SUBTASK + 1;
 
 enum ClauseKind {
     CK_LABEL = 0,
+    CK_TASKID,
     CK_SIGNIFICANT,
     CK_APPROXFUN,
     CK_EVALFUN,

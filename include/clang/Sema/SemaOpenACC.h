@@ -51,6 +51,7 @@ public:
     isValidClauseFn isValidClauseWrapper;
 
     isValidClauseFn isValidClauseLabel;
+    isValidClauseFn isValidClauseTaskid;
     isValidClauseFn isValidClauseSignificant;
     isValidClauseFn isValidClauseApproxfun;
     isValidClauseFn isValidClauseEvalfun;

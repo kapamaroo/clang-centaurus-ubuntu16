@@ -528,6 +528,7 @@ void Parser::Initialize() {
   {
       using namespace openacc;
       ParseClause[CK_LABEL] = &Parser::ParseClauseLabel;
+      ParseClause[CK_TASKID] = &Parser::ParseClauseTaskid;
       ParseClause[CK_SIGNIFICANT] = &Parser::ParseClauseSignificant;
       ParseClause[CK_APPROXFUN] = &Parser::ParseClauseApproxfun;
       ParseClause[CK_EVALFUN] = &Parser::ParseClauseEvalfun;

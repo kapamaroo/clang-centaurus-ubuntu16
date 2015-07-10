@@ -15,6 +15,7 @@ using namespace openacc;
 const unsigned DirectiveInfo::ValidDirective[DK_END] = {
     //task
     BITMASK(CK_LABEL) |
+        BITMASK(CK_TASKID) |
         BITMASK(CK_SIGNIFICANT) |
         BITMASK(CK_APPROXFUN) |
         BITMASK(CK_EVALFUN) |
@@ -54,6 +55,7 @@ const std::string DirectiveInfo::Name[DK_END] = {
 
 const std::string ClauseInfo::Name[CK_END] = {
     "label",
+    "taskid",
     "significant",
     "approxfun",
     "evalfun",
@@ -210,6 +212,7 @@ static bool isDuplicate(ClauseList &CList, ClauseKind CK, SourceLocation &Loc) {
 static bool mustBeUnique(ClauseKind CK) {
     switch (CK) {
     case CK_LABEL:
+    case CK_TASKID:
     case CK_SIGNIFICANT:
     case CK_APPROXFUN:
     case CK_EVALFUN:
@@ -310,6 +313,56 @@ bool Parser::ParseArgList(DirectiveKind DK, CommonInfo *Common, bool AllowSubArr
 
 bool
 Parser::ParseClauseLabel(DirectiveKind DK, ClauseInfo *CI) {
+    ExprResult _E = ParseExpression();
+    if (!_E.isUsable())
+        return false;
+
+    Expr *E = _E.get();
+
+    if (StringLiteral *SL = dyn_cast<StringLiteral>(E)) {
+        //PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "string-literal";
+        //PP.Diag(Tok,diag::note_pragma_acc_parser_test) << SL->getString();
+        Arg *A = new (Actions.getASTContext()) LabelArg(CI,SL,&Actions.getASTContext());
+        CI->setArg(A);
+        return true;
+    }
+
+    const QualType QTy = E->getType();
+    const Type *Ty = E->getType().getTypePtr();
+
+    bool Valid = false;
+    if (const ConstantArrayType *CAT = Actions.getASTContext().getAsConstantArrayType(QTy)) {
+        if (CAT->getElementType()->isCharType()) {
+            Valid = true;
+            //PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "isConstantArrayType of CharType";
+        }
+    }
+    else if (const ArrayType *AT = Actions.getASTContext().getAsArrayType(QTy)) {
+        if (AT->getElementType()->isCharType()) {
+            Valid = true;
+            //PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "isArrayType of CharType";
+        }
+    }
+    else if (const PointerType *PT = Ty->getAs<PointerType>()) {
+        if (PT->getPointeeType()->isCharType()) {
+            Valid = true;
+            //PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "isPointerType to CharType";
+        }
+    }
+
+    if (!Valid) {
+        PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "invalid argument type";
+        return false;
+    }
+
+    Arg *A = new (Actions.getASTContext()) LabelArg(CI,E,&Actions.getASTContext());
+    CI->setArg(A);
+
+    return true;
+}
+
+bool
+Parser::ParseClauseTaskid(DirectiveKind DK, ClauseInfo *CI) {
     ExprResult _E = ParseExpression();
     if (!_E.isUsable())
         return false;
