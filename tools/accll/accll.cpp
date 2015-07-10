@@ -180,6 +180,7 @@ int main(int argc, const char *argv[]) {
 
     ARGV.push_back("--");
     ARGV.push_back("-fopenacc");
+    ARGV.push_back("-D_GNU_SOURCE");
     ARGV.push_back(IncludeFlag.c_str());
     ARGV.push_back("-include__acl_api_types.h");
     ARGV.push_back("-c");

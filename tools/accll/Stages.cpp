@@ -1381,7 +1381,8 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
 #endif
 
     // asprintf()
-    HostHeader += "#define _GNU_SOURCE\n";
+    // avoid redeclaration warning from main.c
+    HostHeader += "#ifndef _GNU_SOURCE\n#define _GNU_SOURCE\n#endif\n";
     HostHeader += "#include <stdio.h>\n";
     // malloc_usable_size()
     HostHeader += "#include <malloc.h>\n";
