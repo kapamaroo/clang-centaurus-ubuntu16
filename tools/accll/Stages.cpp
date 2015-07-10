@@ -325,11 +325,18 @@ static FunctionDecl *getApproxFunctionDecl(DirectiveInfo *DI) {
     ClauseList &CList = DI->getClauseList();
     for (ClauseList::iterator
              II = CList.begin(), EE = CList.end(); II != EE; ++II)
-        if ((*II)->getKind() == CK_APPROXFUN) {
-            FunctionArg *FA = dyn_cast<FunctionArg>((*II)->getArg());
-            return FA->getFunctionDecl();
-        }
+        if ((*II)->getKind() == CK_APPROXFUN)
+            return (*II)->getArgAs<FunctionArg>()->getFunctionDecl();
     return 0;
+}
+
+static std::string getTaskid(DirectiveInfo *DI) {
+    ClauseList &CList = DI->getClauseList();
+    for (ClauseList::iterator
+             II = CList.begin(), EE = CList.end(); II != EE; ++II)
+        if ((*II)->getKind() == CK_TASKID)
+            return (*II)->getArgAs<LabelArg>()->getQuotedLabel();
+    return std::string();
 }
 
 struct KernelSrc {
@@ -426,7 +433,11 @@ struct TaskSrc {
 
     PresumedLoc PLoc;
 
+    std::string HostCall;
+    std::string KernelCode;
+
     TaskSrc(clang::ASTContext *Context, clang::CallGraph *CG, DirectiveInfo *DI,
+            SmallVector<VarDecl *,4> &IterationSpace,
             clang::openacc::RegionStack &RStack,
             clang::tooling::Replacements &ReplacementPool,
             std::string &Extensions, std::string &UserTypes) :
@@ -437,10 +448,38 @@ struct TaskSrc {
         OpenCLCode(Context,CG,DI,++TaskUID,Extensions,UserTypes)
     {
         PLoc = Context->getSourceManager().getPresumedLoc(DI->getLocStart());
-    }
+        std::string SrcLocID = "\"" + GetBasename(PLoc.getFilename()) + ":" + toString(PLoc.getLine());
 
-    std::string HostCall(SmallVector<VarDecl *,4> &IterationSpace);
-    std::string KernelCode();
+        std::string ExtraArgs;
+        for (SmallVector<VarDecl *,4>::iterator
+                 II = IterationSpace.begin(), EE = IterationSpace.end(); II != EE; ++II) {
+            SrcLocID += "<%d>";
+            ExtraArgs += "," + (*II)->getNameAsString();
+        }
+        std::string Taskid = getTaskid(DI);
+        if (Taskid.size()) {
+            SrcLocID += "__%s";
+            ExtraArgs += "," + Taskid;
+        }
+        SrcLocID += "\"";
+
+        std::string SrcLocDef = "char *__acl_srcloc;asprintf(&__acl_srcloc," + SrcLocID + ExtraArgs + ");";
+        std::string LabelDef = "const char *__acl_group_label = " + Label + ";";
+
+        HostCall = LabelDef + SrcLocDef
+            + "acl_create_task("
+            + Approx + ","
+            + MemObjInfo.NameRef + "," + MemObjInfo.NumArgs + ","
+            + OpenCLCode.NameRef + ","
+            + Geometry.NameRef + ","
+            + "__acl_group_label" + ","
+            + "__acl_srcloc"
+            + ");";
+
+        KernelCode = OpenCLCode.AccurateKernel->DeviceCode.Definition;
+        if (OpenCLCode.ApproximateKernel)
+            KernelCode += OpenCLCode.ApproximateKernel->DeviceCode.Definition;
+    }
 
 private:
     std::string getTaskLabel(DirectiveInfo *DI) {
@@ -552,41 +591,6 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, Direct
             }
         }
     }
-}
-
-std::string TaskSrc::HostCall(SmallVector<VarDecl *,4> &IterationSpace) {
-    std::string FileName = PLoc.getFilename();
-    std::string SrcLocID = GetBasename(FileName) + ":" + toString(PLoc.getLine());
-
-    std::string LabelDef = "const char *__acl_group_label = " + Label + ";";
-#if 0
-    std::string SrcLocDef = "const char __acl_srcloc[] = \"" + SrcLocID + "\";";
-#else
-    std::string ExtraArgs;
-    for (SmallVector<VarDecl *,4>::iterator
-             II = IterationSpace.begin(), EE = IterationSpace.end(); II != EE; ++II) {
-        SrcLocID += "<%d>";
-        ExtraArgs += "," + (*II)->getNameAsString();
-    }
-    SrcLocID = "\"" + SrcLocID + "\"";
-
-    std::string SrcLocDef = "char *__acl_srcloc;asprintf(&__acl_srcloc," + SrcLocID + ExtraArgs + ");";
-#endif
-    std::string call = LabelDef + SrcLocDef
-        + "acl_create_task("
-        + Approx + ","
-        + MemObjInfo.NameRef + "," + MemObjInfo.NumArgs + ","
-        + OpenCLCode.NameRef + ","
-        + Geometry.NameRef + ","
-        + "__acl_group_label" + ","
-        + "__acl_srcloc"
-        + ");";
-    return call;
-}
-
-std::string TaskSrc::KernelCode() {
-    return OpenCLCode.AccurateKernel->DeviceCode.Definition
-        + OpenCLCode.ApproximateKernel->DeviceCode.Definition;
 }
 
 void GeometrySrc::init(DirectiveInfo *DI, clang::ASTContext *Context) {
@@ -941,7 +945,7 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
             return true;
         }
 
-        TaskSrc NewTask(Context,CG,DI,RStack,ReplacementPool,
+        TaskSrc NewTask(Context,CG,DI,IterationSpace,RStack,ReplacementPool,
                         accll::OpenCLExtensions,UserTypes);
 
         std::string DirectiveSrc =
@@ -951,7 +955,7 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
             + NewTask.MemObjInfo.Definition
             + NewTask.Geometry.Definition
             + NewTask.OpenCLCode.Definition
-            + NewTask.HostCall(IterationSpace)
+            + NewTask.HostCall
             + "}";
 
         SourceLocation PrologueLoc = DI->getLocStart().getLocWithOffset(-8);
