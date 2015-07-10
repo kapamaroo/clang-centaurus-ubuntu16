@@ -439,7 +439,7 @@ struct TaskSrc {
         PLoc = Context->getSourceManager().getPresumedLoc(DI->getLocStart());
     }
 
-    std::string HostCall();
+    std::string HostCall(SmallVector<VarDecl *,4> &IterationSpace);
     std::string KernelCode();
 
 private:
@@ -554,13 +554,24 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, Direct
     }
 }
 
-std::string TaskSrc::HostCall() {
+std::string TaskSrc::HostCall(SmallVector<VarDecl *,4> &IterationSpace) {
     std::string FileName = PLoc.getFilename();
-#warning FIXME: dynamically generate SrcLocID to take care of possible iteration spaces
     std::string SrcLocID = GetBasename(FileName) + ":" + toString(PLoc.getLine());
 
     std::string LabelDef = "const char *__acl_group_label = " + Label + ";";
+#if 0
     std::string SrcLocDef = "const char __acl_srcloc[] = \"" + SrcLocID + "\";";
+#else
+    std::string ExtraArgs;
+    for (SmallVector<VarDecl *,4>::iterator
+             II = IterationSpace.begin(), EE = IterationSpace.end(); II != EE; ++II) {
+        SrcLocID += "<%d>";
+        ExtraArgs += "," + (*II)->getNameAsString();
+    }
+    SrcLocID = "\"" + SrcLocID + "\"";
+
+    std::string SrcLocDef = "char *__acl_srcloc;asprintf(&__acl_srcloc," + SrcLocID + ExtraArgs + ");";
+#endif
     std::string call = LabelDef + SrcLocDef
         + "acl_create_task("
         + Approx + ","
@@ -940,7 +951,7 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
             + NewTask.MemObjInfo.Definition
             + NewTask.Geometry.Definition
             + NewTask.OpenCLCode.Definition
-            + NewTask.HostCall()
+            + NewTask.HostCall(IterationSpace)
             + "}";
 
         SourceLocation PrologueLoc = DI->getLocStart().getLocWithOffset(-8);
@@ -1369,10 +1380,17 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     APIHeaderVector.push_back("include/math/");
 #endif
 
-    HostHeader += "#include <centaurus_common.h>\n";
+    // asprintf()
+    HostHeader += "#define _GNU_SOURCE\n";
+    HostHeader += "#include <stdio.h>\n";
+    // malloc_usable_size()
     HostHeader += "#include <malloc.h>\n";
-    HostHeader += "#include <stdlib.h>\n";  //atexit()
+    // atexit()
+    HostHeader += "#include <stdlib.h>\n";
+    // memcpy()
     HostHeader += "#include <string.h>\n";
+    // centaurus runtime API header
+    HostHeader += "#include <centaurus_common.h>\n";
 
 #if 0
     for (llvm::SmallPtrSet<clang::FunctionDecl *, 32>::iterator
@@ -1604,6 +1622,34 @@ Stage1_ASTVisitor::Finish() {
     DepHeaders.clear();
 
     ACLConfig = accll::CentaurusConfig();
+}
+
+bool Stage1_ASTVisitor::TraverseForStmt(ForStmt *F) {
+    TRY_TO(WalkUpFromForStmt(F));
+
+    VarDecl *VD = F->getConditionVariable();
+    if (VD)
+        ;
+    else if (BinaryOperator *BO = dyn_cast<BinaryOperator>(F->getInit())) {
+        if (BO->getOpcode() == BO_Comma)
+            BO = dyn_cast<BinaryOperator>(BO->getLHS());
+        if (BO && BO->isAssignmentOp()) {
+            DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(BO->getLHS()->IgnoreParenImpCasts());
+            VD = dyn_cast<VarDecl>(DRE->getDecl());
+        }
+    }
+
+    if (VD && VD->getType()->isIntegerType())
+        IterationSpace.push_back(VD);
+
+    for (Stmt::child_range range = F->children(); range; ++range) {
+        TRY_TO(TraverseStmt(*range));
+    }
+
+    if (VD && VD->getType()->isIntegerType())
+        IterationSpace.pop_back();
+
+    return true;
 }
 
 bool

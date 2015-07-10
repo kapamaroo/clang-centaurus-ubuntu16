@@ -10,6 +10,7 @@
 
 #include "clang/Analysis/CallGraph.h"
 
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "Types.hpp"
 #include "Common.hpp"
@@ -165,6 +166,8 @@ private:
     std::string NewHeader;
     std::string HostHeader;
 
+    llvm::SmallVector<clang::VarDecl *, 4> IterationSpace;
+
     bool Stage1_TraverseTemplateArgumentLocsHelper(const clang::TemplateArgumentLoc *TAL,unsigned Count);
 
 public:
@@ -186,6 +189,7 @@ public:
     //////
 
     bool TraverseAccStmt(clang::AccStmt *S);
+    bool TraverseForStmt(clang::ForStmt *F);
     bool TraverseFunctionDecl(clang::FunctionDecl *FD);
 
     bool VisitAccStmt(clang::AccStmt *ACC);
