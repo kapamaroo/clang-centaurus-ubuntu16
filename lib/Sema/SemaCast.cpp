@@ -2272,9 +2272,9 @@ ExprResult Sema::BuildCStyleCastExpr(SourceLocation LPLoc,
   if (getLangOpts().CPlusPlus) {
     Op.CheckCXXCStyleCast(/*FunctionalStyle=*/ false,
                           isa<InitListExpr>(CastExpr));
+  } else if (getLangOpts().OpenCL) {
   } else {
-      if (!Context.isOpenCLKernel(getCurFunctionDecl()))
-          Op.CheckCStyleCast();
+      Op.CheckCStyleCast();
   }
 
   if (Op.SrcExpr.isInvalid())

@@ -45,6 +45,7 @@
 #include "llvm/ADT/OwningPtr.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/PointerUnion.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -1612,6 +1613,7 @@ private:
 
 public:
   SmallVector<SourceLocation,8> OpenCLIncludeDirectives;
+  llvm::SmallSet<FileID,8> OpenCLIncludeFiles;
 };
 
 /// \brief Comparison function object.

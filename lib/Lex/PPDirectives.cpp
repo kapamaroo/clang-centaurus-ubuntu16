@@ -1565,8 +1565,13 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
   FileID FID = SourceMgr.createFileID(File, IncludePos, FileCharacter);
   assert(!FID.isInvalid() && "Expected valid file ID");
 
-  if (Filename.endswith(".cl"))
+  if (Filename.endswith(".cl")) {
       SourceMgr.OpenCLIncludeDirectives.push_back(HashLoc);
+      SourceMgr.OpenCLIncludeFiles.insert(FID);
+      SetOpenCL(true);
+  }
+  else
+      SetOpenCL(false);
 
   // Finally, if all is good, enter the new file!
   EnterSourceFile(FID, CurDir, FilenameTok.getLocation());
