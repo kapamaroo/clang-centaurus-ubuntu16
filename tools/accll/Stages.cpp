@@ -1123,18 +1123,11 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
 
     Arg *A = getMatchedArg(TmpA,PragmaArgs,Context);
     if (!A) {
-        //not in data clause
-        //therefore not a dependency (pass by value)
-        A = TmpA;
-        if (A->getExpr()->getType()->isPointerType()) {
-            llvm::outs() << WARNING
-                         << "argument " << toString(Index + 1) << " '"
-                         << A->getPrettyArg()
-                         << "' not found in data clauses - treat as 'in' dependency\n";
-        }
-    }
-    else {
+        std::string msg = "argument " + toString(Index + 1) + " '"
+            + TmpA->getPrettyArg() +  "' not found in data clauses\n";
+        Diag(Context,(TmpA)->getExpr()->getLocStart(),diag::err_pragma_acc_test) << msg;
         delete TmpA;
+        return ObjRefDef();
     }
 
     std::string NewName = "__accll_arg_" + toString(Index);
