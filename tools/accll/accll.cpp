@@ -84,6 +84,72 @@ int runClang(std::string Path, SmallVector<const char *, 256> &cli) {
     return Res;
 }
 
+int CheckGeneratedSourceFiles(int argc, const char *argv[], const accll::CentaurusConfig &Config) {
+    llvm::outs() << "Check new generated source files ... ";
+
+    SmallVector<const char *, 256> ARGV;
+
+    ARGV.push_back(argv[0]);
+
+    for (std::vector<std::string>::const_iterator
+             II = Config.InputFiles.begin(),
+             EE = Config.InputFiles.end(); II != EE; ++II)
+        ARGV.push_back(II->c_str());
+
+    std::string IncludeFlag("-I" + IncludePath);
+    //std::string LibFlag("-L" + LibPath);
+
+    ARGV.push_back("--");
+    //ARGV.push_back("-fopenacc");
+    //ARGV.push_back("-D_GNU_SOURCE");
+    ARGV.push_back(IncludeFlag.c_str());
+    //ARGV.push_back("-include__acl_api_types.h");
+    //ARGV.push_back("-c");
+
+    for (std::vector<std::string>::const_iterator
+             II = Config.ExtraCompilerFlags.begin(),
+             EE = Config.ExtraCompilerFlags.end(); II != EE; ++II) {
+        ARGV.push_back(II->c_str());
+    }
+
+    int ARGC = ARGV.size();
+    llvm::outs() << DEBUG << "Invoke Stages as: ";
+    for (size_t i=0; i<ARGV.size(); ++i)
+        llvm::outs() << ARGV[i] + std::string(" ");
+    llvm::outs() << "\n";
+
+    CommonOptionsParser OptionsParser(ARGC, ARGV.data());
+
+    {
+        ClangTool Tool5(OptionsParser.getCompilations(),Config.OutputFiles);
+        if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
+            llvm::errs() << "\nFATAL: __internal_error__: illegal generated source code  -  Exit.\n";
+            return 1;
+        }
+    }
+
+#if 0
+    {
+        ClangTool Tool5(OptionsParser.getCompilations(),Config.KernelFiles);
+        if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
+            llvm::errs() << "\nFATAL: __internal_error__: illegal generated source code  -  Exit.\n";
+            return 1;
+        }
+    }
+#endif
+
+    {
+        ClangTool Tool5(OptionsParser.getCompilations(),Config.LibOCLFiles);
+        if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
+            llvm::errs() << "\nFATAL: __internal_error__: illegal generated source code  -  Exit.\n";
+            return 1;
+        }
+    }
+
+    llvm::outs() << "OK\n";
+    return 0;
+}
+
 // CommonOptionsParser declares HelpMessage with a description of the common
 // command-line options related to the compilation database and input files.
 // It's nice to have this help message in all tools.
@@ -199,28 +265,24 @@ int main(int argc, const char *argv[]) {
 
     CommonOptionsParser OptionsParser(ARGC, ARGV.data());
 
-    std::vector<std::string> UserInputFiles = OptionsParser.getSourcePathList();
+    Config.InputFiles = OptionsParser.getSourcePathList();
 
-    if (UserInputFiles.size() != 1) {
+    if (Config.InputFiles.size() != 1) {
         llvm::outs() << "Unsupported multiple input files  -  exit.\n";
         return 1;
     }
 
     //After Stage0, proccess only the files that contain OpenACC Directives and main() function
-    std::vector<std::string> InputFiles;
-    std::vector<std::string> LibOCLFiles;
-    std::vector<std::string> KernelFiles;
-    std::vector<std::string> RegularFiles;
 
     llvm::outs() << "Stage0: Check input files ...\n";
-    RefactoringTool Tool0(OptionsParser.getCompilations(), UserInputFiles);
-    Stage0_ConsumerFactory Stage0(Config,InputFiles,RegularFiles);
+    RefactoringTool Tool0(OptionsParser.getCompilations(), Config.InputFiles);
+    Stage0_ConsumerFactory Stage0(Config,Config.OutputFiles,Config.RegularFiles);
     if (Tool0.runAndSave(newFrontendActionFactory(&Stage0))) {
         llvm::errs() << "Stage0 failed - exit.\n";
         return 1;
     }
 
-    if (!RegularFiles.empty()) {
+    if (!Config.RegularFiles.empty()) {
         //llvm::outs() << WARNING << "Source code has no directives, enter clang mode.\n";
 
         SmallVector<const char *, 256> cli;
@@ -230,8 +292,8 @@ int main(int argc, const char *argv[]) {
         cli.push_back("-Wall");
 
         for (std::vector<std::string>::iterator
-                 II = RegularFiles.begin(),
-                 EE = RegularFiles.end(); II != EE; ++II)
+                 II = Config.RegularFiles.begin(),
+                 EE = Config.RegularFiles.end(); II != EE; ++II)
             cli.push_back(II->c_str());
 
         for (std::vector<std::string>::iterator
@@ -261,14 +323,14 @@ int main(int argc, const char *argv[]) {
         return 0;
     }
 
-    if (InputFiles.empty()) {
+    if (Config.OutputFiles.empty()) {
         llvm::outs() << "UNEXPECTED ERROR: Source code has no directives, nothing to do - exit.\n";
         return 1;
     }
 
     llvm::outs() << "Stage1: Transform source code ...\n";
-    RefactoringTool Tool1(OptionsParser.getCompilations(), InputFiles);
-    Stage1_ConsumerFactory Stage1(Config,Tool1.getReplacements(),LibOCLFiles,KernelFiles);
+    RefactoringTool Tool1(OptionsParser.getCompilations(), Config.OutputFiles);
+    Stage1_ConsumerFactory Stage1(Config,Tool1.getReplacements(),Config.LibOCLFiles,Config.KernelFiles);
     if (Tool1.runAndSave(newFrontendActionFactory(&Stage1))) {
         llvm::errs() << "Stage1 failed - exit.\n";
         return 1;
@@ -277,7 +339,7 @@ int main(int argc, const char *argv[]) {
 #if 0
     // Clang does not like the keyword 'static' for function declarations.
     // The underlying OpenCL compiler is happy with it.
-    if (!KernelFiles.empty()) {
+    if (!Config.KernelFiles.empty()) {
         std::vector<std::string> kernel_conf;
         /* clang
            -S
@@ -302,20 +364,20 @@ int main(int argc, const char *argv[]) {
         kernel_conf.push_back("cl");
         //kernel_conf.push_back("-w");
 
-        int KernelARGC = 1 + KernelFiles.size() + kernel_conf.size();
-        const char **KernelARGV = new const char*[1 + KernelFiles.size() + kernel_conf.size()];
+        int KernelARGC = 1 + Config.KernelFiles.size() + kernel_conf.size();
+        const char **KernelARGV = new const char*[1 + Config.KernelFiles.size() + kernel_conf.size()];
 
         KernelARGV[0] = argv[0];
         int i = 1;
-        for (std::vector<std::string>::iterator II = KernelFiles.begin(),
-                 EE = KernelFiles.end(); II != EE; ++II,++i)
+        for (std::vector<std::string>::iterator II = Config.KernelFiles.begin(),
+                 EE = Config.KernelFiles.end(); II != EE; ++II,++i)
             KernelARGV[i] = (*II).c_str();
         for (std::vector<std::string>::size_type i=0; i<kernel_conf.size(); ++i)
-            KernelARGV[1 + KernelFiles.size() + i] = kernel_conf[i].c_str();
+            KernelARGV[1 + Config.KernelFiles.size() + i] = kernel_conf[i].c_str();
 
         llvm::outs() << "Check new generated device files ...\n";
         CommonOptionsParser KernelOptionsParser(KernelARGC, KernelARGV);
-        ClangTool Tool6(KernelOptionsParser.getCompilations(),KernelFiles);
+        ClangTool Tool6(KernelOptionsParser.getCompilations(),Config.KernelFiles);
         if (Tool6.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
             llvm::errs() << "FATAL: __internal_error__: illegal device code  -  Exit.\n";
             return 1;
@@ -330,20 +392,20 @@ int main(int argc, const char *argv[]) {
 
     std::string Style = "LLVM";
     for (std::vector<std::string>::iterator
-             II = InputFiles.begin(),
-             EE = InputFiles.end(); II != EE; ++II) {
+             II = Config.OutputFiles.begin(),
+             EE = Config.OutputFiles.end(); II != EE; ++II) {
         status += clang_format_main(*II,Style);
     }
 #if 0
     for (std::vector<std::string>::iterator
-             II = LibOCLFiles.begin(),
-             EE = LibOCLFiles.end(); II != EE; ++II) {
+             II = Config.LibOCLFiles.begin(),
+             EE = Config.LibOCLFiles.end(); II != EE; ++II) {
         status += clang_format_main(*II,Style);
     }
 #endif
     for (std::vector<std::string>::iterator
-             II = KernelFiles.begin(),
-             EE = KernelFiles.end(); II != EE; ++II) {
+             II = Config.KernelFiles.begin(),
+             EE = Config.KernelFiles.end(); II != EE; ++II) {
         status += clang_format_main(*II,Style);
     }
 
@@ -354,37 +416,10 @@ int main(int argc, const char *argv[]) {
     llvm::outs() << "OK\n";
 
 #if 1
-    //#error fixme with include files from command line
-    llvm::outs() << "Check new generated source files ... ";
-
-    {
-        ClangTool Tool5(OptionsParser.getCompilations(),InputFiles);
-        if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
-            llvm::errs() << "\nFATAL: __internal_error__: illegal generated source code  -  Exit.\n";
-            return 1;
-        }
-    }
-
-#if 0
-    {
-        ClangTool Tool5(OptionsParser.getCompilations(),KernelFiles);
-        if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
-            llvm::errs() << "\nFATAL: __internal_error__: illegal generated source code  -  Exit.\n";
-            return 1;
-        }
-    }
+    if (CheckGeneratedSourceFiles(argc,argv,Config))
+        return 1;
 #endif
 
-    {
-        ClangTool Tool5(OptionsParser.getCompilations(),LibOCLFiles);
-        if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
-            llvm::errs() << "\nFATAL: __internal_error__: illegal generated source code  -  Exit.\n";
-            return 1;
-        }
-    }
-#endif
-
-    llvm::outs() << "OK\n";
     llvm::outs() << "Generate temporary object files ... ";
 
     {
@@ -408,8 +443,8 @@ int main(int argc, const char *argv[]) {
         std::vector<std::string> TmpObjList;
 
         for (std::vector<std::string>::iterator
-                 II = InputFiles.begin(),
-                 EE = InputFiles.end(); II != EE; ++II) {
+                 II = Config.OutputFiles.begin(),
+                 EE = Config.OutputFiles.end(); II != EE; ++II) {
             if (GetDotExtension(*II).compare(".c") != 0)
                 continue;
             std::string obj = RemoveDotExtension(*II) + ".o";
@@ -427,8 +462,8 @@ int main(int argc, const char *argv[]) {
         }
 
         for (std::vector<std::string>::iterator
-                 II = LibOCLFiles.begin(),
-                 EE = LibOCLFiles.end(); II != EE; ++II) {
+                 II = Config.LibOCLFiles.begin(),
+                 EE = Config.LibOCLFiles.end(); II != EE; ++II) {
             if (GetDotExtension(*II).compare(".c") != 0)
                 continue;
             std::string obj = RemoveDotExtension(*II) + ".o";
@@ -451,7 +486,7 @@ int main(int argc, const char *argv[]) {
         }
         llvm::outs() << "OK\n";
 
-        std::string ObjFile = RemoveDotExtension(UserInputFiles.front()) + ".o";
+        std::string ObjFile = RemoveDotExtension(Config.InputFiles.front()) + ".o";
         ObjFile = GetBasename(ObjFile);
 
         if (Config.CompileOnly && Config.UserDefinedOutputFile.size())

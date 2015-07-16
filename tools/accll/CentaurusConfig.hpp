@@ -16,6 +16,11 @@ struct CentaurusConfig {
     std::vector<std::string> ExtraLinkerFlags;
     std::vector<std::string> InputFiles;
 
+    std::vector<std::string> OutputFiles;
+    std::vector<std::string> LibOCLFiles;
+    std::vector<std::string> KernelFiles;
+    std::vector<std::string> RegularFiles;
+
     CentaurusConfig(int argc, const char *argv[]);
     CentaurusConfig() {}
 
