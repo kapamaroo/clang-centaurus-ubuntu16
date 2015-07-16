@@ -1123,11 +1123,14 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
 
     Arg *A = getMatchedArg(TmpA,PragmaArgs,Context);
     if (!A) {
-        std::string msg = "argument " + toString(Index + 1) + " '"
-            + TmpA->getPrettyArg() +  "' not found in data clauses\n";
-        Diag(Context,(TmpA)->getExpr()->getLocStart(),diag::err_pragma_acc_test) << msg;
-        delete TmpA;
-        return ObjRefDef();
+        if (TmpA->getExpr()->getType()->isPointerType()) {
+            std::string msg = "argument " + toString(Index + 1) + " '"
+                + TmpA->getPrettyArg() +  "' not found in data clauses\n";
+            Diag(Context,(TmpA)->getExpr()->getLocStart(),diag::err_pragma_acc_test) << msg;
+            delete TmpA;
+            return ObjRefDef();
+        }
+        A = TmpA;
     }
 
     std::string NewName = "__accll_arg_" + toString(Index);
