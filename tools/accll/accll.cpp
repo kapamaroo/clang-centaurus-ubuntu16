@@ -506,6 +506,14 @@ int main(int argc, const char *argv[]) {
             ldcli.push_back(0);
 
             llvm::outs() << "Merge temporary object files to '" << ObjFile << "': ... ";
+#if 0
+            llvm::outs() << DEBUG << " ";
+            for (SmallVector<const char *, 256>::iterator
+                     II = ldcli.begin(), EE = ldcli.end()-1; II != EE; ++II) {
+                llvm::outs() << *II << " ";
+            }
+            llvm::outs() << "\n";
+#endif
 
             int pid  = fork();
             if (pid < 0) {
