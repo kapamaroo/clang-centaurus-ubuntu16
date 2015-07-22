@@ -179,7 +179,7 @@ int main(int argc, const char *argv[]) {
         SmallVector<const char *, 256> cli;
 
         //std::string LinkerPath = "/usr/bin/ld";
-        std::string ClangPath = InstallPath + "/build-dev/bin/clang-3.3";
+        std::string ClangPath = InstallPath + "/build-dev/bin/clang++";
 
         cli.push_back("-lcentaurus");
         //cli.push_back("-lcentaurusapi");
@@ -287,7 +287,7 @@ int main(int argc, const char *argv[]) {
 
         SmallVector<const char *, 256> cli;
 
-        std::string ClangPath = InstallPath + "/build-dev/bin/clang-3.3";
+        std::string ClangPath = InstallPath + "/build-dev/bin/clang++";
 
         cli.push_back("-Wall");
 
@@ -425,7 +425,7 @@ int main(int argc, const char *argv[]) {
     {
         SmallVector<const char *, 256> cli;
 
-        std::string ClangPath = InstallPath + "/build-dev/bin/clang-3.3";
+        std::string ClangPath = InstallPath + "/build-dev/bin/clang++";
 
         //cli.push_back("-###");
         cli.push_back("-Wall");
