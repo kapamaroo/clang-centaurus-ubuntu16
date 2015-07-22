@@ -82,10 +82,12 @@ public:
         clang::SourceManager &SM = Context.getSourceManager();
         std::string FileName = SM.getFileEntryForID(SM.getMainFileID())->getName();
         std::string Ext = GetDotExtension(FileName);
+#if 0
         if (Ext.compare(".c")) {
             llvm::outs() << "skip invalid input file: '" << FileName << "'\n";
             return;
         }
+#endif
 
         clang::TranslationUnitDecl *TU = Context.getTranslationUnitDecl();
         Visitor.TraverseDecl(TU);

@@ -445,8 +445,10 @@ int main(int argc, const char *argv[]) {
         for (std::vector<std::string>::iterator
                  II = Config.OutputFiles.begin(),
                  EE = Config.OutputFiles.end(); II != EE; ++II) {
+#if 0
             if (GetDotExtension(*II).compare(".c") != 0)
                 continue;
+#endif
             std::string obj = RemoveDotExtension(*II) + ".o";
             obj = GetBasename(obj);
             //llvm::outs() << obj << "\n";

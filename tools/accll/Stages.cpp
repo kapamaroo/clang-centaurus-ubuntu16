@@ -1631,7 +1631,7 @@ bool Stage1_ASTVisitor::TraverseForStmt(ForStmt *F) {
     VarDecl *VD = F->getConditionVariable();
     if (VD)
         ;
-    else if (BinaryOperator *BO = dyn_cast<BinaryOperator>(F->getInit())) {
+    else if (BinaryOperator *BO = dyn_cast_or_null<BinaryOperator>(F->getInit())) {
         if (BO->getOpcode() == BO_Comma)
             BO = dyn_cast<BinaryOperator>(BO->getLHS());
         if (BO && BO->isAssignmentOp()) {
@@ -1721,6 +1721,9 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
         return true;
 
     FunctionDecl *FD = CE->getDirectCallee();
+    if (!FD)
+        return true;
+
     std::string Name = FD->getNameAsString();
 
     SourceManager &SM = Context->getSourceManager();

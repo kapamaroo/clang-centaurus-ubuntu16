@@ -443,7 +443,13 @@ KEYWORD(__private                   , KEYOPENCL)
 KEYWORD(__global                    , KEYOPENCL)
 KEYWORD(__local                     , KEYOPENCL)
 KEYWORD(__constant                  , KEYOPENCL)
-ALIAS("global", __global            , KEYOPENCL)
+// C++ defines the following conflicting method
+//
+// /usr/include/c++/4.8/bits/locale_classes.h:270:12: error:
+//            expected member name or ';' after declaration specifiers
+// global(const locale& __loc);
+//
+//ALIAS("global", __global            , KEYOPENCL)
 ALIAS("local", __local              , KEYOPENCL)
 ALIAS("constant", __constant        , KEYOPENCL)
 KEYWORD(__read_only                 , KEYOPENCL)
