@@ -370,7 +370,7 @@ PlatformBin _compile(std::string src, std::string SymbolName, std::string Prefix
     PlatformBinary.NameRef = PrefixDef + PlatformName;
 
     std::string DevTableName = PrefixDef + PlatformName + "_DEV_TABLE";
-    std::string DevTable = "struct _device_bin *" + DevTableName + " = malloc(sizeof(struct _device_bin)*" + toString(BinArray.size()) + ");";
+    std::string DevTable = "struct _device_bin *" + DevTableName + " = (struct _device_bin*)malloc(sizeof(struct _device_bin)*" + toString(BinArray.size()) + ");";
     for (std::vector<std::string>::size_type i=0; i<BinArray.size(); ++i) {
         std::string APINameRef = PrefixDef + PlatformName + "__device" + toString(i);
         DevTable += DevTableName + "[" + toString(i) + "] = " + APINameRef + ";";

@@ -253,7 +253,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
 
     std::string PreAPIDef;
     std::string PlatformTableName = PrefixDef + "PLATFORM_TABLE";
-    std::string PlatformTable = "struct _platform_bin *" + PlatformTableName + " = calloc(ACL_SUPPORTED_PLATFORMS_NUM,sizeof(struct _platform_bin));";
+    std::string PlatformTable = "struct _platform_bin *" + PlatformTableName + " = (struct _platform_bin*)calloc(ACL_SUPPORTED_PLATFORMS_NUM,sizeof(struct _platform_bin));";
 
     for (std::vector<PlatformBin>::iterator
              II = Binary.begin(), EE = Binary.end(); II != EE; ++II) {
@@ -298,7 +298,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
 
     HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
     HostCode.Definition = PreAPIDef + PlatformTable
-        + "struct _kernel_struct *" + HostCode.NameRef + " = malloc(sizeof(struct _kernel_struct));"
+        + "struct _kernel_struct *" + HostCode.NameRef + " = (struct _kernel_struct*)malloc(sizeof(struct _kernel_struct));"
         "*" + HostCode.NameRef + " = (struct _kernel_struct){"
         + ".UID = " + toString(getKernelUID(DeviceCode.NameRef))
         + ",.name = \"" + DeviceCode.NameRef + "\""
