@@ -157,16 +157,6 @@ static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
 static cl::extrahelp MoreHelp("\nInvocation\n\t./acl input-files [-- compiler-flags]\n\n");
 
 int main(int argc, const char *argv[]) {
-#if 0
-    int ExtraArgsStartPos = 0;
-    for (int i=1; i<argc; ++i)
-        if (strlen(argv[i]) == 2 && argv[i][0] == '-' && argv[i][1] == '-' && i + 1 < argc) {
-            ExtraArgsStartPos = i;
-            break;
-        }
-    int tool_argc = ExtraArgsStartPos ? ExtraArgsStartPos : argc;
-#endif
-
     accll::CentaurusConfig Config(argc,argv);
     //Config.print();
 
