@@ -218,13 +218,6 @@ int main(int argc, const char *argv[]) {
         cli.push_back("-lrt");
         cli.push_back("-lm");
 
-#if 0
-        llvm::outs() << DEBUG << "Invoke clang as: " << ClangPath << " ";
-        for (size_t i=0; i<cli.size(); ++i)
-            llvm::outs() << cli[i] << " ";
-        llvm::outs() << "\n";
-
-#endif
         runClang(ClangPath,cli);
 
         //llvm::outs() << DEBUG << "Exit clang mode.\n";
@@ -308,13 +301,6 @@ int main(int argc, const char *argv[]) {
                  II = Config.ExtraLinkerFlags.begin(),
                  EE = Config.ExtraLinkerFlags.end(); II != EE; ++II)
             cli.push_back(II->c_str());
-
-#if 1
-        llvm::outs() << DEBUG;
-        for (size_t i=0; i<cli.size(); ++i)
-            llvm::outs() << cli[i] << " ";
-        llvm::outs() << "\n";
-#endif
 
         runClang(ClangPath,cli);
 
