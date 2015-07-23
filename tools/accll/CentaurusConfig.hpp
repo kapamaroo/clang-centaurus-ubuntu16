@@ -10,6 +10,7 @@ struct CentaurusConfig {
     bool ProfileMode;
     bool CompileOnly;
     bool isCXX;
+    bool NoArgs;
 
     std::string InstallPath;
     std::string IncludePath;

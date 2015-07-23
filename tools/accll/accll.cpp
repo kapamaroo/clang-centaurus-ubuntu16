@@ -160,6 +160,11 @@ int main(int argc, const char *argv[]) {
     accll::CentaurusConfig Config(argc,argv);
     //Config.print();
 
+    if (Config.NoArgs) {
+        llvm::outs() << "No input, try '" << argv[0] << " --help' for more information  -  exit.\n";
+        return 0;
+    }
+
     if (!Config.InputFiles.size()) {
         //treat as raw clang invocation
         //llvm::outs() << WARNING << "no input files, enter clang mode.\n";
@@ -625,7 +630,7 @@ int main(int argc, const char *argv[]) {
 }
 
 accll::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
-    ProfileMode(false), CompileOnly(false), isCXX(false)
+    ProfileMode(false), CompileOnly(false), isCXX(false), NoArgs(false)
 {
     InstallPath = "/opt/LLVM";
     IncludePath = InstallPath + "/include";
@@ -639,12 +644,22 @@ accll::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
         isCXX = true;
     }
 
+    if (argc == 1) {
+        NoArgs = true;
+        return;
+    }
+
     int i = 1;
 
     for (; i<argc; ++i) {
         const std::string Option(argv[i]);
-        if (Option.compare("--") == 0)
+        if (Option.compare("--") == 0) {
+            if (argc == 2 && i == 1) {
+                NoArgs = true;
+                return;
+            }
             break;
+        }
         if (Option.compare("--profile") == 0)
             ProfileMode = true;
         else
