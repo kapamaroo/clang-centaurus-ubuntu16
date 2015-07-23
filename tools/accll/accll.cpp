@@ -37,13 +37,7 @@ using namespace accll;
 //                        Main Tool
 ///////////////////////////////////////////////////////////////////////////////
 
-namespace {
-    std::string InstallPath("/opt/LLVM");
-    std::string IncludePath(InstallPath + "/include");
-    std::string LibPath(InstallPath + "/lib");
-}
-
-int runClang(std::string Path, SmallVector<const char *, 256> &cli) {
+int runClang(const accll::CentaurusConfig &Config, std::string Path, SmallVector<const char *, 256> &cli) {
 #if 1
     llvm::outs() << DEBUG << Path << " ";
     for (SmallVector<const char *, 256>::iterator
@@ -65,7 +59,8 @@ int runClang(std::string Path, SmallVector<const char *, 256> &cli) {
     DiagnosticsEngine Diags(DiagID, &*DiagOpts, DiagClient);
 
     Driver TheDriver(Path, llvm::sys::getDefaultTargetTriple(), "a.out", Diags);
-    TheDriver.setTitle("clang");
+    TheDriver.setTitle("centaurus");
+    TheDriver.CCCIsCXX = Config.isCXX;
 
     llvm::InitializeAllTargets();
 
@@ -96,7 +91,7 @@ int CheckGeneratedSourceFiles(int argc, const char *argv[], const accll::Centaur
              EE = Config.InputFiles.end(); II != EE; ++II)
         ARGV.push_back(II->c_str());
 
-    std::string IncludeFlag("-I" + IncludePath);
+    std::string IncludeFlag("-I" + Config.IncludePath);
     //std::string LibFlag("-L" + LibPath);
 
     ARGV.push_back("--");
@@ -178,9 +173,6 @@ int main(int argc, const char *argv[]) {
 
         SmallVector<const char *, 256> cli;
 
-        //std::string LinkerPath = "/usr/bin/ld";
-        std::string ClangPath = InstallPath + "/build-dev/bin/clang++";
-
         cli.push_back("-lcentaurus");
         //cli.push_back("-lcentaurusapi");
 
@@ -202,7 +194,7 @@ int main(int argc, const char *argv[]) {
                  EE = Config.ExtraLinkerFlags.end(); II != EE; ++II)
             cli.push_back(II->c_str());
 
-        std::string LibPathFlag("-L" + LibPath);
+        std::string LibPathFlag("-L" + Config.LibPath);
         cli.push_back(LibPathFlag.c_str());
         cli.push_back("-lcentaurus");
         //cli.push_back("-lcentaurusapi");
@@ -218,7 +210,7 @@ int main(int argc, const char *argv[]) {
         cli.push_back("-lrt");
         cli.push_back("-lm");
 
-        runClang(ClangPath,cli);
+        runClang(Config,Config.ClangPath,cli);
 
         //llvm::outs() << DEBUG << "Exit clang mode.\n";
 
@@ -234,7 +226,7 @@ int main(int argc, const char *argv[]) {
              EE = Config.InputFiles.end(); II != EE; ++II)
         ARGV.push_back(II->c_str());
 
-    std::string IncludeFlag("-I" + IncludePath);
+    std::string IncludeFlag("-I" + Config.IncludePath);
     //std::string LibFlag("-L" + LibPath);
 
     ARGV.push_back("--");
@@ -280,8 +272,6 @@ int main(int argc, const char *argv[]) {
 
         SmallVector<const char *, 256> cli;
 
-        std::string ClangPath = InstallPath + "/build-dev/bin/clang++";
-
         cli.push_back("-Wall");
 
         for (std::vector<std::string>::iterator
@@ -302,7 +292,7 @@ int main(int argc, const char *argv[]) {
                  EE = Config.ExtraLinkerFlags.end(); II != EE; ++II)
             cli.push_back(II->c_str());
 
-        runClang(ClangPath,cli);
+        runClang(Config,Config.ClangPath,cli);
 
         //llvm::outs() << DEBUG << "Exit clang mode.\n";
 
@@ -411,8 +401,6 @@ int main(int argc, const char *argv[]) {
     {
         SmallVector<const char *, 256> cli;
 
-        std::string ClangPath = InstallPath + "/build-dev/bin/clang++";
-
         //cli.push_back("-###");
         cli.push_back("-Wall");
         //cli.push_back("-fopenacc");
@@ -443,7 +431,7 @@ int main(int argc, const char *argv[]) {
             cli.push_back(II->c_str());
             cli.push_back("-o");
             cli.push_back(obj.c_str());
-            Res += runClang(ClangPath,cli);
+            Res += runClang(Config,Config.ClangPath,cli);
             cli.pop_back();
             cli.pop_back();
             cli.pop_back();
@@ -462,7 +450,7 @@ int main(int argc, const char *argv[]) {
             cli.push_back(II->c_str());
             cli.push_back("-o");
             cli.push_back(obj.c_str());
-            Res += runClang(ClangPath,cli);
+            Res += runClang(Config,Config.ClangPath,cli);
             cli.pop_back();
             cli.pop_back();
             cli.pop_back();
@@ -481,10 +469,8 @@ int main(int argc, const char *argv[]) {
             ObjFile = Config.UserDefinedOutputFile;
 
         {
-            std::string LinkerPath = "/usr/bin/ld";
-
             SmallVector<const char *, 256> ldcli;
-            ldcli.push_back(LinkerPath.c_str());
+            ldcli.push_back(Config.LinkerPath.c_str());
             ldcli.push_back("-r");
             for (std::vector<std::string>::iterator
                      II = TmpObjList.begin(), EE = TmpObjList.end(); II != EE; ++II)
@@ -509,7 +495,7 @@ int main(int argc, const char *argv[]) {
                 return 1;
             }
             if (!pid) {
-                execvp(LinkerPath.c_str(),(char * const *)const_cast<char **>(ldcli.data()));
+                execvp(Config.LinkerPath.c_str(),(char * const *)const_cast<char **>(ldcli.data()));
                 llvm::outs() << "Fail : execlp()  -  exit.\n";
                 return 1;
             }
@@ -552,10 +538,10 @@ int main(int argc, const char *argv[]) {
             }
             if (!pid) {
                 SmallVector<const char *, 256> ldcli;
-                ldcli.push_back(ClangPath.c_str());
+                ldcli.push_back(Config.ClangPath.c_str());
                 ldcli.push_back(ObjFile.c_str());
 
-                std::string LibPathFlag("-L" + LibPath);
+                std::string LibPathFlag("-L" + Config.LibPath);
                 ldcli.push_back(LibPathFlag.c_str());
 
                 ldcli.push_back("-L/usr/lib/nvidia-346");
@@ -595,7 +581,7 @@ int main(int argc, const char *argv[]) {
 
                 ldcli.push_back(0);
 
-                execvp(ClangPath.c_str(),(char * const *)const_cast<char **>(ldcli.data()));
+                execvp(Config.ClangPath.c_str(),(char * const *)const_cast<char **>(ldcli.data()));
                 llvm::outs() << "Fail : execlp()  -  exit.\n";
                 return 1;
             }
@@ -626,7 +612,7 @@ int main(int argc, const char *argv[]) {
                 ldcli.push_back("-o");
                 ldcli.push_back(UserDefinedOutputFile.c_str());
             }
-            int Res = runClang(ClangPath,ldcli);
+            int Res = runClang(Config,Config.ClangPath,ldcli);
             if (Res) {
                 llvm::outs() << "Fail\n";
                 return 1;
@@ -643,8 +629,20 @@ int main(int argc, const char *argv[]) {
 }
 
 accll::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
-    ProfileMode(false), CompileOnly(false)
+    ProfileMode(false), CompileOnly(false), isCXX(false)
 {
+    InstallPath = "/opt/LLVM";
+    IncludePath = InstallPath + "/include";
+    LibPath = InstallPath + "/lib";
+    LinkerPath = "/usr/bin/ld";
+    ClangPath = InstallPath + "/build-dev/bin/clang";
+
+    StringRef Path = argv[0];
+    if (Path.endswith("++")) {
+        ClangPath += "++";
+        isCXX = true;
+    }
+
     int i = 1;
 
     for (; i<argc; ++i) {

@@ -9,6 +9,13 @@ namespace accll {
 struct CentaurusConfig {
     bool ProfileMode;
     bool CompileOnly;
+    bool isCXX;
+
+    std::string InstallPath;
+    std::string IncludePath;
+    std::string LibPath;
+    std::string LinkerPath;
+    std::string ClangPath;
 
     std::string UserDefinedOutputFile;
 
