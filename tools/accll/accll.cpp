@@ -108,10 +108,13 @@ int CheckGeneratedSourceFiles(int argc, const char *argv[], const accll::Centaur
     }
 
     int ARGC = ARGV.size();
+
+#if 0
     llvm::outs() << DEBUG << "Invoke Stages as: ";
     for (size_t i=0; i<ARGV.size(); ++i)
         llvm::outs() << ARGV[i] + std::string(" ");
     llvm::outs() << "\n";
+#endif
 
     CommonOptionsParser OptionsParser(ARGC, ARGV.data());
 
@@ -243,10 +246,13 @@ int main(int argc, const char *argv[]) {
     }
 
     int ARGC = ARGV.size();
+
+#if 0
     llvm::outs() << DEBUG << "Invoke Stages as: ";
     for (size_t i=0; i<ARGV.size(); ++i)
         llvm::outs() << ARGV[i] + std::string(" ");
     llvm::outs() << "\n";
+#endif
 
     CommonOptionsParser OptionsParser(ARGC, ARGV.data());
 
