@@ -658,6 +658,7 @@ accll::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
                 NoArgs = true;
                 return;
             }
+            ++i;
             break;
         }
         if (Option.compare("--profile") == 0)
@@ -666,7 +667,6 @@ accll::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
             InputFiles.push_back(Option);
     }
 
-    ++i;
     for (; i<argc; ++i) {
         const std::string Option(argv[i]);
         if (Option.compare("-o") == 0) {
