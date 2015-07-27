@@ -33,6 +33,8 @@ llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelAccuratePool;
 llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelApproximatePool;
 llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelEvaluatePool;
 llvm::DenseMap<FunctionDecl *,std::string> CommonFunctionsPool;
+
+std::vector<std::pair<std::string, std::string> > NewOpenCLFiles;
 }
 
 std::string print(const PTXASInfo &info) {
@@ -169,7 +171,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
                      << "usertypes:" << UserTypes << "\n";
 #endif
 
-    std::string __offline = Extensions;
+    std::string __offline = KernelHeader + Extensions;
     std::string PreDef;  // = Extensions;
     for (StringMap<bool>::iterator
              II = DepHeaders.begin(), EE = DepHeaders.end(); II != EE; ++II) {
@@ -307,6 +309,14 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         + ",.src_size = " + toString(__inline_definition.size())
         + ",.platform_table = " + PlatformTableName
         + "};";
+
+    SourceManager &SM = Context->getSourceManager();
+    std::string FileName = SM.getFileEntryForID(SM.getMainFileID())->getName();
+    std::string Suffix = "_ocl_";
+    std::string NewDeviceImpl = RemoveDotExtension(FileName) + Suffix + DeviceCode.NameRef + ".cl";
+    NewOpenCLFiles.push_back(std::make_pair(NewDeviceImpl,__offline));
+    DepHeaders.clear();
+    CommonFunctionsPool.clear();
 }
 
 size_t KernelRefDef::getKernelUID(std::string Name) {
@@ -1563,65 +1573,38 @@ Stage1_ASTVisitor::Finish() {
     InputFiles.push_back(NewImpl);
     llvm::outs() << "Create kernel src/bin   : '" << NewImpl << "'  -  new file\n";
 
-    std::string NewDeviceImpl = RemoveDotExtension(FileName) + Suffix + ".cl";
-    {
-        std::ofstream dst(NewDeviceImpl.c_str());
-        dst << KernelHeader << OpenCLExtensions;
-        for (StringMap<bool>::iterator
-                 II = DepHeaders.begin(), EE = DepHeaders.end(); II != EE; ++II) {
-            dst << "#include \"" + II->getKey().str() + "\"\n";
+    for (std::vector<std::pair<std::string, std::string> >::iterator
+             II = NewOpenCLFiles.begin(), EE = NewOpenCLFiles.end(); II != EE; ++II) {
+        std::pair<std::string, std::string> &P = *II;
+        {
+            std::ofstream dst(P.first.c_str());
+            dst << P.second;
+            dst.flush();
         }
-        dst << UserTypes;
-        for (llvm::DenseMap<FunctionDecl *, std::string>::iterator
-                 II = CommonFunctionsPool.begin(), EE = CommonFunctionsPool.end(); II != EE; ++II) {
-            if (SM.isFromMainFile((*II).first->getLocStart()))
-                dst << (*II).second;
-        }
-        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
-                 II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
-            if (Context->isFunctionWithSubtasks((*II).first) ||
-                 SM.isFromMainFile((*II).first->getLocStart()))
-                dst << (*II).second->DeviceCode.Definition;
-        }
-        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
-                 II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
-            if (Context->isFunctionWithSubtasks((*II).first) ||
-                 SM.isFromMainFile((*II).first->getLocStart()))
-                dst << (*II).second->DeviceCode.Definition;
-        }
-        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
-                 II = KernelEvaluatePool.begin(), EE = KernelEvaluatePool.end(); II != EE; ++II) {
-            if (Context->isFunctionWithSubtasks((*II).first) ||
-                 SM.isFromMainFile((*II).first->getLocStart()))
-                dst << (*II).second->DeviceCode.Definition;
-        }
-        dst.flush();
+        KernelFiles.push_back(P.first);
+        llvm::outs() << "Write OpenCL kernels to : '" << P.first << "'  -  new file\n";
     }
-    KernelFiles.push_back(NewDeviceImpl);
-    llvm::outs() << "Write OpenCL kernels to : '" << NewDeviceImpl << "'  -  new file\n";
+    NewOpenCLFiles.clear();
 
-    {
-        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
-                 II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
-            delete (*II).second;
-        }
-        KernelAccuratePool.clear();
-        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
-                 II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
-            delete (*II).second;
-        }
-        KernelApproximatePool.clear();
-        for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
-                 II = KernelEvaluatePool.begin(), EE = KernelEvaluatePool.end(); II != EE; ++II) {
-            delete (*II).second;
-        }
-        KernelEvaluatePool.clear();
+    // clean
+
+    for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+             II = KernelAccuratePool.begin(), EE = KernelAccuratePool.end(); II != EE; ++II) {
+        delete (*II).second;
     }
+    KernelAccuratePool.clear();
+    for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+             II = KernelApproximatePool.begin(), EE = KernelApproximatePool.end(); II != EE; ++II) {
+        delete (*II).second;
+    }
+    KernelApproximatePool.clear();
+    for (llvm::DenseMap<FunctionDecl *,KernelRefDef *>::iterator
+             II = KernelEvaluatePool.begin(), EE = KernelEvaluatePool.end(); II != EE; ++II) {
+        delete (*II).second;
+    }
+    KernelEvaluatePool.clear();
 
     APIHeaderVector.clear();
-    CommonFunctionsPool.clear();
-    DepHeaders.clear();
-
     ACLConfig = accll::CentaurusConfig();
 }
 
