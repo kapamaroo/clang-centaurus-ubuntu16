@@ -32,6 +32,9 @@
 
 namespace {
 
+const char *_blacklist[] = { "GeForce 210" };
+const std::vector<const char *> Blacklist(_blacklist,_blacklist + 1);
+
 std::string ToHex(const std::string src) {
     std::string out;
     //llvm::raw_string_ostream OS(out);
@@ -227,6 +230,36 @@ namespace accll {
     }
 }
 
+static inline bool find(const std::vector<const char *> &pool, const std::string &value) {
+    for (std::vector<const char *>::const_iterator II = pool.begin(), EE = pool.end(); II != EE; ++II)
+        if (value.compare(*II) == 0)
+            return true;
+    return false;
+}
+
+cl_uint blacklist(const std::string &PlatformName, cl_device_id *cdDevice, cl_uint device_num) {
+    cl_uint i;
+    for (i=0; i<device_num; ) {
+        size_t size = 0;
+        clGetDeviceInfo(cdDevice[i], CL_DEVICE_NAME, 0, NULL, &size);
+        char *name = (char*) malloc(size);
+        clGetDeviceInfo(cdDevice[i], CL_DEVICE_NAME, size, name, NULL);
+        std::string Name = name;
+        free(name);
+        if (find(Blacklist,Name)) {
+            std::cout << WARNING << "Blacklisted device '" << PlatformName << "::" << Name << "'\n";
+
+            // if not the last device, swap with the last,
+            // else just decrease device_num
+            if (i != --device_num)
+                cdDevice[i] = cdDevice[device_num];
+        }
+        else
+            ++i;
+    }
+    return device_num;
+}
+
 PlatformBin _compile(std::string src, std::string SymbolName, std::string PrefixDef,
                    const std::vector<std::string> &options,
                    cl_platform_id cpPlatform) {
@@ -311,6 +344,8 @@ PlatformBin _compile(std::string src, std::string SymbolName, std::string Prefix
     // Get a GPU device
     errcode = clGetDeviceIDs(cpPlatform, CL_DEVICE_TYPE_ALL, device_num, cdDevice, NULL);
     checkError(errcode, CL_SUCCESS);
+
+    device_num = blacklist(PlatformName,cdDevice,device_num);
 
     clGPUContext = clCreateContext(0, device_num, cdDevice, NULL, NULL, &errcode);
     checkError(errcode, CL_SUCCESS);
