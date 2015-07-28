@@ -17,6 +17,7 @@ struct CentaurusConfig {
     std::string LibPath;
     std::string LinkerPath;
     std::string ClangPath;
+    std::string SPIRToolPath;
 
     std::string UserDefinedOutputFile;
 

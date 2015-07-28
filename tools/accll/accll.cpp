@@ -637,6 +637,7 @@ accll::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
     LibPath = InstallPath + "/lib";
     LinkerPath = "/usr/bin/ld";
     ClangPath = InstallPath + "/build-dev/bin/clang";
+    SPIRToolPath = "ioc64";
 
     StringRef Path = argv[0];
     if (Path.endswith("++")) {
