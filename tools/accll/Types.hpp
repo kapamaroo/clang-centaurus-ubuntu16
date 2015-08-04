@@ -6,6 +6,8 @@
 
 #include "clang/Basic/OpenACC.h"
 
+#include "Common.hpp"
+
 namespace clang {
     class FunctionDecl;
     class ASTContext;
@@ -83,11 +85,14 @@ struct DeviceBin : public ObjRefDef {
     ObjRefDef Bin;
     struct PTXASInfo Log;
 
-    explicit DeviceBin(std::string NameRef, std::string Definition,
-                       std::string PlatformName, ObjRefDef Bin,
-                       std::string RawLog)
-        : ObjRefDef(NameRef,Definition),
-        PlatformName(PlatformName), Bin(Bin), Log(RawLog,PlatformName) {}
+    explicit DeviceBin(std::string &SymbolName,
+                       std::string &PlatformName,
+                       std::string &APINameRef,
+                       std::string &BinArray,
+                       std::string &RawLog);
+
+    std::string ToHex(const std::string &src);
+
 };
 
 struct PlatformBin : public ObjRefDef, public std::vector<DeviceBin> {

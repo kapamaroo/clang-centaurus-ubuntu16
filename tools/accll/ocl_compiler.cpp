@@ -35,24 +35,6 @@ namespace {
 const char *_blacklist[] = { "GeForce 210" };
 const std::vector<const char *> Blacklist(_blacklist,_blacklist + 1);
 
-std::string ToHex(const std::string src) {
-    std::string out;
-    //llvm::raw_string_ostream OS(out);
-    std::stringstream OS;
-
-    for (size_t i=0; i<src.size(); ++i) {
-        if (i)
-            OS << ",";
-        OS << "0x"
-           << std::setfill('0')
-           << std::setw(2)
-           << std::hex
-           << (int)(unsigned char)src[i];
-    }
-
-    return OS.str();
-}
-
 std::vector<std::string> getProgBinary(cl_program cpProgram, cl_device_id *clDevices, cl_uint device_num)
 {
     cl_int errcode;
@@ -154,6 +136,55 @@ std::vector<std::string> ocltLogBuildInfo(cl_program cpProgram, cl_device_id *cd
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace accll {
+
+DeviceBin::DeviceBin(std::string &SymbolName,
+                     std::string &PlatformName,
+                     std::string &APINameRef,
+                     std::string &BinArray,
+                     std::string &RawLog)
+    : PlatformName(PlatformName), Log(RawLog,PlatformName)
+{
+#if 1
+    std::string HexBinArray = ToHex(BinArray);
+#else
+    std::string HexBinArray;
+#endif
+    std::string _NameRef = "__bin__" + APINameRef + "__" + SymbolName;
+
+    NameRef = APINameRef;
+    Definition = "struct _device_bin " + APINameRef + " = {"
+        + ".bin = " + _NameRef
+        + ",.bin_size = " + toString(BinArray.size())
+        + "};";
+
+    Bin.NameRef = _NameRef;
+    Bin.Definition = "const unsigned char " + _NameRef
+        + "[" + toString(BinArray.size()) + "]"
+        +" = "
+        + "{" + HexBinArray + "};";
+    Bin.HeaderDecl = "extern const unsigned char " + _NameRef
+        + "[" + toString(BinArray.size()) + "];";
+}
+
+std::string
+DeviceBin::ToHex(const std::string &src) {
+    std::string out;
+    //llvm::raw_string_ostream OS(out);
+    std::stringstream OS;
+
+    for (size_t i=0; i<src.size(); ++i) {
+        if (i)
+            OS << ",";
+        OS << "0x"
+           << std::setfill('0')
+           << std::setw(2)
+           << std::hex
+           << (int)(unsigned char)src[i];
+    }
+
+    return OS.str();
+}
+
     PTXASInfo::PTXASInfo(std::string Log, std::string PlatformName) :
     Raw(Log), arch(0), registers(0), gmem(0),
     stack_frame(0), spill_stores(0), spill_loads(0), cmem(0)
@@ -410,27 +441,8 @@ PlatformBin _compile(std::string src, std::string SymbolName, std::string Prefix
         std::string APINameRef = PrefixDef + PlatformName + "__device" + toString(i);
         DevTable += DevTableName + "[" + toString(i) + "] = " + APINameRef + ";";
 
-        std::string NameRef = "__bin__" + APINameRef + "__" + SymbolName;
-#if 1
-        std::string HexBinArray = ToHex(BinArray[i]);
-#else
-        std::string HexBinArray;
-#endif
-        std::string HeaderDecl = "extern const unsigned char " + NameRef
-            + "[" + toString(BinArray[i].size()) + "];";
-        std::string Definition = "const unsigned char " + NameRef
-            + "[" + toString(BinArray[i].size()) + "]"
-            +" = "
-            + "{" + HexBinArray + "};";
-
-        std::string APIDefinition = "struct _device_bin " + APINameRef + " = {"
-            + ".bin = " + NameRef
-            + ",.bin_size = " + toString(BinArray[i].size())
-            + "};";
-
-        DeviceBin DeviceBinary(APINameRef,APIDefinition,
-                               PlatformName,ObjRefDef(NameRef,Definition,HeaderDecl),
-                               RawBuildLogs[i]);
+        DeviceBin DeviceBinary(SymbolName,PlatformName,APINameRef,
+                               BinArray[i],RawBuildLogs[i]);
         PlatformBinary.push_back(DeviceBinary);
     }
 
