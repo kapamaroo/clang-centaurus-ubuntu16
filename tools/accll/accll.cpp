@@ -637,6 +637,9 @@ accll::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
     LibPath = InstallPath + "/lib";
     LinkerPath = "/usr/bin/ld";
     ClangPath = InstallPath + "/build-dev/bin/clang";
+
+    // clang -emit-llvm -target spir -include ~/centaurus/acl/opencl_spir.h -S -o clang.ll ~/centaurus/acl/input.cl
+    // ioc64 -cmd=compile -input=./input.cl -llvm-spir32=intel.ll
     SPIRToolPath = "ioc64";
 
     StringRef Path = argv[0];
