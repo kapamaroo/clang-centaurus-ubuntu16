@@ -16,10 +16,16 @@ using namespace clang::openacc;
 using namespace accll;
 
 namespace {
+
+struct KernelDepInfo {
+    std::vector<const clang::Type *> UserTypes;
+    llvm::StringMap<bool> DepHeaders;
+};
+llvm::DenseMap<FunctionDecl *, struct KernelDepInfo> DepCFG;
+
 accll::CentaurusConfig ACLConfig;
 
 std::vector<std::string> APIHeaderVector;
-llvm::StringMap<bool> DepHeaders;
 bool TrackThisHeader(std::string &Header) {
     for (std::vector<std::string>::iterator
              II = APIHeaderVector.begin(), EE = APIHeaderVector.end(); II != EE; ++II)
@@ -35,6 +41,25 @@ llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelEvaluatePool;
 llvm::DenseMap<FunctionDecl *,std::string> CommonFunctionsPool;
 
 std::vector<std::pair<std::string, std::string> > NewOpenCLFiles;
+
+std::string printUserType(const Type *Ty) {
+    std::string DeclStr;
+    raw_string_ostream OS(DeclStr);
+    if (const TagType *TT = Ty->getAs<TagType>()) {
+        const TagDecl *Tag = cast<TagDecl>(TT->getDecl());
+        Tag->print(OS);
+    }
+    else if (const TypedefType *TT = dyn_cast<TypedefType>(Ty)) {
+        TT->getDecl()->print(OS);
+    }
+    else
+        return std::string();
+
+    OS << ";\n\n";
+    OS.str();
+    return DeclStr;
+}
+
 }
 
 std::string print(const PTXASInfo &info) {
@@ -151,7 +176,7 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         // we have a header dependency
         SourceManager &SM = Context->getSourceManager();
         std::string DefFile = SM.getFileEntryForID(SM.getFileID(FD->getLocStart()))->getName();
-        DepHeaders[DefFile] = true;
+        DepCFG[FD].DepHeaders[DefFile] = true;
 
 #if 0
         llvm::outs() << DEBUG
@@ -173,13 +198,16 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
 
     std::string __offline = KernelHeader + Extensions;
     std::string PreDef;  // = Extensions;
-    for (StringMap<bool>::iterator
-             II = DepHeaders.begin(), EE = DepHeaders.end(); II != EE; ++II) {
+    for (llvm::StringMap<bool>::iterator
+             II = DepCFG[FD].DepHeaders.begin(), EE = DepCFG[FD].DepHeaders.end(); II != EE; ++II) {
         __offline += "#include \"" + II->getKey().str() + "\"\n";
         //PreDef += "#include \"" + II->getKey().str() + "\"\n";
     }
-    __offline += UserTypes;
-    //PreDef += UserTypes;
+    for (std::vector<const clang::Type *>::iterator
+             II = DepCFG[FD].UserTypes.begin(), EE = DepCFG[FD].UserTypes.end(); II != EE; ++II) {
+        __offline += printUserType(*II);
+        //PreDef += UserTypes;
+    }
 
     llvm::SmallSetVector<clang::FunctionDecl *,sizeof(clang::FunctionDecl *)> Deps;
     findCallDeps(FD,CG,Deps);
@@ -315,7 +343,6 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
     std::string Suffix = "_ocl_";
     std::string NewDeviceImpl = RemoveDotExtension(FileName) + Suffix + DeviceCode.NameRef + ".cl";
     NewOpenCLFiles.push_back(std::make_pair(NewDeviceImpl,__offline));
-    DepHeaders.clear();
     CommonFunctionsPool.clear();
 }
 
@@ -662,8 +689,12 @@ static bool isRuntimeCall(const std::string Name) {
     return false;
 }
 
+#if 0
 #warning FIXME: autodetect double extensions
 std::string accll::OpenCLExtensions = "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n\n";
+#else
+std::string accll::OpenCLExtensions;
+#endif
 
 #if 0
 std::string accll::KernelHeader =
@@ -1604,6 +1635,8 @@ Stage1_ASTVisitor::Finish() {
     }
     KernelEvaluatePool.clear();
 
+    DepCFG.clear();
+
     APIHeaderVector.clear();
     ACLConfig = accll::CentaurusConfig();
 }
@@ -1643,22 +1676,16 @@ Stage1_ASTVisitor::VisitVarDecl(VarDecl *VD) {
 
     const Type *Ty = (cast<ValueDecl>(VD))->getType().getTypePtr();
 
-    std::string DeclStr;
-    raw_string_ostream OS(DeclStr);
     SourceLocation Loc;
     if (const TagType *TT = Ty->getAs<TagType>()) {
         const TagDecl *Tag = cast<TagDecl>(TT->getDecl());
-        Tag->print(OS);
         Loc = Tag->getSourceRange().getBegin();
     }
     else if (const TypedefType *TT = dyn_cast<TypedefType>(Ty)) {
-        TT->getDecl()->print(OS);
         Loc = TT->getDecl()->getSourceRange().getBegin();
     }
     else
         return true;
-
-    OS.str();
 
     if (Loc.isInvalid())
         return true;
@@ -1681,19 +1708,22 @@ Stage1_ASTVisitor::VisitVarDecl(VarDecl *VD) {
 #endif
 
     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
-    //llvm::outs() << DEBUG
-    //             << "user defined record '" << TT->getNameAsString() << "' from file :" << DefFile << "\n";
 
     //maybe the implementation headers are not in system directories
     if (!SM.isFromMainFile(Loc)) {
         if (TrackThisHeader(DefFile)) {
+#if 0
+            const TagType *TT = Ty->getAs<TagType>();
             llvm::outs() << DEBUG
-                         << VD->getNameAsString() << " ------------------- " << DefFile << "\n";
-            DepHeaders[DefFile] = true;
+                         << "user defined record '" << TT->getDecl()->getNameAsString() << "' "
+                         << "for variable '" << VD->getNameAsString() << "' "
+                         << "from file :" << DefFile << "\n";
+#endif
+            DepCFG[CurrentFunction].DepHeaders[DefFile] = true;
         }
     }
     else
-        UserTypes += DeclStr + ";\n\n";
+        DepCFG[CurrentFunction].UserTypes.push_back(Ty);
 
     return true;
 }
@@ -1754,13 +1784,16 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
         return true;
     }
     std::string DefFile = FE->getName();
-    //llvm::outs() << DEBUG
-    //             << "user defined record '" << R->getNameAsString() << "' from file :" << DefFile << "\n";
 
     //maybe the implementation headers are not in system directories
     if (!SM.isFromMainFile(Loc)) {
-        if (TrackThisHeader(DefFile))
-            DepHeaders[DefFile] = true;
+        if (TrackThisHeader(DefFile)) {
+            DepCFG[FD].DepHeaders[DefFile] = true;
+#if 0
+            llvm::outs() << DEBUG
+                         << "user defined function '" << FD->getNameAsString() << "' from file :" << DefFile << "\n";
+#endif
+        }
     }
 #if 0
     // we get them through call graph
