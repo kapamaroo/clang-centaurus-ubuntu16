@@ -137,11 +137,13 @@ std::vector<std::string> ocltLogBuildInfo(cl_program cpProgram, cl_device_id *cd
 
 namespace accll {
 
-DeviceBin::DeviceBin(std::string &SymbolName,
-                     std::string &PlatformName,
+DeviceBin::DeviceBin(std::string &PlatformName,
+                     std::string &SymbolName,
+                     std::string &PrefixDef,
                      std::string &APINameRef,
                      std::string &BinArray,
-                     std::string &RawLog)
+                     std::string &RawLog,
+                     const int id)
     : PlatformName(PlatformName), Log(RawLog,PlatformName)
 {
 #if 1
@@ -151,10 +153,16 @@ DeviceBin::DeviceBin(std::string &SymbolName,
 #endif
     std::string _NameRef = "__bin__" + APINameRef + "__" + SymbolName;
 
+    const std::string StaticInfoDeclName = "__acl_static_info_"
+        + PrefixDef + "_" + PlatformName + "_" + toString(id);
+    std::string StaticInfoLogDecl = "struct _device_bin_static_info "
+        + StaticInfoDeclName + " = " + Log.printDeclInit() + ";";
+
     NameRef = APINameRef;
-    Definition = "struct _device_bin " + APINameRef + " = {"
+    Definition = StaticInfoLogDecl + "struct _device_bin " + APINameRef + " = {"
         + ".bin = " + _NameRef
         + ",.bin_size = " + toString(BinArray.size())
+        + ",.static_info = " + StaticInfoDeclName
         + "};";
 
     Bin.NameRef = _NameRef;
@@ -185,7 +193,7 @@ DeviceBin::ToHex(const std::string &src) {
     return OS.str();
 }
 
-    PTXASInfo::PTXASInfo(std::string Log, std::string PlatformName) :
+PTXASInfo::PTXASInfo(std::string Log, std::string PlatformName) :
     Raw(Log), arch(0), registers(0), gmem(0),
     stack_frame(0), spill_stores(0), spill_loads(0), cmem(0)
 {
@@ -259,6 +267,24 @@ DeviceBin::ToHex(const std::string &src) {
             }
         }
     }
+}
+
+std::string
+PTXASInfo::printDeclInit() {
+    std::stringstream OS;
+#define PRINT(x) "." << #x << " = " << toString(x)
+    OS << "{"
+        PRINT(arch) << ","
+        PRINT(registers) << ","
+        PRINT(gmem) << ","
+        PRINT(stack_frame) << ","
+        PRINT(spill_stores) << ","
+        PRINT(spill_loads) << ","
+        PRINT(cmem)
+       << "}";
+#undef PRINT
+
+    return OS.str();
 }
 
 static inline bool find(const std::vector<const char *> &pool, const std::string &value) {
@@ -441,8 +467,8 @@ PlatformBin _compile(std::string src, std::string SymbolName, std::string Prefix
         std::string APINameRef = PrefixDef + PlatformName + "__device" + toString(i);
         DevTable += DevTableName + "[" + toString(i) + "] = " + APINameRef + ";";
 
-        DeviceBin DeviceBinary(SymbolName,PlatformName,APINameRef,
-                               BinArray[i],RawBuildLogs[i]);
+        DeviceBin DeviceBinary(PlatformName,SymbolName,PrefixDef,APINameRef,
+                               BinArray[i],RawBuildLogs[i],i);
         PlatformBinary.push_back(DeviceBinary);
     }
 

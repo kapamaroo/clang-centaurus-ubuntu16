@@ -78,6 +78,8 @@ struct PTXASInfo {
     PTXASInfo() :
         Raw(std::string()), arch(0), registers(0), gmem(0),
         stack_frame(0), spill_stores(0), spill_loads(0), cmem(0) {}
+
+    std::string printDeclInit();
 };
 
 struct DeviceBin : public ObjRefDef {
@@ -85,11 +87,13 @@ struct DeviceBin : public ObjRefDef {
     ObjRefDef Bin;
     struct PTXASInfo Log;
 
-    explicit DeviceBin(std::string &SymbolName,
-                       std::string &PlatformName,
+    explicit DeviceBin(std::string &PlatformName,
+                       std::string &SymbolName,
+                       std::string &PrefixDef,
                        std::string &APINameRef,
                        std::string &BinArray,
-                       std::string &RawLog);
+                       std::string &RawLog,
+                       const int id);
 
     std::string ToHex(const std::string &src);
 
