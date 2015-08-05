@@ -61,7 +61,7 @@ std::string printUserType(const Type *Ty) {
 
 }
 
-std::string print(const PTXASInfo &info) {
+std::string printPTXLog(const PTXASInfo &info) {
     std::string str;
     llvm::raw_string_ostream OS(str);
 #define PRINT(x) #x << " = " << x << "\n"
@@ -298,10 +298,12 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
             //llvm::outs() << NOTE
             //    << "########" << Device.Bin.NameRef << "' build log   ########\n";
             if (Device.Log.Raw.size()) {
+#if 0
                 llvm::outs() << Device.Log.Raw;
                 if (Device.PlatformName.compare("NVIDIA") == 0) {
-                    llvm::outs() << print(Device.Log);
+                    llvm::outs() << printPTXLog(Device.Log);
                 }
+#endif
             }
             else {
                 CacheWarning = true;
