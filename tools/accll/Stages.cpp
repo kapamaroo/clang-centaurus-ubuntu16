@@ -38,7 +38,6 @@ bool TrackThisHeader(std::string &Header) {
 llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelAccuratePool;
 llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelApproximatePool;
 llvm::DenseMap<FunctionDecl *,KernelRefDef *> KernelEvaluatePool;
-llvm::DenseMap<FunctionDecl *,std::string> CommonFunctionsPool;
 
 std::vector<std::pair<std::string, std::string> > NewOpenCLFiles;
 
@@ -234,7 +233,6 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
             Src = printFunction(DepFD,Context,AlternativeName,SubtaskPrintMode);
             // it appears as it is, in both accurate and approximate
             // version (if exists), add it only once in the final *.cl file
-            CommonFunctionsPool[DepFD] = Src.Definition;
             __offline += Src.Definition;
         }
         else {
@@ -343,7 +341,6 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
     std::string Suffix = "_ocl_";
     std::string NewDeviceImpl = RemoveDotExtension(FileName) + Suffix + DeviceCode.NameRef + ".cl";
     NewOpenCLFiles.push_back(std::make_pair(NewDeviceImpl,__offline));
-    CommonFunctionsPool.clear();
 }
 
 size_t KernelRefDef::getKernelUID(std::string Name) {
