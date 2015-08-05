@@ -489,9 +489,11 @@ KernelRefDef::compile(std::string src, std::string SymbolName, std::string Prefi
     cl_platform_id* clPlatformIDs;
     cl_int          status;
 
+#if 0
     std::cout << DEBUG << "________________src________________\n";
     std::cout << src;
     std::cout << DEBUG << "________________src________________\n";
+#endif
 
     status = clGetPlatformIDs(0, NULL, &num_platforms);
     if (status != CL_SUCCESS)

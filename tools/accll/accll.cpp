@@ -39,7 +39,7 @@ using namespace accll;
 
 int runClang(const accll::CentaurusConfig &Config, std::string Path, SmallVector<const char *, 256> &cli) {
 #if 1
-    llvm::outs() << DEBUG << Path << " ";
+    llvm::outs() << "\n" << DEBUG << Path << " ";
     for (SmallVector<const char *, 256>::iterator
              II = cli.begin(), EE = cli.end(); II != EE; ++II) {
         llvm::outs() << *II << " ";

@@ -286,8 +286,10 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
     for (std::vector<PlatformBin>::iterator
              II = Binary.begin(), EE = Binary.end(); II != EE; ++II) {
         PlatformBin &Platform = *II;
+#if 0
         llvm::outs() << NOTE
                      << "########    [" << Platform.PlatformName << "]\n";
+#endif
 
         std::string PlatformDef;
 
@@ -970,7 +972,7 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         }
     }
     else if (DI->getKind() == DK_TASK) {
-        llvm::outs() << "  -  Create Kernel\n";
+        llvm::outs() << "  -  Create task\n";
 
         // extra semantic checking
         // we cannot move this into Sema, because we need information from the Call Graph
