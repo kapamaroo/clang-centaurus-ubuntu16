@@ -545,6 +545,7 @@ void Parser::Initialize() {
       ParseClause[CK_WORKERS] = &Parser::ParseClauseWorkers;
       ParseClause[CK_GROUPS] = &Parser::ParseClauseGroups;
       ParseClause[CK_BIND] = &Parser::ParseClauseBind;
+      ParseClause[CK_BIND_APPROXIMATE] = &Parser::ParseClauseBind_approximate;
       ParseClause[CK_SUGGEST] = &Parser::ParseClauseSuggest;
       ParseClause[CK_ENERGY_JOULE] = &Parser::ParseClauseEnergy_joule;
       ParseClause[CK_RATIO] = &Parser::ParseClauseRatio;

@@ -56,6 +56,7 @@ enum ClauseKind {
     CK_WORKERS,
     CK_GROUPS,
     CK_BIND,
+    CK_BIND_APPROXIMATE,
     CK_SUGGEST,
     CK_ENERGY_JOULE,
     CK_RATIO

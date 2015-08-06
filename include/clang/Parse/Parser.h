@@ -492,6 +492,7 @@ private:
     ParseClauseFn ParseClauseWorkers;
     ParseClauseFn ParseClauseGroups;
     ParseClauseFn ParseClauseBind;
+    ParseClauseFn ParseClauseBind_approximate;
     ParseClauseFn ParseClauseSuggest;
     ParseClauseFn ParseClauseEnergy_joule;
     ParseClauseFn ParseClauseRatio;

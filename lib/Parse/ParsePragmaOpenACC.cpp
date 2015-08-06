@@ -31,6 +31,7 @@ const unsigned DirectiveInfo::ValidDirective[DK_END] = {
         BITMASK(CK_WORKERS) |
         BITMASK(CK_GROUPS) |
         BITMASK(CK_BIND) |
+        BITMASK(CK_BIND_APPROXIMATE) |
         BITMASK(CK_SUGGEST),
 
         //taskwait
@@ -72,6 +73,7 @@ const std::string ClauseInfo::Name[CK_END] = {
     "workers",
     "groups",
     "bind",
+    "bind_approx",
     "suggest",
     "energy_joule",
     "ratio",
@@ -220,6 +222,7 @@ static bool mustBeUnique(ClauseKind CK) {
     case CK_WORKERS:
     case CK_GROUPS:
     case CK_BIND:
+    case CK_BIND_APPROXIMATE:
     case CK_SUGGEST:
     case CK_ENERGY_JOULE:
     case CK_RATIO:
@@ -672,6 +675,13 @@ Parser::ParseClauseGroups(DirectiveKind DK, ClauseInfo *CI) {
 
 bool
 Parser::ParseClauseBind(DirectiveKind DK, ClauseInfo *CI) {
+    if (!ParseArgScalarIntExpr(DK,CI))
+        return false;
+    return true;
+}
+
+bool
+Parser::ParseClauseBind_approximate(DirectiveKind DK, ClauseInfo *CI) {
     if (!ParseArgScalarIntExpr(DK,CI))
         return false;
     return true;
