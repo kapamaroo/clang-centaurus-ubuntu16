@@ -274,32 +274,32 @@ Arg::Contains(Arg *Target) {
 
 OpenACC::OpenACC(Sema &s) : S(s), PendingDirective(0), Valid(false),
                             ICEPool(0), ValidArg(false), LengthTmp(0) {
-    isValidClause[CK_LABEL] =        &OpenACC::isValidClauseLabel;
-    isValidClause[CK_TASKID] =       &OpenACC::isValidClauseTaskid;
-    isValidClause[CK_SIGNIFICANT] =  &OpenACC::isValidClauseSignificant;
-    isValidClause[CK_APPROXFUN] =    &OpenACC::isValidClauseApproxfun;
-    isValidClause[CK_EVALFUN] =      &OpenACC::isValidClauseEvalfun;
-    isValidClause[CK_ESTIMATION] =   &OpenACC::isValidClauseEstimation;
-    isValidClause[CK_BUFFER] =       &OpenACC::isValidClauseBuffer;
+    isValidClause[CK_LABEL] = &OpenACC::isValidClauseLabel;
+    isValidClause[CK_TASKID] = &OpenACC::isValidClauseTaskid;
+    isValidClause[CK_SIGNIFICANT] = &OpenACC::isValidClauseSignificant;
+    isValidClause[CK_APPROXFUN] = &OpenACC::isValidClauseApproxfun;
+    isValidClause[CK_EVALFUN] = &OpenACC::isValidClauseEvalfun;
+    isValidClause[CK_ESTIMATION] = &OpenACC::isValidClauseEstimation;
+    isValidClause[CK_BUFFER] = &OpenACC::isValidClauseBuffer;
     isValidClause[CK_LOCAL_BUFFER] = &OpenACC::isValidClauseLocal_buffer;
-    isValidClause[CK_IN] =           &OpenACC::isValidClauseIn;
-    isValidClause[CK_OUT] =          &OpenACC::isValidClauseOut;
-    isValidClause[CK_INOUT] =        &OpenACC::isValidClauseInout;
-    isValidClause[CK_DEVICE_IN] =    &OpenACC::isValidClauseIn;
-    isValidClause[CK_DEVICE_OUT] =   &OpenACC::isValidClauseOut;
+    isValidClause[CK_IN] = &OpenACC::isValidClauseIn;
+    isValidClause[CK_OUT] = &OpenACC::isValidClauseOut;
+    isValidClause[CK_INOUT] = &OpenACC::isValidClauseInout;
+    isValidClause[CK_DEVICE_IN] = &OpenACC::isValidClauseIn;
+    isValidClause[CK_DEVICE_OUT] = &OpenACC::isValidClauseOut;
     isValidClause[CK_DEVICE_INOUT] = &OpenACC::isValidClauseInout;
-    isValidClause[CK_ON] =           &OpenACC::isValidClauseOn;
-    isValidClause[CK_WORKERS] =      &OpenACC::isValidClauseWorkers;
-    isValidClause[CK_GROUPS] =       &OpenACC::isValidClauseGroups;
-    isValidClause[CK_BIND] =         &OpenACC::isValidClauseBind;
+    isValidClause[CK_ON] = &OpenACC::isValidClauseOn;
+    isValidClause[CK_WORKERS] = &OpenACC::isValidClauseWorkers;
+    isValidClause[CK_GROUPS] = &OpenACC::isValidClauseGroups;
+    isValidClause[CK_BIND] = &OpenACC::isValidClauseBind;
     isValidClause[CK_BIND_APPROXIMATE] = &OpenACC::isValidClauseBind_approximate;
-    isValidClause[CK_SUGGEST] =      &OpenACC::isValidClauseSuggest;
+    isValidClause[CK_SUGGEST] = &OpenACC::isValidClauseSuggest;
     isValidClause[CK_ENERGY_JOULE] = &OpenACC::isValidClauseEnergy_joule;
-    isValidClause[CK_RATIO] =        &OpenACC::isValidClauseRatio;
+    isValidClause[CK_RATIO] = &OpenACC::isValidClauseRatio;
 
-    isValidDirective[DK_TASK] =      &OpenACC::isValidDirectiveTask;
-    isValidDirective[DK_TASKWAIT] =  &OpenACC::isValidDirectiveTaskwait;
-    isValidDirective[DK_SUBTASK] =  &OpenACC::isValidDirectiveSubtask;
+    isValidDirective[DK_TASK] = &OpenACC::isValidDirectiveTask;
+    isValidDirective[DK_TASKWAIT] = &OpenACC::isValidDirectiveTaskwait;
+    isValidDirective[DK_SUBTASK] = &OpenACC::isValidDirectiveSubtask;
 }
 
 void OpenACC::SetOpenCL(bool value) { S.getPreprocessor().SetOpenCL(value); }
