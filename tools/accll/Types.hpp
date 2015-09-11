@@ -130,10 +130,14 @@ struct KernelRefDef {
                 const std::vector<std::string> &options = std::vector<std::string>());
 
     KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, clang::CallGraph *CG,
+                 const clang::openacc::DirectiveInfo *DI,
                  std::string &Extensions, std::string &UserTypes,
                  const enum clang::openacc::PrintSubtaskType = clang::openacc::K_PRINT_ALL);
 
     size_t getKernelUID(std::string Name);
+
+    std::string setDeviceType(const clang::openacc::DirectiveInfo *DI, const clang::openacc::ClauseKind CK);
+
 };
 
 }

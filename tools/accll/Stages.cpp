@@ -144,6 +144,7 @@ static ClauseInfo *getClauseOfKind(const ClauseList &CList, ClauseKind CK) {
 }
 
 KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, clang::CallGraph *CG,
+                           const clang::openacc::DirectiveInfo *DI,
                            std::string &Extensions, std::string &UserTypes,
                            const enum PrintSubtaskType SubtaskPrintMode)
 {
@@ -328,11 +329,14 @@ KernelRefDef::KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, c
         //llvm::outs() << "\n#################################\n";
     }
 
+    const ClauseKind BindMode = (SubtaskPrintMode == K_PRINT_ACCURATE_SUBTASK) ? CK_BIND : CK_BIND_APPROXIMATE;
+
     HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
     HostCode.Definition = PreAPIDef + PlatformTable
         + "struct _kernel_struct *" + HostCode.NameRef + " = (struct _kernel_struct*)malloc(sizeof(struct _kernel_struct));"
         "*" + HostCode.NameRef + " = (struct _kernel_struct){"
-        + ".UID = " + toString(getKernelUID(DeviceCode.NameRef))
+        + ".device_type = " + setDeviceType(DI,BindMode)
+        + ",.UID = " + toString(getKernelUID(DeviceCode.NameRef))
         + ",.name = \"" + DeviceCode.NameRef + "\""
         + ",.name_size = " + toString(DeviceCode.NameRef.size())
         + ",.src = " + InlineDeviceCode.NameRef
@@ -395,7 +399,6 @@ struct KernelSrc {
     {
         CreateKernel(Context,CG,DI,Extensions,UserTypes);
 
-        std::string DeviceType = setDeviceType(DI);
         NameRef = "__accll_task_exe";
         Definition = AccurateKernel->HostCode.Definition;
 
@@ -431,8 +434,7 @@ struct KernelSrc {
 
         Definition += "struct _task_executable " + NameRef + " = {"
             //+ ".UID = " + toString(TaskUID)
-            + ".device_type = " + DeviceType
-            + ",.kernel_accurate = " + AccurateKernel->HostCode.NameRef
+            + ".kernel_accurate = " + AccurateKernel->HostCode.NameRef
             + ",.kernel_approximate = " + ApproxName
             + ",.kernel_evalfun = " + EvalfunName
             + ",.estimation = " + EstimationName
@@ -444,19 +446,6 @@ private:
                       clang::openacc::DirectiveInfo *DI,
                       std::string &Extensions, std::string &UserTypes);
 
-    std::string setDeviceType(const DirectiveInfo *DI) {
-        std::string DeviceType;
-        if (const ClauseInfo *CI = getClauseOfKind(DI->getClauseList(),CK_SUGGEST)) {
-            DeviceType += "((unsigned int)" + CI->getArg()->getPrettyArg() + " << 1) | 0x0";
-        }
-        else if (const ClauseInfo *CI = getClauseOfKind(DI->getClauseList(),CK_BIND)) {
-            DeviceType += "((unsigned int)" + CI->getArg()->getPrettyArg() + " << 1) | 0x1";
-        }
-        else {
-            DeviceType += "((unsigned int)ACL_DEV_ALL << 1) | 0x0";
-        }
-        return DeviceType;
-    }
 };
 
 struct TaskSrc {
@@ -571,7 +560,7 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, Direct
         if (Kref != KernelAccuratePool.end())
             AccurateKernel = Kref->second;
         else {
-            AccurateKernel = new KernelRefDef(Context,AccurateFun,CG,
+            AccurateKernel = new KernelRefDef(Context,AccurateFun,CG,DI,
                                               Extensions,UserTypes,
                                               K_PRINT_ACCURATE_SUBTASK);
             KernelAccuratePool[AccurateFun] = AccurateKernel;
@@ -581,7 +570,7 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, Direct
         if (Kref != KernelApproximatePool.end())
             ApproximateKernel = Kref->second;
         else {
-            ApproximateKernel = new KernelRefDef(Context,AccurateFun,CG,
+            ApproximateKernel = new KernelRefDef(Context,AccurateFun,CG,DI,
                                                  Extensions,UserTypes,
                                                  K_PRINT_APPROXIMATE_SUBTASK);
             KernelApproximatePool[AccurateFun] = ApproximateKernel;
@@ -592,7 +581,7 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, Direct
         if (Kref != KernelAccuratePool.end())
             AccurateKernel = Kref->second;
         else {
-            AccurateKernel = new KernelRefDef(Context,AccurateFun,CG,
+            AccurateKernel = new KernelRefDef(Context,AccurateFun,CG,DI,
                                               Extensions,UserTypes,
                                               K_PRINT_ACCURATE_SUBTASK);
             KernelAccuratePool[AccurateFun] = AccurateKernel;
@@ -602,7 +591,7 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, Direct
             if (Kref != KernelApproximatePool.end())
                 ApproximateKernel = Kref->second;
             else {
-                ApproximateKernel = new KernelRefDef(Context,ApproxFun,CG,
+                ApproximateKernel = new KernelRefDef(Context,ApproxFun,CG,DI,
                                                      Extensions,UserTypes,
                                                      K_PRINT_APPROXIMATE_SUBTASK);
                 KernelApproximatePool[ApproxFun] = ApproximateKernel;
@@ -624,7 +613,7 @@ KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, Direct
             if (Kref != KernelEvaluatePool.end())
                 EvaluationKernel = Kref->second;
             else {
-                EvaluationKernel = new KernelRefDef(Context,Evalfun,CG,Extensions,UserTypes);
+                EvaluationKernel = new KernelRefDef(Context,Evalfun,CG,DI,Extensions,UserTypes);
                 KernelEvaluatePool[Evalfun] = EvaluationKernel;
             }
         }
@@ -1471,6 +1460,27 @@ void KernelRefDef::findCallDeps(FunctionDecl *StartFD, CallGraph *CG,
                     WorkList.insert(NewFD);
                 }
     }
+}
+
+std::string
+KernelRefDef::setDeviceType(const DirectiveInfo *DI, const ClauseKind CK) {
+    std::string DeviceType;
+    if (const ClauseInfo *CI = getClauseOfKind(DI->getClauseList(),CK_SUGGEST)) {
+        DeviceType = "((unsigned int)" + CI->getArg()->getPrettyArg() + " << 1) | 0x0";
+    }
+    else if (const ClauseInfo *CI = getClauseOfKind(DI->getClauseList(),CK)) {
+        DeviceType = "((unsigned int)" + CI->getArg()->getPrettyArg() + " << 1) | 0x1";
+    }
+    else if (CK == CK_BIND_APPROXIMATE) {
+        if (const ClauseInfo *CI = getClauseOfKind(DI->getClauseList(),CK_BIND))
+            DeviceType = "((unsigned int)" + CI->getArg()->getPrettyArg() + " << 1) | 0x1";
+        else
+            DeviceType = "((unsigned int)ACL_DEV_ALL << 1) | 0x0";
+    }
+    else {
+        DeviceType = "((unsigned int)ACL_DEV_ALL << 1) | 0x0";
+    }
+    return DeviceType;
 }
 
 void
