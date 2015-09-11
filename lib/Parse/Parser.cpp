@@ -551,6 +551,7 @@ void Parser::Initialize() {
       ParseClause[CK_RATIO] = &Parser::ParseClauseRatio;
 
       ParseDirective[DK_TASK] = &Parser::ParseDirectiveTask;
+      ParseDirective[DK_TASKGROUP] = &Parser::ParseDirectiveTaskgroup;
       ParseDirective[DK_TASKWAIT] = &Parser::ParseDirectiveTaskwait;
       ParseDirective[DK_SUBTASK] = &Parser::ParseDirectiveSubtask;
   }

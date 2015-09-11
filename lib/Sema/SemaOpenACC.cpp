@@ -298,6 +298,7 @@ OpenACC::OpenACC(Sema &s) : S(s), PendingDirective(0), Valid(false),
     isValidClause[CK_RATIO] = &OpenACC::isValidClauseRatio;
 
     isValidDirective[DK_TASK] = &OpenACC::isValidDirectiveTask;
+    isValidDirective[DK_TASKGROUP] = &OpenACC::isValidDirectiveTaskgroup;
     isValidDirective[DK_TASKWAIT] = &OpenACC::isValidDirectiveTaskwait;
     isValidDirective[DK_SUBTASK] = &OpenACC::isValidDirectiveSubtask;
 }
@@ -968,6 +969,42 @@ OpenACC::isValidDirectiveTask(DirectiveInfo *DI) {
 }
 
 bool
+OpenACC::isValidDirectiveTaskgroup(DirectiveInfo *DI) {
+    if (DI->getClauseList().empty())
+        return true;
+
+    bool hasLabelClause(false);
+    bool hasRatioClause(false);
+    bool hasEnergy_jouleClause(false);
+
+    ClauseList &CList = DI->getClauseList();
+    for (ClauseList::iterator II = CList.begin(), EE = CList.end(); II != EE; ++II) {
+        ClauseInfo *CI = *II;
+        if (CI->getKind() == CK_RATIO)
+            hasRatioClause = true;
+        else if (CI->getKind() == CK_LABEL)
+            hasLabelClause = true;
+        else if (CI->getKind() == CK_ENERGY_JOULE)
+            hasEnergy_jouleClause = true;
+    }
+
+    if (!hasLabelClause) {
+        S.Diag(DI->getLocStart(),diag::err_pragma_acc_test)
+            << "invalid taskgroup declaration without label()";
+        return false;
+    }
+
+    // reminder: ratio() clause is unique
+    if (hasRatioClause && hasEnergy_jouleClause) {
+        S.Diag(DI->getLocStart(),diag::err_pragma_acc_test)
+            << "invalid combination of clauses";
+        return false;
+    }
+
+    return true;
+}
+
+bool
 OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
     assert(DI->getKind() == DK_TASKWAIT);
 
@@ -975,9 +1012,7 @@ OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
         return true;
 
     bool hasOnClause(false);
-    bool hasRatioClause(false);
     bool hasLabelClause(false);
-    bool hasEnergy_jouleClause(false);
 
     ClauseInfo *EvalFun = NULL;
     ClauseInfo *Estimation = NULL;
@@ -987,23 +1022,17 @@ OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
         ClauseInfo *CI = *II;
         if (CI->getKind() == CK_ON)
             hasOnClause = true;
-        else if (CI->getKind() == CK_RATIO)
-            hasRatioClause = true;
         else if (CI->getKind() == CK_LABEL)
             hasLabelClause = true;
-        else if (CI->getKind() == CK_ENERGY_JOULE)
-            hasEnergy_jouleClause = true;
         else if (CI->getKind() == CK_EVALFUN)
             EvalFun = CI;
         else if (CI->getKind() == CK_ESTIMATION)
             Estimation = CI;
     }
 
-    if ((hasOnClause && (hasLabelClause || hasRatioClause || hasEnergy_jouleClause)) ||
-        (hasRatioClause && hasEnergy_jouleClause)) {
-        //suggest spliting this wait directive into two distinct wait directives
+    if (hasOnClause && hasLabelClause) {
+        //suggest spliting this taskwait directive into two distinct directives
         //one that has all the on() clauses, and another that has all the label()
-        //and ratio clauses(). ratio() clause is unique.
 
         S.Diag(DI->getLocStart(),diag::err_pragma_acc_taskwait_clauses)
             << "invalid combination of clauses";
@@ -1219,6 +1248,7 @@ OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
         S.getASTContext().markAsFunctionWithSubtasks(S.getCurFunctionDecl());
         break;
     }
+    case DK_TASKGROUP:
     case DK_TASKWAIT: {
         assert(!SubStmt);
 

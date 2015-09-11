@@ -908,6 +908,9 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
             R = Actions.getACCInfo()->CreateRegion(DI);
 #endif
         }
+        else if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASKGROUP)) {
+            R = Actions.getACCInfo()->CreateRegion(DI);
+        }
         else
             R = ParseStatementOrDeclaration(Stmts, false);
     } else {

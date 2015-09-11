@@ -669,6 +669,7 @@ void GeometrySrc::init(DirectiveInfo *DI, clang::ASTContext *Context) {
 }
 
 static bool isRuntimeCall(const std::string Name) {
+#warning do we need this? are these actually the runtime calls?
     std::string data[] = {"create_task","taskwait"};
     static const SmallVector<std::string,8> RuntimeCalls(data, data + sizeof(data)/sizeof(std::string));
 
@@ -900,33 +901,19 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
 
         ClauseInfo *ClauseOn = getClauseOfKind(CList,CK_ON);
         ClauseInfo *ClauseLabel = getClauseOfKind(CList,CK_LABEL);
-        ClauseInfo *ClauseRatio = getClauseOfKind(CList,CK_RATIO);
-        ClauseInfo *ClauseEnergy_joule = getClauseOfKind(CList,CK_ENERGY_JOULE);
         ClauseInfo *ClauseEvalfun = getClauseOfKind(CList,CK_EVALFUN);
         ClauseInfo *ClauseEstimation = getClauseOfKind(CList,CK_ESTIMATION);
 
         std::string QLabel = "NULL";
-        std::string Ratio;
-        std::string Energy;
 
         if (ClauseLabel)
             QLabel = ClauseLabel->getArgAs<LabelArg>()->getQuotedLabel();
-        if (ClauseRatio)
-            Ratio = ClauseRatio->getArg()->getPrettyArg();
-        if (ClauseEnergy_joule)
-            Energy = ClauseEnergy_joule->getArg()->getPrettyArg();
 
         std::string NewCode;
         if (ClauseOn) {
             llvm::outs() << DEBUG
                          << "Unsupported feature: IMPLEMENT ME:  wait_on()";
             return true;
-        }
-        else if (ClauseLabel && ClauseRatio) {
-            NewCode = "acl_taskwait_label_ratio(" + QLabel + "," + Ratio + ");";
-        }
-        else if (ClauseLabel && ClauseEnergy_joule) {
-            NewCode = "acl_taskwait_label_energy(" + QLabel + "," + Energy + ");";
         }
         else if (ClauseLabel) {
             NewCode = "acl_taskwait_label(" + QLabel + ");";
@@ -1001,6 +988,53 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         CharSourceRange Range(SourceRange(PrologueLoc,EpilogueLoc),/*IsTokenRange=*/false);
         Replacement HostCall(Context->getSourceManager(),Range,NewCode);
         applyReplacement(ReplacementPool,HostCall);
+    }
+    else if (DI->getKind() == DK_TASKGROUP) {
+        //geterate runtime calls for taskgroup
+        ClauseList &CList = DI->getClauseList();
+
+        ClauseInfo *ClauseLabel = getClauseOfKind(CList,CK_LABEL);
+        ClauseInfo *ClauseRatio = getClauseOfKind(CList,CK_RATIO);
+        ClauseInfo *ClauseEnergy_joule = getClauseOfKind(CList,CK_ENERGY_JOULE);
+
+        std::string QLabel = "NULL";
+        std::string Ratio;
+        std::string Energy;
+
+        if (ClauseLabel)
+            QLabel = ClauseLabel->getArgAs<LabelArg>()->getQuotedLabel();
+        if (ClauseRatio)
+            Ratio = ClauseRatio->getArg()->getPrettyArg();
+        if (ClauseEnergy_joule)
+            Energy = ClauseEnergy_joule->getArg()->getPrettyArg();
+
+        std::string NewCode;
+        if (ClauseLabel && ClauseRatio) {
+            NewCode = "acl_create_group_ratio(" + QLabel + "," + Ratio + ");";
+        }
+        else if (ClauseLabel && ClauseEnergy_joule) {
+            NewCode = "acl_create_group_energy(" + QLabel + "," + Energy + ");";
+        }
+        else {
+            assert(ClauseLabel);
+            llvm::outs() << WARNING
+                         << "postpone declaration of group " << QLabel
+                         << " without constraints (energy or ratio)"
+                         << " until the first task of that group\n";
+        }
+
+        //if (!NewCode.empty())
+        {
+            std::string DirectiveSrc =
+                DI->getPrettyDirective(Context->getPrintingPolicy(),false);
+            //NewCode = "\n{" + NewCode + "\n}";
+            NewCode = "/*" + DirectiveSrc + "*/\n" + NewCode;
+            SourceLocation StartLoc = DI->getLocStart().getLocWithOffset(-8);
+            SourceLocation EndLoc = DI->getLocEnd();
+            CharSourceRange Range(SourceRange(StartLoc,EndLoc),/*IsTokenRange=*/false);
+            Replacement R(Context->getSourceManager(),Range,NewCode);
+            applyReplacement(ReplacementPool,R);
+        }
     }
 
     llvm::outs() << "\n";

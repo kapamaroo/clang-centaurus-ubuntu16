@@ -77,6 +77,7 @@ public:
     isValidDirectiveFn isValidDirectiveWrapper;
 
     isValidDirectiveFn isValidDirectiveTask;
+    isValidDirectiveFn isValidDirectiveTaskgroup;
     isValidDirectiveFn isValidDirectiveTaskwait;
     isValidDirectiveFn isValidDirectiveSubtask;
 

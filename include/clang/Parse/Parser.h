@@ -500,6 +500,7 @@ private:
     //Parse Directives
 
     ParseDirectiveFn ParseDirectiveTask;
+    ParseDirectiveFn ParseDirectiveTaskgroup;
     ParseDirectiveFn ParseDirectiveTaskwait;
     ParseDirectiveFn ParseDirectiveSubtask;
 

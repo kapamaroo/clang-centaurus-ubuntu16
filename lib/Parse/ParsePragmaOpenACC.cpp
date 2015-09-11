@@ -34,13 +34,16 @@ const unsigned DirectiveInfo::ValidDirective[DK_END] = {
         BITMASK(CK_BIND_APPROXIMATE) |
         BITMASK(CK_SUGGEST),
 
+        //taskgroup
+        BITMASK(CK_LABEL) |
+        BITMASK(CK_ENERGY_JOULE) |
+        BITMASK(CK_RATIO),
+
         //taskwait
         BITMASK(CK_LABEL) |
         BITMASK(CK_EVALFUN) |
         BITMASK(CK_ESTIMATION) |
-        BITMASK(CK_ON) |
-        BITMASK(CK_ENERGY_JOULE) |
-        BITMASK(CK_RATIO),
+        BITMASK(CK_ON),
 
         //subtask
         BITMASK(CK_APPROXFUN),
@@ -50,6 +53,7 @@ const std::string clang::openacc::ExtensionName = "acl";
 
 const std::string DirectiveInfo::Name[DK_END] = {
     "task",
+    "taskgroup",
     "taskwait",
     "subtask",
 };
@@ -712,6 +716,11 @@ Parser::ParseClauseRatio(DirectiveKind DK, ClauseInfo *CI) {
 
 bool
 Parser::ParseDirectiveTask(DirectiveInfo *DI) {
+    return ParseClauses(DI);
+}
+
+bool
+Parser::ParseDirectiveTaskgroup(DirectiveInfo *DI) {
     return ParseClauses(DI);
 }
 
