@@ -988,9 +988,9 @@ OpenACC::isValidDirectiveTaskgroup(DirectiveInfo *DI) {
             hasEnergy_jouleClause = true;
     }
 
-    if (!hasLabelClause) {
+    if (!hasLabelClause && !hasRatioClause && !hasEnergy_jouleClause) {
         S.Diag(DI->getLocStart(),diag::err_pragma_acc_test)
-            << "invalid taskgroup declaration without label()";
+            << "invalid taskgroup declaration without clauses";
         return false;
     }
 

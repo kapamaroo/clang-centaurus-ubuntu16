@@ -1009,14 +1009,13 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
             Energy = ClauseEnergy_joule->getArg()->getPrettyArg();
 
         std::string NewCode;
-        if (ClauseLabel && ClauseRatio) {
+        if (ClauseRatio) {
             NewCode = "acl_create_group_ratio(" + QLabel + "," + Ratio + ");";
         }
-        else if (ClauseLabel && ClauseEnergy_joule) {
+        else if (ClauseEnergy_joule) {
             NewCode = "acl_create_group_energy(" + QLabel + "," + Energy + ");";
         }
-        else {
-            assert(ClauseLabel);
+        else if (ClauseLabel) {
             llvm::outs() << WARNING
                          << "postpone declaration of group " << QLabel
                          << " without constraints (energy or ratio)"
