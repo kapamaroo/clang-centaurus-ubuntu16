@@ -201,6 +201,7 @@ int main(int argc, const char *argv[]) {
 
         cli.push_back("-L/usr/lib/nvidia-346");
         cli.push_back("-L/usr/lib/nvidia-340");
+        cli.push_back("-L/usr/lib/nvidia-352");
 
         cli.push_back("-lnvidia-ml");
         cli.push_back("-lpthread");
