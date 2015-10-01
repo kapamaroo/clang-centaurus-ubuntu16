@@ -84,48 +84,50 @@ struct OCLModuleInfo {
     void update() {
         //warning: assume one spir kernel per module
 
-        Function *SPIR_Kernel = 0;
+        std::vector<Function *> SPIR_Kernels;
         for (Module::iterator mi = M.begin(), me = M.end(); mi != me; ++mi) {
             Function *F = &*mi;
             if (!F || !F->size())
                 continue;
-            if (F->getCallingConv() == CallingConv::SPIR_KERNEL) {
-                SPIR_Kernel = F;
-                break;
-            }
+            if (F->getCallingConv() == CallingConv::SPIR_KERNEL)
+                SPIR_Kernels.push_back(F);
         }
-        assert(SPIR_Kernel);
+        assert(SPIR_Kernels.size());
 
+        NamedMDNode *NMDclKernels = 0;
         for (Module::named_metadata_iterator MI = M.named_metadata_begin(),
                  ME = M.named_metadata_end(); MI != ME; ++MI) {
-            NamedMDNode &NMD = *MI;
-            StringRef Name = NMD.getName();
+            NamedMDNode *NMD = &*MI;
+            StringRef Name = NMD->getName();
             //errs() << Name <<  "\n";
             if (Name.equals("opencl.kernels")) {
-                MDNode *Op = NMD.getOperand(0);
-                Op->replaceOperandWith(0,SPIR_Kernel);
-
-                Value *AddrSpace = Constant::getIntegerValue(Type::getInt32Ty(Context),APInt(32,1));
-                Value *AccessQual = MDString::get(Context,"none");
-                Value *ArgType = MDString::get(Context,"int*");
-                Value *TypeQual = MDString::get(Context,"");
-                Value *BaseType = MDString::get(Context,"int*");
-
-                insertValueToMDOperand(Op,1,AddrSpace);
-                insertValueToMDOperand(Op,2,AccessQual);
-                insertValueToMDOperand(Op,3,ArgType);
-                insertValueToMDOperand(Op,4,TypeQual);
-                insertValueToMDOperand(Op,5,BaseType);
+                NMDclKernels = NMD;
                 break;
             }
-
 #if 0
-            for (unsigned i = 0, e = NMD.getNumOperands(); i!=e; ++i){
-                if(MDNode *MD = dyn_cast_or_null<MDNode>(NMD.getOperand(i))){
+            for (unsigned i = 0, e = NMD.getNumOperands(); i!=e; ++i)
+                if(MDNode *MD = dyn_cast_or_null<MDNode>(NMD.getOperand(i)))
                     keepMetadata(MD);
-                }
-            }
 #endif
+        }
+        assert(NMDclKernels);
+
+        assert(NMDclKernels->getNumOperands() == SPIR_Kernels.size());
+        for (unsigned i = 0, e = NMDclKernels->getNumOperands(); i != e; ++i) {
+            MDNode *Op = NMDclKernels->getOperand(i);
+            Op->replaceOperandWith(0,SPIR_Kernels[i]);
+
+            Value *AddrSpace = Constant::getIntegerValue(Type::getInt32Ty(Context),APInt(32,1));
+            Value *AccessQual = MDString::get(Context,"none");
+            Value *ArgType = MDString::get(Context,"int*");
+            Value *TypeQual = MDString::get(Context,"");
+            Value *BaseType = MDString::get(Context,"int*");
+
+            insertValueToMDOperand(Op,1,AddrSpace);
+            insertValueToMDOperand(Op,2,AccessQual);
+            insertValueToMDOperand(Op,3,ArgType);
+            insertValueToMDOperand(Op,4,TypeQual);
+            insertValueToMDOperand(Op,5,BaseType);
         }
     }
 
