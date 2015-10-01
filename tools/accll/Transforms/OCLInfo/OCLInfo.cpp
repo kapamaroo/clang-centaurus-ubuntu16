@@ -117,17 +117,29 @@ struct OCLModuleInfo {
             MDNode *Op = NMDclKernels->getOperand(i);
             Op->replaceOperandWith(0,SPIR_Kernels[i]);
 
-            Value *AddrSpace = Constant::getIntegerValue(Type::getInt32Ty(Context),APInt(32,1));
+            Value *AddrSpace = Constant::getIntegerValue(Type::getInt32Ty(Context),APInt(32,0));
+            Value *AddrSpace1 = Constant::getIntegerValue(Type::getInt32Ty(Context),APInt(32,1));
             Value *AccessQual = MDString::get(Context,"none");
-            Value *ArgType = MDString::get(Context,"int*");
+            Value *ArgIntPtrType = MDString::get(Context,"int*");
+            Value *ArgIntType = MDString::get(Context,"int");
             Value *TypeQual = MDString::get(Context,"");
-            Value *BaseType = MDString::get(Context,"int*");
+            Value *BaseIntPtrType = MDString::get(Context,"int*");
+            Value *BaseIntType = MDString::get(Context,"int");
 
+
+            // add metadata for __oclprof__
+            insertValueToMDOperand(Op,1,AddrSpace1);
+            insertValueToMDOperand(Op,2,AccessQual);
+            insertValueToMDOperand(Op,3,ArgIntPtrType);
+            insertValueToMDOperand(Op,4,TypeQual);
+            insertValueToMDOperand(Op,5,BaseIntPtrType);
+
+            // add metadata for __oclprof_size__
             insertValueToMDOperand(Op,1,AddrSpace);
             insertValueToMDOperand(Op,2,AccessQual);
-            insertValueToMDOperand(Op,3,ArgType);
+            insertValueToMDOperand(Op,3,ArgIntType);
             insertValueToMDOperand(Op,4,TypeQual);
-            insertValueToMDOperand(Op,5,BaseType);
+            insertValueToMDOperand(Op,5,BaseIntType);
         }
     }
 
@@ -414,11 +426,13 @@ Function *OclProf::addProfileCounters(AliasAnalysis &AA, CallGraph &CG, Function
 
     {
         DataLayout TD(F->getParent()->getDataLayout());
-        PointerType *PtrTy =
-            Type::getIntNPtrTy(F->getContext(),
-                               TD.getIntPtrType(F->getContext(),
-                                                /*AddressSpace=*/1)->getBitWidth(),/*AS=*/1);
+        IntegerType *IntTy1 = TD.getIntPtrType(F->getContext(), /*AddressSpace=*/1);
+        PointerType *PtrTy = Type::getIntNPtrTy(F->getContext(),
+                                                IntTy1->getBitWidth(),/*AS=*/1);
+        // add parameter for profiling data buffer
         Params.push_back(PtrTy);
+        // add parameter for profiling data buffer size
+        Params.push_back(TD.getIntPtrType(F->getContext()));
     }
 
     // Add any function attributes.
@@ -441,9 +455,13 @@ Function *OclProf::addProfileCounters(AliasAnalysis &AA, CallGraph &CG, Function
     AttributesVec.clear();
 
     {
-        Argument *_NA = &NF->getArgumentList().back();
-        _NA->setName("__oclprof__");
-        _NA->addAttr(AttributeSet::get(FTy->getContext(),NF->arg_size(),Attribute::NoCapture));
+        Function::ArgumentListType::iterator E = NF->getArgumentList().end();
+        --E; --E;
+        Argument *__oclprof__ = &*E;
+        Argument *__oclprof_size__ = &NF->getArgumentList().back();
+        __oclprof__->setName("__oclprof__");
+        __oclprof__->addAttr(AttributeSet::get(FTy->getContext(),NF->arg_size(),Attribute::NoCapture));
+        __oclprof_size__->setName("__oclprof_size__");
     }
 
     F->getParent()->getFunctionList().insert(F, NF);
@@ -516,13 +534,14 @@ CallGraphNode *OclProf::backpatchWithNullPtr(AliasAnalysis &AA, CallGraph &CG,
 
         {
             DataLayout TD(F->getParent()->getDataLayout());
-            PointerType *PtrTy =
-                Type::getIntNPtrTy(F->getContext(),
-                                   TD.getIntPtrType(F->getContext(),
-                                                    /*AddressSpace=*/1)->getBitWidth(),/*AS=*/1);
-            Value *NewArg = ConstantPointerNull::get(PtrTy);
+            IntegerType *IntTy1 = TD.getIntPtrType(F->getContext(), /*AddressSpace=*/1);
+            PointerType *PtrTy = Type::getIntNPtrTy(F->getContext(),
+                                                    IntTy1->getBitWidth(),/*AS=*/1);
+            Value *__oclprof__Arg = ConstantPointerNull::get(PtrTy);
+            Value *__oclprof_size__Arg = ConstantInt::get(TD.getIntPtrType(F->getContext()),0);
 
-            Args.push_back(NewArg);
+            Args.push_back(__oclprof__Arg);
+            Args.push_back(__oclprof_size__Arg);
         }
 
         // Push any varargs arguments on the list.
@@ -632,13 +651,20 @@ void OclProf2::replaceNullPtrWithProfileCounters(AliasAnalysis &AA, CallGraph &C
             }
         }
 
-        Args.pop_back();  //_val()->print(errs()); errs() << "\n";
-        //errs() << "Caller : " << CS.getCaller()->getName() << "  -  type: ";
-        //CS.getCaller()->getFunctionType()->print(errs()); errs() << "\n";
+        {
+            Args.pop_back();  //_val()->print(errs()); errs() << "\n";
+            Args.pop_back();  //_val()->print(errs()); errs() << "\n";
+            //errs() << "Caller : " << CS.getCaller()->getName() << "  -  type: ";
+            //CS.getCaller()->getFunctionType()->print(errs()); errs() << "\n";
 
-        Argument *NewArg = &CS.getCaller()->getArgumentList().back();
-        //NewArg->print(errs()); errs() << "\n";
-        Args.push_back(NewArg);
+            Function::ArgumentListType::iterator E = CS.getCaller()->getArgumentList().end();
+            --E; --E;
+            Argument *__oclprof__Arg = &*E;
+            Argument *__oclprof_size__Arg = &CS.getCaller()->getArgumentList().back();
+            //NewArg->print(errs()); errs() << "\n";
+            Args.push_back(__oclprof__Arg);
+            Args.push_back(__oclprof_size__Arg);
+        }
 
         // Push any varargs arguments on the list.
         for (; AI != CS.arg_end(); ++AI, ++ArgIndex) {
