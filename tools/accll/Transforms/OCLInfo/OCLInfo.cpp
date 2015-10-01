@@ -367,21 +367,20 @@ bool OclProf2::runOnModule(Module &M) {
     //    CallGraphNode *CGN = *I;
     //    Function *F = CGN->getFunction();
     for (Module::iterator mi = M.begin(), me = M.end(); mi != me; ++mi) {
-        Function &F = *mi;
+        Function *F = &*mi;
 
-        // F is empty now, its body was moved to New[F]
-        //if (!F)
-        //    continue;
+        if (!F || !F->size())
+            continue;
 
 #if 1
-        if (F.getName().endswith(".__deprecated__")) {
+        if (F->getName().endswith(".__deprecated__")) {
             errs() << "found deprecated function\n";
             continue;
         }
 #endif
 
         //replaceNullPtrWithProfileCounters(AA,CG,CGN);
-        replaceNullPtrWithProfileCounters(AA,CG,CG[&F]);
+        replaceNullPtrWithProfileCounters(AA,CG,CG[F]);
     }
 
     return true;
