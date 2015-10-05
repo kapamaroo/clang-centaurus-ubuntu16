@@ -199,8 +199,8 @@ int main(int argc, const char *argv[]) {
 
         // -lpthread -lOpenCL -ldl -lrt -lm -lnvidia-ml -Lpapi-5.4.1/src/ -lpapi
 
-        cli.push_back("-L/usr/lib/nvidia-346");
         cli.push_back("-L/usr/lib/nvidia-340");
+        cli.push_back("-L/usr/lib/nvidia-346");
         cli.push_back("-L/usr/lib/nvidia-352");
 
         cli.push_back("-lnvidia-ml");
@@ -546,8 +546,9 @@ int main(int argc, const char *argv[]) {
                 std::string LibPathFlag("-L" + Config.LibPath);
                 ldcli.push_back(LibPathFlag.c_str());
 
-                ldcli.push_back("-L/usr/lib/nvidia-346");
                 ldcli.push_back("-L/usr/lib/nvidia-340");
+                ldcli.push_back("-L/usr/lib/nvidia-346");
+                ldcli.push_back("-L/usr/lib/nvidia-352");
 
                 ldcli.push_back("-lnvidia-ml");
                 ldcli.push_back("-lpthread");
