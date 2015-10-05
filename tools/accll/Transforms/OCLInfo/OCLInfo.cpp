@@ -229,6 +229,7 @@ struct OclProf : public ModulePass {
 
 struct OclProf2 : public ModulePass {
     static char ID;
+    static unsigned BBCounter;
     //virtual bool doInitialization(CallGraph &CG);
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
         AU.addRequired<AliasAnalysis>();
@@ -246,6 +247,7 @@ struct OclProf2 : public ModulePass {
     //Function *addProfileCounters(AliasAnalysis &AA, CallGraph &CG, Function *F);
     //CallGraphNode *backpatchWithNullPtr(AliasAnalysis &AA, CallGraph &CG, Function *F, Function *NF);
     void replaceNullPtrWithProfileCounters(AliasAnalysis &AA, CallGraph &CG, CallGraphNode *NF_CGN);
+    void addCalltoProfileBuiltins(AliasAnalysis &AA, CallGraph &CG, CallGraphNode *NF_CGN, Function *Builtin_inc);
 
 };
 
@@ -253,6 +255,7 @@ struct OclProf2 : public ModulePass {
 
 char OclProf::ID = 0;
 char OclProf2::ID = 0;
+unsigned OclProf2::BBCounter = 0;
 
 static RegisterPass<OclProf> Y1("oclprof","Add Profile Counters to Device Code");
 static RegisterPass<OclProf2> Y2("oclprof2","Add Profile Counters to Device Code");
@@ -365,6 +368,9 @@ bool OclProf2::runOnModule(Module &M) {
 
     //CG.print(errs(),&CG.getModule());
 
+    Function *Builtin_inc = M.getFunction("__acl_builtin__incBB");
+    assert(Builtin_inc);
+
     //for (CallGraphSCC::iterator I = SCC.begin(), E = SCC.end(); I != E; ++I) {
     //    CallGraphNode *CGN = *I;
     //    Function *F = CGN->getFunction();
@@ -385,6 +391,7 @@ bool OclProf2::runOnModule(Module &M) {
 
         //replaceNullPtrWithProfileCounters(AA,CG,CGN);
         replaceNullPtrWithProfileCounters(AA,CG,CG[F]);
+        addCalltoProfileBuiltins(AA,CG,CG[F],Builtin_inc);
     }
 
     return true;
@@ -720,5 +727,34 @@ void OclProf2::replaceNullPtrWithProfileCounters(AliasAnalysis &AA, CallGraph &C
         // Finally, remove the old call from the program, reducing the use-count of
         // F.
         Call->eraseFromParent();
+    }
+}
+
+void OclProf2::addCalltoProfileBuiltins(AliasAnalysis &AA, CallGraph &CG, CallGraphNode *NF_CGN,
+                                        Function *Builtin_inc) {
+    Function *F = NF_CGN->getFunction();
+
+    errs() << F->getName() << "  -  " << __FUNCTION__ << "\n";
+
+    for (Function::iterator BI = F->begin(), BE = F->end(); BI != BE; ++BI) {
+        const unsigned BBnum = BBCounter++;
+
+        Instruction *Term = BI->getTerminator();
+
+        SmallVector<Value*, 2> Args;
+
+        Function::ArgumentListType::iterator E = F->getArgumentList().end();
+        --E; --E;
+        Argument *__oclprof__Arg = &*E;
+        Value *__BBnum__ = ConstantInt::get(Type::getInt32Ty(F->getContext()),BBnum);
+
+        Args.push_back(__oclprof__Arg);
+        Args.push_back(__BBnum__);
+
+        CallInst *New = CallInst::Create(Builtin_inc, Args, "", Term);
+        New->setCallingConv(Builtin_inc->getCallingConv());
+        New->setDoesNotThrow();
+        New->setTailCall();
+
     }
 }
