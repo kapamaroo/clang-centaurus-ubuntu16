@@ -41,7 +41,7 @@ struct BasicBlockStatistics {
                                                  ScalarInstr(0), FloatInstr(0) {}
 
     void print() const {
-        errs() << Name << ": "
+        outs() << Name << ": "
                << MemInstr << "^mem + " << ScalarInstr << "^int + "
                << FloatInstr << "^fp = " << TotalInstr << "\n";
     }
@@ -76,8 +76,8 @@ struct OCLModuleInfo {
         MDNode *Op = dyn_cast<MDNode>(Parent->getOperand(Idx));
         MDNode *NewOp = appendValueToNewMD(Op,Val);
         Parent->replaceOperandWith(Idx,NewOp);
-        //errs() << "__________________________________\n";
-        //NewOp->print(errs());
+        //outs() << "__________________________________\n";
+        //NewOp->print(outs());
         return NewOp;
     }
 
@@ -99,7 +99,7 @@ struct OCLModuleInfo {
                  ME = M.named_metadata_end(); MI != ME; ++MI) {
             NamedMDNode *NMD = &*MI;
             StringRef Name = NMD->getName();
-            //errs() << Name <<  "\n";
+            //outs() << Name <<  "\n";
             if (Name.equals("opencl.kernels")) {
                 NMDclKernels = NMD;
                 break;
@@ -153,7 +153,7 @@ struct OCLModuleInfo {
             //the map also stores the number of each metadata node. It is the same order as in the dumped bc file.
             unsigned DestSlot = _MDNext++;
             _MDMap[N] = DestSlot;
-            //N->print(errs());
+            //N->print(outs());
         }
 
         for (unsigned i = 0, e = N->getNumOperands(); i!=e; ++i){
@@ -168,12 +168,12 @@ struct OCLModuleInfo {
                  ME = M.named_metadata_end(); MI != ME; ++MI) {
             NamedMDNode &NMD = *MI;
             StringRef Name = NMD.getName();
-            errs() << Name <<  "\n";
+            outs() << Name <<  "\n";
             if (Name.equals("opencl.kernels")) {
                 MDNode *Op = NMD.getOperand(0);
                 //Op->replaceOperandWith(0,);
-                errs() << "__________________________________\n";
-                Op->print(errs());
+                outs() << "__________________________________\n";
+                Op->print(outs());
             }
             for (unsigned i = 0, e = NMD.getNumOperands(); i!=e; ++i){
                 if(MDNode *MD = dyn_cast_or_null<MDNode>(NMD.getOperand(i))){
@@ -184,7 +184,7 @@ struct OCLModuleInfo {
     }
 
     bool runOnModule(Module &M) {
-        errs() << "OCLModuleInfo\n";
+        outs() << "OCLModuleInfo\n";
 
         //CollectMD(M);
 
@@ -294,7 +294,7 @@ FunctionStatistics OCLModuleInfo::analyzeFunc(Function &F) {
     if (BlockNum == 0)
         return out;
 
-    errs() << "\n****    Function: " << F.getName() << "    ****\n";
+    outs() << "\n****    Function: " << F.getName() << "    ****\n";
 
     for (Function::iterator BI = F.begin(), BE = F.end(); BI != BE; ++BI) {
         BasicBlockStatistics BBout = analyzeBB(*BI);
@@ -316,7 +316,7 @@ bool OclProf::runOnModule(Module &M) {
 
     DenseMap<Function *, Function *> New;
 
-    //CG.print(errs(),&CG.getModule());
+    //CG.print(outs(),&CG.getModule());
 
     std::vector<Function *> Pool;
     for (Module::iterator mi = M.begin(), me = M.end(); mi != me; ++mi) {
@@ -335,18 +335,18 @@ bool OclProf::runOnModule(Module &M) {
     //    CallGraphNode *CGN = *I;
     //    Function *F = CGN->getFunction();
 
-        //errs() << F->getNumUses() << "\n";
+        //outs() << F->getNumUses() << "\n";
         New[F] = addProfileCounters(AA,CG,F);
-        //errs() << F->getNumUses() << "\n";
-        //errs() << New[F]->getNumUses() << "\n";
+        //outs() << F->getNumUses() << "\n";
+        //outs() << New[F]->getNumUses() << "\n";
         //CallGraphNode *NEW_CGN =
         backpatchWithNullPtr(AA,CG,F,New[F]);
 
         //SCC.ReplaceNode(CGN, NEW_CGN);
 
-        //errs() << F->getNumUses() << "\n";
-        //errs() << New[F]->getNumUses() << "\n";
-        //errs() << "CGN->getNumReferences() = " << CGN->getNumReferences() << "\n";
+        //outs() << F->getNumUses() << "\n";
+        //outs() << New[F]->getNumUses() << "\n";
+        //outs() << "CGN->getNumReferences() = " << CGN->getNumReferences() << "\n";
         //replaceNullPtrWithProfileCounters(AA,CG,NEW_CGN);
     }
 
@@ -366,10 +366,13 @@ bool OclProf2::runOnModule(Module &M) {
     // changes.
     CallGraph &CG = getAnalysis<CallGraph>();
 
-    //CG.print(errs(),&CG.getModule());
+    //CG.print(outs(),&CG.getModule());
 
     Function *Builtin_inc = M.getFunction("__acl_builtin__incBB");
     assert(Builtin_inc);
+
+    // reset basic block counter for each module
+    BBCounter = 0;
 
     //for (CallGraphSCC::iterator I = SCC.begin(), E = SCC.end(); I != E; ++I) {
     //    CallGraphNode *CGN = *I;
@@ -384,7 +387,7 @@ bool OclProf2::runOnModule(Module &M) {
             continue;
 #if 1
         if (F->getName().endswith(".__deprecated__")) {
-            errs() << "found deprecated function\n";
+            outs() << "found deprecated function\n";
             continue;
         }
 #endif
@@ -394,6 +397,8 @@ bool OclProf2::runOnModule(Module &M) {
         addCalltoProfileBuiltins(AA,CG,CG[F],Builtin_inc);
     }
 
+    outs() << "Module: " << M.getModuleIdentifier() << ": " << BBCounter << " BacisBlocks\n";
+
     return true;
 }
 
@@ -401,7 +406,7 @@ Function *OclProf::addProfileCounters(AliasAnalysis &AA, CallGraph &CG, Function
     // Start by computing a new prototype for the function, which is the same as
     // the old function, but has modified arguments.
 
-    errs() << F->getName() << "  -  " << __FUNCTION__ << "\n";
+    //outs() << F->getName() << "  -  " << __FUNCTION__ << "\n";
 
     CallGraphNode *Root = CG.getExternalCallingNode();
     Root->removeAnyCallEdgeTo(CG[F]);
@@ -477,7 +482,7 @@ Function *OclProf::addProfileCounters(AliasAnalysis &AA, CallGraph &CG, Function
     F->getParent()->getFunctionList().insert(F, NF);
     NF->takeName(F);
     F->setName(NF->getName() + ".__deprecated__");
-    //NF->getFunctionType()->print(errs()); errs() << "\n";
+    //NF->getFunctionType()->print(outs()); outs() << "\n";
 
     // Since we have now created the new function, splice the body of the old
     // function right into the new function, leaving the old rotting hulk of the
@@ -502,7 +507,7 @@ Function *OclProf::addProfileCounters(AliasAnalysis &AA, CallGraph &CG, Function
 
 CallGraphNode *OclProf::backpatchWithNullPtr(AliasAnalysis &AA, CallGraph &CG,
                                                             Function *F, Function *NF) {
-    errs() << NF->getName() << "  -  " << __FUNCTION__ << "\n";
+    //outs() << NF->getName() << "  -  " << __FUNCTION__ << "\n";
 
     SmallVector<AttributeSet, 8> AttributesVec;
 
@@ -626,7 +631,7 @@ void OclProf2::replaceNullPtrWithProfileCounters(AliasAnalysis &AA, CallGraph &C
                                                  CallGraphNode *NF_CGN) {
     Function *NF = NF_CGN->getFunction();
 
-    errs() << NF->getName() << "  -  " << __FUNCTION__ << "\n";
+    //outs() << NF->getName() << "  -  " << __FUNCTION__ << "\n";
 
     SmallVector<AttributeSet, 8> AttributesVec;
 
@@ -662,16 +667,16 @@ void OclProf2::replaceNullPtrWithProfileCounters(AliasAnalysis &AA, CallGraph &C
         }
 
         {
-            Args.pop_back();  //_val()->print(errs()); errs() << "\n";
-            Args.pop_back();  //_val()->print(errs()); errs() << "\n";
-            //errs() << "Caller : " << CS.getCaller()->getName() << "  -  type: ";
-            //CS.getCaller()->getFunctionType()->print(errs()); errs() << "\n";
+            Args.pop_back();  //_val()->print(outs()); outs() << "\n";
+            Args.pop_back();  //_val()->print(outs()); outs() << "\n";
+            //outs() << "Caller : " << CS.getCaller()->getName() << "  -  type: ";
+            //CS.getCaller()->getFunctionType()->print(outs()); outs() << "\n";
 
             Function::ArgumentListType::iterator E = CS.getCaller()->getArgumentList().end();
             --E; --E;
             Argument *__oclprof__Arg = &*E;
             Argument *__oclprof_size__Arg = &CS.getCaller()->getArgumentList().back();
-            //NewArg->print(errs()); errs() << "\n";
+            //NewArg->print(outs()); outs() << "\n";
             Args.push_back(__oclprof__Arg);
             Args.push_back(__oclprof_size__Arg);
         }
@@ -686,7 +691,7 @@ void OclProf2::replaceNullPtrWithProfileCounters(AliasAnalysis &AA, CallGraph &C
             }
         }
 
-        //errs() << "Args.size() = " << Args.size() << "  -  NF params = " << NF->getFunctionType()->getNumParams() << "\n";
+        //outs() << "Args.size() = " << Args.size() << "  -  NF params = " << NF->getFunctionType()->getNumParams() << "\n";
 
         // Add any function attributes.
         if (CallPAL.hasAttributes(AttributeSet::FunctionIndex))
@@ -734,7 +739,7 @@ void OclProf2::addCalltoProfileBuiltins(AliasAnalysis &AA, CallGraph &CG, CallGr
                                         Function *Builtin_inc) {
     Function *F = NF_CGN->getFunction();
 
-    errs() << F->getName() << "  -  " << __FUNCTION__ << "\n";
+    //outs() << F->getName() << "  -  " << __FUNCTION__ << "\n";
 
     for (Function::iterator BI = F->begin(), BE = F->end(); BI != BE; ++BI) {
         const unsigned BBnum = BBCounter++;
