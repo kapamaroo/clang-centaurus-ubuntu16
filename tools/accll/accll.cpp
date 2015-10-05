@@ -686,6 +686,13 @@ accll::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
         }
         else if (Option.compare(0,2,"-l") == 0 || Option.compare(0,2,"-L") == 0)
             ExtraLinkerFlags.push_back(Option);
+        else if (Option.compare("-pg") == 0) {
+            ExtraCompilerFlags.push_back(Option);
+            // workaround for this:
+            // [LLVMdev] Program compiled with Clang -pg and -O crashes with SEGFAULT
+            // http://lists.llvm.org/pipermail/llvm-dev/2013-July/064107.html
+            ExtraCompilerFlags.push_back("-fno-omit-frame-pointer");
+        }
         else
             ExtraCompilerFlags.push_back(Option);
     }
