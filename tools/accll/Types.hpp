@@ -7,6 +7,7 @@
 #include "clang/Basic/OpenACC.h"
 
 #include "Common.hpp"
+#include "CentaurusConfig.hpp"
 
 namespace clang {
     class FunctionDecl;
@@ -111,6 +112,8 @@ struct PlatformBin : public ObjRefDef, public std::vector<DeviceBin> {
 struct KernelRefDef {
     static UIDKernelMap KernelUIDMap;
 
+    const CentaurusConfig &ACLConfig;
+
     ObjRefDef HostCode;
     ObjRefDef DeviceCode;
     ObjRefDef InlineDeviceCode;
@@ -120,7 +123,7 @@ struct KernelRefDef {
 
     std::vector<PlatformBin> Binary;
 
-    KernelRefDef() {}
+    KernelRefDef(const CentaurusConfig &ACLConfig) : ACLConfig(ACLConfig) {}
 
     void findCallDeps(clang::FunctionDecl *StartFD, clang::CallGraph *CG,
                       llvm::SmallSetVector<clang::FunctionDecl *,sizeof(clang::FunctionDecl *)> &Deps);
@@ -129,7 +132,8 @@ struct KernelRefDef {
     int compile(std::string src, std::string SymbolName, std::string PrefixDef,
                 const std::vector<std::string> &options = std::vector<std::string>());
 
-    KernelRefDef(clang::ASTContext *Context,clang::FunctionDecl *FD, clang::CallGraph *CG,
+    KernelRefDef(const CentaurusConfig &ACLConfig,
+                 clang::ASTContext *Context,clang::FunctionDecl *FD, clang::CallGraph *CG,
                  const clang::openacc::DirectiveInfo *DI,
                  std::string &Extensions, std::string &UserTypes,
                  const enum clang::openacc::PrintSubtaskType = clang::openacc::K_PRINT_ALL);

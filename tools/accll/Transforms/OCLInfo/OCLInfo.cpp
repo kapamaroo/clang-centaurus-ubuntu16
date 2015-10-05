@@ -320,6 +320,8 @@ bool OclProf::runOnModule(Module &M) {
         Function *F = &*mi;
         if (!F || !F->size())
             continue;
+        if (F->getName().startswith("__acl_builtin__"))
+            continue;
         Pool.push_back(F);
     }
 
@@ -372,6 +374,8 @@ bool OclProf2::runOnModule(Module &M) {
         if (!F || !F->size())
             continue;
 
+        if (F->getName().startswith("__acl_builtin__"))
+            continue;
 #if 1
         if (F->getName().endswith(".__deprecated__")) {
             errs() << "found deprecated function\n";
