@@ -279,6 +279,7 @@ int clang_format_main(std::string FileName, std::string Style) {
                                 "result is written to the standard output.\n");
 #endif
 
+    Inplace = true;
     FileNames.push_back(FileName);
 
     bool Error = false;
