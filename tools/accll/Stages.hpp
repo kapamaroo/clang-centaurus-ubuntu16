@@ -111,8 +111,8 @@ public:
         Config(Config),
         InputFiles(InputFiles), RegularFiles(RegularFiles) {}
 
-    clang::ASTConsumer *newASTConsumer() {
-        return new Stage0_ASTConsumer(Config,InputFiles,RegularFiles);
+    std::unique_ptr<clang::ASTConsumer> newASTConsumer() {
+        return std::unique_ptr<clang::ASTConsumer>(new Stage0_ASTConsumer(Config,InputFiles,RegularFiles));
     }
 };
 
@@ -250,8 +250,8 @@ public:
         Config(Config),
         ReplacementPool(ReplacementPool),
         InputFiles(InputFiles), KernelFiles(KernelFiles) {}
-    clang::ASTConsumer *newASTConsumer() {
-        return new Stage1_ASTConsumer(Config,ReplacementPool,InputFiles,KernelFiles);
+    std::unique_ptr<clang::ASTConsumer> newASTConsumer() {
+        return std::unique_ptr<clang::ASTConsumer>(new Stage1_ASTConsumer(Config,ReplacementPool,InputFiles,KernelFiles));
     }
 };
 

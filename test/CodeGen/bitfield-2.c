@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -emit-llvm -triple x86_64 -O3 -o %t.opt.ll %s \
-// RUN:   -fdump-record-layouts 2> %t.dump.txt
+// RUN:   -fdump-record-layouts > %t.dump.txt
 // RUN: FileCheck -check-prefix=CHECK-RECORD < %t.dump.txt %s
 // RUN: FileCheck -check-prefix=CHECK-OPT < %t.opt.ll %s
 
@@ -11,10 +11,10 @@
 // CHECK-RECORD: *** Dumping IRgen Record Layout
 // CHECK-RECORD: Record: RecordDecl{{.*}}s0
 // CHECK-RECORD: Layout: <CGRecordLayout
-// CHECK-RECORD:   LLVMType:%struct.s0 = type <{ [3 x i8] }>
+// CHECK-RECORD:   LLVMType:%struct.s0 = type { [3 x i8] }
 // CHECK-RECORD:   IsZeroInitializable:1
 // CHECK-RECORD:   BitFields:[
-// CHECK-RECORD:     <CGBitFieldInfo Offset:0 Size:24 IsSigned:1 StorageSize:24 StorageAlignment:1>
+// CHECK-RECORD:     <CGBitFieldInfo Offset:0 Size:24 IsSigned:1 StorageSize:24 StorageOffset:0>
 struct __attribute((packed)) s0 {
   int f0 : 24;
 };
@@ -32,7 +32,7 @@ int f0_reload(struct s0 *a0) {
   return (a0->f0 += 1);
 }
 
-// CHECK-OPT: define i64 @test_0()
+// CHECK-OPT-LABEL: define i64 @test_0()
 // CHECK-OPT:  ret i64 1
 // CHECK-OPT: }
 unsigned long long test_0() {
@@ -51,11 +51,11 @@ unsigned long long test_0() {
 // CHECK-RECORD: *** Dumping IRgen Record Layout
 // CHECK-RECORD: Record: RecordDecl{{.*}}s1
 // CHECK-RECORD: Layout: <CGRecordLayout
-// CHECK-RECORD:   LLVMType:%struct.s1 = type <{ [3 x i8] }>
+// CHECK-RECORD:   LLVMType:%struct.s1 = type { [3 x i8] }
 // CHECK-RECORD:   IsZeroInitializable:1
 // CHECK-RECORD:   BitFields:[
-// CHECK-RECORD:     <CGBitFieldInfo Offset:0 Size:10 IsSigned:1 StorageSize:24 StorageAlignment:1>
-// CHECK-RECORD:     <CGBitFieldInfo Offset:10 Size:10 IsSigned:1 StorageSize:24 StorageAlignment:1>
+// CHECK-RECORD:     <CGBitFieldInfo Offset:0 Size:10 IsSigned:1 StorageSize:24 StorageOffset:0>
+// CHECK-RECORD:     <CGBitFieldInfo Offset:10 Size:10 IsSigned:1 StorageSize:24 StorageOffset:0>
 
 #pragma pack(push)
 #pragma pack(1)
@@ -78,7 +78,7 @@ int f1_reload(struct s1 *a0) {
   return (a0->f1 += 1234);
 }
 
-// CHECK-OPT: define i64 @test_1()
+// CHECK-OPT-LABEL: define i64 @test_1()
 // CHECK-OPT:  ret i64 210
 // CHECK-OPT: }
 unsigned long long test_1() {
@@ -99,10 +99,10 @@ unsigned long long test_1() {
 // CHECK-RECORD: *** Dumping IRgen Record Layout
 // CHECK-RECORD: Record: RecordDecl{{.*}}u2
 // CHECK-RECORD: Layout: <CGRecordLayout
-// CHECK-RECORD:   LLVMType:%union.u2 = type <{ i8 }>
+// CHECK-RECORD:   LLVMType:%union.u2 = type { i8 }
 // CHECK-RECORD:   IsZeroInitializable:1
 // CHECK-RECORD:   BitFields:[
-// CHECK-RECORD:     <CGBitFieldInfo Offset:0 Size:3 IsSigned:0 StorageSize:8 StorageAlignment:1>
+// CHECK-RECORD:     <CGBitFieldInfo Offset:0 Size:3 IsSigned:0 StorageSize:8 StorageOffset:0>
 
 union __attribute__((packed)) u2 {
   unsigned long long f0 : 3;
@@ -120,7 +120,7 @@ int f2_reload(union u2 *a0) {
   return (a0->f0 += 1234);
 }
 
-// CHECK-OPT: define i64 @test_2()
+// CHECK-OPT-LABEL: define i64 @test_2()
 // CHECK-OPT:  ret i64 2
 // CHECK-OPT: }
 unsigned long long test_2() {
@@ -156,7 +156,7 @@ int f3_reload(struct s3 *a0) {
   return (a0->f0 += 1234);
 }
 
-// CHECK-OPT: define i64 @test_3()
+// CHECK-OPT-LABEL: define i64 @test_3()
 // CHECK-OPT:  ret i64 -559039940
 // CHECK-OPT: }
 unsigned long long test_3() {
@@ -190,7 +190,7 @@ int f4_reload(struct s4 *a0) {
   return (a0->f0 += 1234) ^ (a0->f1 += 5678);
 }
 
-// CHECK-OPT: define i64 @test_4()
+// CHECK-OPT-LABEL: define i64 @test_4()
 // CHECK-OPT:  ret i64 4860
 // CHECK-OPT: }
 unsigned long long test_4() {
@@ -222,7 +222,7 @@ int f5_reload(struct s5 *a0) {
   return (a0->f0 += 0xF) ^ (a0->f1 += 0xF) ^ (a0->f2 += 0xF);
 }
 
-// CHECK-OPT: define i64 @test_5()
+// CHECK-OPT-LABEL: define i64 @test_5()
 // CHECK-OPT:  ret i64 2
 // CHECK-OPT: }
 unsigned long long test_5() {
@@ -252,7 +252,7 @@ int f6_reload(struct s6 *a0) {
   return (a0->f0 += 0xF);
 }
 
-// CHECK-OPT: define zeroext i1 @test_6()
+// CHECK-OPT-LABEL: define zeroext i1 @test_6()
 // CHECK-OPT:  ret i1 true
 // CHECK-OPT: }
 _Bool test_6() {
@@ -271,11 +271,11 @@ _Bool test_6() {
 // CHECK-RECORD: *** Dumping IRgen Record Layout
 // CHECK-RECORD: Record: RecordDecl{{.*}}s7
 // CHECK-RECORD: Layout: <CGRecordLayout
-// CHECK-RECORD:   LLVMType:%struct.s7 = type { i32, i32, i32, i8, [3 x i8], [4 x i8], [12 x i8] }
+// CHECK-RECORD:   LLVMType:%struct.s7 = type { i32, i32, i32, i8, i32, [12 x i8] }
 // CHECK-RECORD:   IsZeroInitializable:1
 // CHECK-RECORD:   BitFields:[
-// CHECK-RECORD:     <CGBitFieldInfo Offset:0 Size:5 IsSigned:1 StorageSize:8 StorageAlignment:4>
-// CHECK-RECORD:     <CGBitFieldInfo Offset:0 Size:29 IsSigned:1 StorageSize:32 StorageAlignment:16>
+// CHECK-RECORD:     <CGBitFieldInfo Offset:0 Size:5 IsSigned:1 StorageSize:8 StorageOffset:12>
+// CHECK-RECORD:     <CGBitFieldInfo Offset:0 Size:29 IsSigned:1 StorageSize:32 StorageOffset:16>
 
 struct __attribute__((aligned(16))) s7 {
   int a, b, c;
@@ -310,7 +310,7 @@ int f8_reload(struct s8 *a0) {
   return (a0->f0 += 0xFD) ^ (a0->f2 += 0xFD) ^ (a0->f3 += 0xFD);
 }
 
-// CHECK-OPT: define i32 @test_8()
+// CHECK-OPT-LABEL: define i32 @test_8()
 // CHECK-OPT:  ret i32 -3
 // CHECK-OPT: }
 unsigned test_8() {

@@ -7,6 +7,7 @@ add_clang_library(clangAST
   ASTDiagnostic.cpp
   ASTDumper.cpp
   ASTImporter.cpp
+  ASTTypeTraits.cpp
   AttrImpl.cpp
   CXXInheritance.cpp
   Comment.cpp
@@ -25,7 +26,6 @@ add_clang_library(clangAST
   DeclOpenMP.cpp
   DeclPrinter.cpp
   DeclTemplate.cpp
-  DumpXML.cpp
   Expr.cpp
   ExprClassification.cpp
   ExprConstant.cpp
@@ -34,7 +34,6 @@ add_clang_library(clangAST
   InheritViz.cpp
   ItaniumCXXABI.cpp
   ItaniumMangle.cpp
-  LambdaMangleContext.cpp
   Mangle.cpp
   MicrosoftCXXABI.cpp
   MicrosoftMangle.cpp
@@ -57,29 +56,8 @@ add_clang_library(clangAST
   TypePrinter.cpp
   VTableBuilder.cpp
   VTTBuilder.cpp
-  )
 
-add_dependencies(clangAST
-  ClangARMNeon
-  ClangAttrClasses
-  ClangAttrList
-  ClangAttrImpl
-  ClangAttrDump
-  ClangCommentCommandInfo
-  ClangCommentCommandList
-  ClangCommentNodes
-  ClangCommentHTMLTags
-  ClangCommentHTMLTagsProperties
-  ClangCommentHTMLNamedCharacterReferences
-  ClangDeclNodes
-  ClangDiagnosticAST
-  ClangDiagnosticComment
-  ClangDiagnosticCommon
-  ClangDiagnosticSema
-  ClangStmtNodes
-  )
-
-target_link_libraries(clangAST
+  LINK_LIBS
   clangBasic
   clangLex
   )

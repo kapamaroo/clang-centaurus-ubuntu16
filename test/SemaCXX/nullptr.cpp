@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fcxx-exceptions -fexceptions -fsyntax-only -verify -std=c++11 -ffreestanding %s
+// RUN: %clang_cc1 -fcxx-exceptions -fexceptions -fsyntax-only -verify -std=c++11 -ffreestanding -Wno-null-conversion %s
 #include <stdint.h>
 
 typedef decltype(nullptr) nullptr_t;
@@ -63,6 +63,9 @@ nullptr_t f(nullptr_t null)
   // You can reinterpret_cast nullptr to an integer.
   (void)reinterpret_cast<uintptr_t>(nullptr);
   (void)reinterpret_cast<uintptr_t>(*pn);
+
+  // You can't reinterpret_cast nullptr to any integer
+  (void)reinterpret_cast<char>(nullptr); // expected-error {{cast from pointer to smaller type 'char' loses information}}
 
   int *ip = *pn;
   if (*pn) { }

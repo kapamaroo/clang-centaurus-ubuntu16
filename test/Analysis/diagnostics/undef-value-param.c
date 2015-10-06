@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-output=text -verify %s
-// RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-output=plist-multi-file %s -o %t.plist
+// RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-output=plist-multi-file -analyzer-config path-diagnostics-alternate=false %s -o %t.plist
 // RUN: FileCheck --input-file=%t.plist %s
 
 void foo_irrelevant(int c) {
@@ -435,6 +435,7 @@ double testPassingParentRegionStruct(int x) {
 // CHECK-NEXT:    <key>description</key><string>The left operand of &apos;+&apos; is a garbage value</string>
 // CHECK-NEXT:    <key>category</key><string>Logic error</string>
 // CHECK-NEXT:    <key>type</key><string>Result of operation is garbage or undefined</string>
+// CHECK-NEXT:    <key>check_name</key><string>core.UndefinedBinaryOperatorResult</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>function</string>
 // CHECK-NEXT:   <key>issue_context</key><string>use</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>7</string>
@@ -752,6 +753,7 @@ double testPassingParentRegionStruct(int x) {
 // CHECK-NEXT:    <key>description</key><string>The right operand of &apos;*&apos; is a garbage value</string>
 // CHECK-NEXT:    <key>category</key><string>Logic error</string>
 // CHECK-NEXT:    <key>type</key><string>Result of operation is garbage or undefined</string>
+// CHECK-NEXT:    <key>check_name</key><string>core.UndefinedBinaryOperatorResult</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>function</string>
 // CHECK-NEXT:   <key>issue_context</key><string>testPassingParentRegionArray</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>4</string>
@@ -1166,6 +1168,7 @@ double testPassingParentRegionStruct(int x) {
 // CHECK-NEXT:    <key>description</key><string>Dereference of null pointer (loaded from field &apos;f1&apos;)</string>
 // CHECK-NEXT:    <key>category</key><string>Logic error</string>
 // CHECK-NEXT:    <key>type</key><string>Dereference of null pointer</string>
+// CHECK-NEXT:    <key>check_name</key><string>core.NullDereference</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>function</string>
 // CHECK-NEXT:   <key>issue_context</key><string>testPassingParentRegionStruct</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>5</string>

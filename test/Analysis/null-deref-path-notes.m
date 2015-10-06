@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-store=region -analyzer-output=text -fblocks -verify -Wno-objc-root-class %s
-// RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-store=region -analyzer-output=plist-multi-file -fblocks -Wno-objc-root-class %s -o %t
+// RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-store=region -analyzer-output=plist-multi-file -analyzer-config path-diagnostics-alternate=false -fblocks -Wno-objc-root-class %s -o %t
 // RUN: FileCheck --input-file=%t %s
 
 @interface Root {
@@ -283,6 +283,7 @@ void repeatedStores(int coin) {
 // CHECK-NEXT:    <key>description</key><string>Dereference of null pointer (loaded from variable &apos;x&apos;)</string>
 // CHECK-NEXT:    <key>category</key><string>Logic error</string>
 // CHECK-NEXT:    <key>type</key><string>Dereference of null pointer</string>
+// CHECK-NEXT:    <key>check_name</key><string>core.NullDereference</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>function</string>
 // CHECK-NEXT:   <key>issue_context</key><string>testNull</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>6</string>
@@ -508,6 +509,7 @@ void repeatedStores(int coin) {
 // CHECK-NEXT:    <key>description</key><string>Access to instance variable &apos;uniqueID&apos; results in a dereference of a null pointer (loaded from variable &apos;self&apos;)</string>
 // CHECK-NEXT:    <key>category</key><string>Logic error</string>
 // CHECK-NEXT:    <key>type</key><string>Dereference of null pointer</string>
+// CHECK-NEXT:    <key>check_name</key><string>core.NullDereference</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>Objective-C method</string>
 // CHECK-NEXT:   <key>issue_context</key><string>initWithID:</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>6</string>
@@ -782,6 +784,7 @@ void repeatedStores(int coin) {
 // CHECK-NEXT:    <key>description</key><string>Dereference of null pointer (loaded from variable &apos;p&apos;)</string>
 // CHECK-NEXT:    <key>category</key><string>Logic error</string>
 // CHECK-NEXT:    <key>type</key><string>Dereference of null pointer</string>
+// CHECK-NEXT:    <key>check_name</key><string>core.NullDereference</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>function</string>
 // CHECK-NEXT:   <key>issue_context</key><string>repeatedStores</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>11</string>

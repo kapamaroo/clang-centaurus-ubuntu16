@@ -51,20 +51,51 @@ void func()
 }
 
 // rdar://9157348
+// rdar://15757510
 
 @interface J
-@property (retain) id newFoo; // expected-note {{property declared here}}
-@property (strong) id copyBar; // expected-note {{property declared here}}
-@property (copy) id allocBaz; // expected-note {{property declared here}}
+@property (retain) id newFoo; // expected-error {{property follows Cocoa naming convention for returning 'owned' objects}} expected-note{{explicitly declare getter '-newFoo' with '__attribute__((objc_method_family(none)))' to return an 'unowned' object}}
+@property (strong) id copyBar;  // expected-error {{property follows Cocoa naming convention for returning 'owned' objects}} expected-note{{explicitly declare getter '-copyBar' with '__attribute__((objc_method_family(none)))' to return an 'unowned' object}}
+@property (copy) id allocBaz; // expected-error {{property follows Cocoa naming convention for returning 'owned' objects}} expected-note{{explicitly declare getter '-allocBaz' with '__attribute__((objc_method_family(none)))' to return an 'unowned' object}}
 @property (copy, nonatomic) id new;
+@property (retain) id newDFoo; // expected-error {{property follows Cocoa naming convention for returning 'owned' objects}} expected-note{{explicitly declare getter '-newDFoo' with '__attribute__((objc_method_family(none)))' to return an 'unowned' object}}
+@property (strong) id copyDBar; // expected-error {{property follows Cocoa naming convention for returning 'owned' objects}} expected-note{{explicitly declare getter '-copyDBar' with '__attribute__((objc_method_family(none)))' to return an 'unowned' object}}
+@property (copy) id allocDBaz; // expected-error {{property follows Cocoa naming convention for returning 'owned' objects}} expected-note{{explicitly declare getter '-allocDBaz' with '__attribute__((objc_method_family(none)))' to return an 'unowned' object}}
 @end
 
 @implementation J
-@synthesize newFoo;	// expected-error {{property's synthesized getter follows Cocoa naming convention for returning}}
-@synthesize copyBar;	// expected-error {{property's synthesized getter follows Cocoa naming convention for returning}}
-@synthesize allocBaz;	// expected-error {{property's synthesized getter follows Cocoa naming convention for returning}}
+@synthesize newFoo;
+@synthesize copyBar;
+@synthesize allocBaz;
 @synthesize new;
 - new {return 0; };
+
+@dynamic newDFoo;
+@dynamic copyDBar; 
+@dynamic allocDBaz;
+@end
+
+
+@interface MethodFamilyDiags
+@property (retain) id newFoo; // expected-error {{property follows Cocoa naming convention for returning 'owned' objects}}
+- (id)newFoo; // expected-note {{explicitly declare getter '-newFoo' with '__attribute__((objc_method_family(none)))' to return an 'unowned' object}}
+
+#define OBJC_METHOD_FAMILY_NONE __attribute__((objc_method_family(none)))
+- (id)newBar; // expected-note {{explicitly declare getter '-newBar' with 'OBJC_METHOD_FAMILY_NONE' to return an 'unowned' object}}
+@property (retain) id newBar; // expected-error {{property follows Cocoa naming convention for returning 'owned' objects}}
+
+@property (retain) id newBaz; // expected-error {{property follows Cocoa naming convention for returning 'owned' objects}} expected-note {{explicitly declare getter '-newBaz' with 'OBJC_METHOD_FAMILY_NONE' to return an 'unowned' object}}
+#undef OBJC_METHOD_FAMILY_NONE
+
+@property (retain, readonly) id newGarply; // expected-error {{property follows Cocoa naming convention for returning 'owned' objects}} expected-note {{explicitly declare getter '-newGarply' with '__attribute__((objc_method_family(none)))' to return an 'unowned' object}}
+@end
+
+@interface MethodFamilyDiags (Redeclarations)
+- (id)newGarply; // no note here
+@end
+
+@implementation MethodFamilyDiags
+@synthesize newGarply;
 @end
 
 
@@ -99,3 +130,27 @@ void test7(void) {
   I *y;
   J **py = &y; // expected-error {{pointer to non-const type 'J *' with no explicit ownership}} expected-warning {{incompatible pointer types initializing}}
 }
+
+void func(void) __attribute__((objc_ownership(none)));  // expected-warning {{'objc_ownership' only applies to Objective-C object or block pointer types; type here is 'void (void)'}}
+struct __attribute__((objc_ownership(none))) S2 {}; // expected-error {{'objc_ownership' attribute only applies to variables}}
+@interface I2
+    @property __attribute__((objc_ownership(frob))) id i; // expected-warning {{'objc_ownership' attribute argument not supported: 'frob'}}
+@end
+
+// rdar://15304886
+@interface NSObject @end
+
+@interface ControllerClass : NSObject @end
+
+@interface SomeClassOwnedByController
+@property (readonly) ControllerClass *controller; // expected-note {{property declared here}}
+
+// rdar://15465916
+@property (readonly, weak) ControllerClass *weak_controller;
+@end
+
+@interface SomeClassOwnedByController ()
+@property (readwrite, weak) ControllerClass *controller; // expected-warning {{primary property declaration is implicitly strong while redeclaration in class extension is weak}}
+
+@property (readwrite, weak) ControllerClass *weak_controller;
+@end

@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-output=text -analyzer-config graph-trim-interval=5 -verify %s
-// RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-output=plist-multi-file -analyzer-config graph-trim-interval=5 %s -o %t.plist
+// RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-output=plist-multi-file -analyzer-config graph-trim-interval=5 -analyzer-config path-diagnostics-alternate=false %s -o %t.plist
 // RUN: FileCheck --input-file=%t.plist %s
 
 void use(int *ptr, int val) {
@@ -318,6 +318,7 @@ void testChainedCalls() {
 // CHECK-NEXT:    <key>description</key><string>Dereference of null pointer (loaded from variable &apos;ptr&apos;)</string>
 // CHECK-NEXT:    <key>category</key><string>Logic error</string>
 // CHECK-NEXT:    <key>type</key><string>Dereference of null pointer</string>
+// CHECK-NEXT:    <key>check_name</key><string>core.NullDereference</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>function</string>
 // CHECK-NEXT:   <key>issue_context</key><string>use</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>1</string>
@@ -775,6 +776,7 @@ void testChainedCalls() {
 // CHECK-NEXT:    <key>description</key><string>Dereference of null pointer (loaded from variable &apos;ptr&apos;)</string>
 // CHECK-NEXT:    <key>category</key><string>Logic error</string>
 // CHECK-NEXT:    <key>type</key><string>Dereference of null pointer</string>
+// CHECK-NEXT:    <key>check_name</key><string>core.NullDereference</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>function</string>
 // CHECK-NEXT:   <key>issue_context</key><string>use2</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>1</string>

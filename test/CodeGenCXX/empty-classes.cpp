@@ -1,5 +1,7 @@
 // RUN: %clang_cc1 %s -I%S -triple=x86_64-apple-darwin10 -emit-llvm -O3 -o - | FileCheck %s
 
+// CHECK: %"struct.rdar20621065::B" = type { float, float }
+
 struct Empty { };
 
 struct A { 
@@ -29,7 +31,7 @@ struct D : A, Empty {
 #define CHECK(x) if (!(x)) return __LINE__
 
 // PR7012
-// CHECK: define i32 @_Z1fv()
+// CHECK-LABEL: define i32 @_Z1fv()
 int f() {
   B b1;
 
@@ -80,3 +82,17 @@ int main() {
   return result;
 }
 #endif
+
+namespace rdar20621065 {
+  struct A {
+    float array[0];
+  };
+
+  struct B : A {
+    float left;
+    float right;
+  };
+
+  // Type checked at the top of the file.
+  B b;
+};

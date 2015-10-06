@@ -15,13 +15,17 @@ void foo (const char *c) {
   str.assign(c, str);
 }
 
-// CHECK: [[P:.*]] = {{.*}}, metadata [[CON:![0-9]*]]} ; [ DW_TAG_pointer_type ] [line 0, size 64, align 64, offset 0] [from ]
-// CHECK: [[CON]] = {{.*}}, metadata [[CH:![0-9]*]]} ; [ DW_TAG_const_type ] [line 0, size 0, align 0, offset 0] [from char]
-// CHECK: [[CH]] = {{.*}} ; [ DW_TAG_base_type ] [char] [line 0, size 8, align 8, offset 0, enc DW_ATE_signed_char]
+// CHECK: [[BS:.*]] = !DICompositeType(tag: DW_TAG_structure_type, name: "basic_string<char>"
+// CHECK-SAME:                         line: 4
+// CHECK-SAME:                         size: 8, align: 8
+// CHECK: [[TYPE:![0-9]*]] = !DISubroutineType(types: [[ARGS:.*]])
+// CHECK: [[ARGS]] = !{!{{.*}}, !{{.*}}, [[P:![0-9]*]], [[R:.*]]}
+// CHECK: [[P]] = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: [[CON:![0-9]*]]
+// CHECK: [[CON]] = !DIDerivedType(tag: DW_TAG_const_type, baseType: [[CH:![0-9]*]]
+// CHECK: [[CH]] = !DIBasicType(name: "char", size: 8, align: 8, encoding: DW_ATE_signed_char)
 
-// CHECK: {{.*}} metadata [[TYPE:![0-9]*]], {{.*}}, metadata !{{[0-9]*}}, metadata !{{[0-9]*}}, i32 8} ; [ DW_TAG_subprogram ] [line 7] [def] [scope 8] [assign]
-// CHECK: [[TYPE]] = metadata !{i32 {{.*}}, metadata [[ARGS:.*]], i32 0, i32 0} ; [ DW_TAG_subroutine_type ]
-// CHECK: [[ARGS]] = metadata !{metadata !{{.*}}, metadata !{{.*}}, metadata [[P]], metadata [[R:.*]]}
-// CHECK: [[BS:.*]] = {{.*}} ; [ DW_TAG_structure_type ] [basic_string<char>] [line 4, size 8, align 8, offset 0] [from ]
-// CHECK: [[R]] = {{.*}}, metadata [[CON2:![0-9]*]]} ; [ DW_TAG_reference_type ] [line 0, size 0, align 0, offset 0] [from ]
-// CHECK: [[CON2]] = {{.*}}, metadata [[BS]]} ; [ DW_TAG_const_type ] [line 0, size 0, align 0, offset 0] [from basic_string<char>]
+// CHECK: [[R]] = !DIDerivedType(tag: DW_TAG_reference_type, baseType: [[CON2:![0-9]*]]
+// CHECK: [[CON2]] = !DIDerivedType(tag: DW_TAG_const_type, baseType: !"_ZTS12basic_stringIcE"
+// CHECK: !DISubprogram(name: "assign"
+// CHECK-SAME:          line: 7
+// CHECK-SAME:          scopeLine: 8

@@ -19,8 +19,8 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/Support/CFG.h"
-#include "llvm/Support/CallSite.h"
+#include "llvm/IR/CFG.h"
+#include "llvm/IR/CallSite.h"
 #include "llvm/Support/Debug.h"
 
 using namespace llvm;

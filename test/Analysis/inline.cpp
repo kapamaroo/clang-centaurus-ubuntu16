@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core,unix.Malloc,debug.ExprInspection -analyzer-config ipa=inlining -verify %s
+// RUN: %clang_cc1 -analyze -analyzer-checker=core,unix.Malloc,debug.ExprInspection -analyzer-config ipa=inlining -analyzer-config c++-allocator-inlining=true -verify %s
 
 void clang_analyzer_eval(bool);
 void clang_analyzer_checkInlined(bool);
@@ -9,6 +9,7 @@ extern "C" void *malloc(size_t);
 // This is the standard placement new.
 inline void* operator new(size_t, void* __p) throw()
 {
+  clang_analyzer_checkInlined(true);// expected-warning{{TRUE}}
   return __p;
 }
 
@@ -290,6 +291,15 @@ namespace DefaultArgs {
     clang_analyzer_eval(defaultFloatReferenceZero(1) == -1); // expected-warning{{UNKNOWN}}
     clang_analyzer_eval(defaultFloatReferenceZero() == 0); // expected-warning{{UNKNOWN}}
   }
+
+  char defaultString(const char *s = "abc") {
+    return s[1];
+  }
+
+  void testString() {
+    clang_analyzer_eval(defaultString("xyz") == 'y'); // expected-warning{{TRUE}}
+    clang_analyzer_eval(defaultString() == 'b'); // expected-warning{{TRUE}}
+  }
 }
 
 namespace OperatorNew {
@@ -418,5 +428,12 @@ namespace rdar12409977  {
     // go to layer a CXXBaseObjectRegion on it, the base isn't a direct base of
     // the object region and we get an assertion failure.
     clang_analyzer_eval(obj.getThis()->x == 42); // expected-warning{{TRUE}}
+  }
+}
+
+namespace bug16307 {
+  void one_argument(int a) { }
+  void call_with_less() {
+    reinterpret_cast<void (*)()>(one_argument)(); // expected-warning{{Function taking 1 argument}}
   }
 }

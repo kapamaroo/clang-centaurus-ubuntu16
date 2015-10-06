@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -ast-print %s | FileCheck %s
+// RUN: %clang_cc1 -ast-print %s -std=gnu++11 | FileCheck %s
 
 // CHECK: r;
 // CHECK-NEXT: (r->method());
@@ -53,7 +53,7 @@ void test6() {
     test6fn((int&)y);
 }
 
-// CHECK: S s( 1, 2 );
+// CHECK: S s(1, 2);
 
 template <class S> void test7()
 {
@@ -103,6 +103,7 @@ int test11() {
 struct DefaultArgClass
 {
   DefaultArgClass(int a = 1) {}
+  DefaultArgClass(int a, int b, int c = 1) {}
 };
 
 struct NoArgClass
@@ -124,6 +125,8 @@ struct ConstrWithCleanupsClass
 // CHECK: test12
 // CHECK-NEXT: DefaultArgClass useDefaultArg;
 // CHECK-NEXT: DefaultArgClass overrideDefaultArg(1);
+// CHECK-NEXT: DefaultArgClass(1, 2);
+// CHECK-NEXT: DefaultArgClass(1, 2, 3);
 // CHECK-NEXT: NoArgClass noArg;
 // CHECK-NEXT: ConstrWithCleanupsClass cwcNoArg;
 // CHECK-NEXT: ConstrWithCleanupsClass cwcOverrideArg(48);
@@ -131,6 +134,8 @@ struct ConstrWithCleanupsClass
 void test12() {
   DefaultArgClass useDefaultArg;
   DefaultArgClass overrideDefaultArg(1);
+  DefaultArgClass tempWithDefaultArg = DefaultArgClass(1, 2);
+  DefaultArgClass tempWithExplictArg = DefaultArgClass(1, 2, 3);
   NoArgClass noArg;
   ConstrWithCleanupsClass cwcNoArg;
   ConstrWithCleanupsClass cwcOverrideArg(48);
@@ -148,3 +153,69 @@ void test13() {
   __c11_atomic_load(&i, 0);
 }
 
+
+// CHECK: void test14() {
+// CHECK:     struct X {
+// CHECK:         union {
+// CHECK:             int x;
+// CHECK:         } x;
+// CHECK:     };
+// CHECK: }
+void test14() {
+  struct X { union { int x; } x; };
+}
+
+
+// CHECK: float test15() {
+// CHECK:     return __builtin_asinf(1.F);
+// CHECK: }
+// CHECK-NOT: extern "C"
+float test15() {
+  return __builtin_asinf(1.0F);
+}
+
+namespace PR18776 {
+struct A {
+  operator void *();
+  explicit operator bool();
+  A operator&(A);
+};
+
+// CHECK: struct A
+// CHECK-NEXT: {{^[ ]*operator}} void *();
+// CHECK-NEXT: {{^[ ]*explicit}} operator bool();
+
+void bar(void *);
+
+void foo() {
+  A a, b;
+  bar(a & b);
+// CHECK: bar(a & b);
+  if (a & b)
+// CHECK: if (a & b)
+    return;
+}
+};
+
+namespace {
+void test(int i) {
+  switch (i) {
+    case 1:
+      // CHECK: {{\[\[clang::fallthrough\]\]}}
+      [[clang::fallthrough]];
+    case 2:
+      break;
+  }
+}
+}
+
+namespace {
+// CHECK: struct {{\[\[gnu::visibility\(\"hidden\"\)\]\]}} S;
+struct [[gnu::visibility("hidden")]] S;
+}
+
+// CHECK: struct CXXFunctionalCastExprPrint fce = CXXFunctionalCastExprPrint{};
+struct CXXFunctionalCastExprPrint {} fce = CXXFunctionalCastExprPrint{};
+
+// CHECK: struct CXXTemporaryObjectExprPrint toe = CXXTemporaryObjectExprPrint{};
+struct CXXTemporaryObjectExprPrint { CXXTemporaryObjectExprPrint(); } toe = CXXTemporaryObjectExprPrint{};

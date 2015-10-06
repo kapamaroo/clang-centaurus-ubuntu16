@@ -8,9 +8,9 @@
 // Tests for signed integer overflow stuff.
 // rdar://7432000 rdar://7221421
 void test1() {
-  // DEFAULT: define void @test1
-  // WRAPV: define void @test1
-  // TRAPV: define void @test1
+  // DEFAULT-LABEL: define void @test1
+  // WRAPV-LABEL: define void @test1
+  // TRAPV-LABEL: define void @test1
   extern volatile int f11G, a, b;
   
   // DEFAULT: add nsw i32
@@ -52,18 +52,18 @@ void test1() {
   
   // DEFAULT: add nsw i32 {{.*}}, -1
   // WRAPV: add i32 {{.*}}, -1
-  // TRAPV: llvm.sadd.with.overflow.i32({{.*}}, i32 -1)
-  // CATCH_UB: llvm.sadd.with.overflow.i32({{.*}}, i32 -1)
+  // TRAPV: llvm.ssub.with.overflow.i32({{.*}}, i32 1)
+  // CATCH_UB: llvm.ssub.with.overflow.i32({{.*}}, i32 1)
   // TRAPV_HANDLER: foo(
   --a;
   
   // -fwrapv should turn off inbounds for GEP's, PR9256
   extern int* P;
   ++P;
-  // DEFAULT: getelementptr inbounds i32*
-  // WRAPV: getelementptr i32*
-  // TRAPV: getelementptr inbounds i32*
-  // CATCH_UB: getelementptr inbounds i32*
+  // DEFAULT: getelementptr inbounds i32, i32*
+  // WRAPV: getelementptr i32, i32*
+  // TRAPV: getelementptr inbounds i32, i32*
+  // CATCH_UB: getelementptr inbounds i32, i32*
 
   // PR9350: char increment never overflows.
   extern volatile signed char PR9350;
@@ -72,4 +72,11 @@ void test1() {
   // TRAPV: add i8 {{.*}}, 1
   // CATCH_UB: add i8 {{.*}}, 1
   ++PR9350;
+
+  // PR24256: don't instrument __builtin_frame_address.
+  __builtin_frame_address(0 + 0);
+  // DEFAULT:  call i8* @llvm.frameaddress(i32 0)
+  // WRAPV:    call i8* @llvm.frameaddress(i32 0)
+  // TRAPV:    call i8* @llvm.frameaddress(i32 0)
+  // CATCH_UB: call i8* @llvm.frameaddress(i32 0)
 }

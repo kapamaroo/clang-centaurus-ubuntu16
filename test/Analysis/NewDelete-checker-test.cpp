@@ -1,9 +1,10 @@
 // RUN: %clang_cc1 -analyze -analyzer-checker=core,cplusplus.NewDelete -std=c++11 -fblocks -verify %s
-// RUN: %clang_cc1 -analyze -analyzer-checker=core,alpha.cplusplus.NewDeleteLeaks -DLEAKS -std=c++11 -fblocks -verify %s
+// RUN: %clang_cc1 -analyze -analyzer-checker=core,cplusplus.NewDeleteLeaks -DLEAKS -std=c++11 -fblocks -verify %s
 #include "Inputs/system-header-simulator-cxx.h"
 
 typedef __typeof__(sizeof(int)) size_t;
 extern "C" void *malloc(size_t);
+extern "C" void free (void* ptr);
 int *global;
 
 //------------------
@@ -86,6 +87,30 @@ void testNewInvalidationPlacement(PtrWrapper *w) {
   new (w) PtrWrapper(new int); // no warn
 }
 
+//-----------------------------------------
+// check for usage of zero-allocated memory
+//-----------------------------------------
+
+void testUseZeroAlloc1() {
+  int *p = (int *)operator new(0);
+  *p = 1; // expected-warning {{Use of zero-allocated memory}}
+  delete p;
+}
+
+int testUseZeroAlloc2() {
+  int *p = (int *)operator new[](0);
+  return p[0]; // expected-warning {{Use of zero-allocated memory}}
+  delete[] p;
+}
+
+void f(int);
+
+void testUseZeroAlloc3() {
+  int *p = new int[0];
+  f(*p); // expected-warning {{Use of zero-allocated memory}}
+  delete[] p;
+}
+
 //---------------
 // other checks
 //---------------
@@ -141,11 +166,6 @@ void testUseThisAfterDelete() {
   SomeClass *c = new SomeClass;
   delete c;
   c->f(0); // expected-warning{{Use of memory after it is freed}}
-}
-
-void testDeleteAlloca() {
-  int *p = (int *)__builtin_alloca(sizeof(int));
-  delete p; // expected-warning{{Memory allocated by alloca() should not be deallocated}}
 }
 
 void testDoubleDelete() {
@@ -206,3 +226,154 @@ void testConstEscapePlacementNew() {
   void *y = new (x) int;
   escapeVoidPtr(y);
 } // no-warning
+
+//============== Test Uninitialized delete delete[]========================
+void testUninitDelete() {
+  int *x;
+  int * y = new int;
+  delete y;
+  delete x; // expected-warning{{Argument to 'delete' is uninitialized}}
+}
+
+void testUninitDeleteArray() {
+  int *x;
+  int * y = new int[5];
+  delete[] y;
+  delete[] x; // expected-warning{{Argument to 'delete[]' is uninitialized}}
+}
+
+void testUninitFree() {
+  int *x;
+  free(x); // expected-warning{{Function call argument is an uninitialized value}}
+}
+
+void testUninitDeleteSink() {
+  int *x;
+  delete x; // expected-warning{{Argument to 'delete' is uninitialized}}
+  (*(volatile int *)0 = 1); // no warn
+}
+
+void testUninitDeleteArraySink() {
+  int *x;
+  delete[] x; // expected-warning{{Argument to 'delete[]' is uninitialized}}
+  (*(volatile int *)0 = 1); // no warn
+}
+
+namespace reference_count {
+  class control_block {
+    unsigned count;
+  public:
+    control_block() : count(0) {}
+    void retain() { ++count; }
+    int release() { return --count; }
+  };
+
+  template <typename T>
+  class shared_ptr {
+    T *p;
+    control_block *control;
+
+  public:
+    shared_ptr() : p(0), control(0) {}
+    explicit shared_ptr(T *p) : p(p), control(new control_block) {
+      control->retain();
+    }
+    shared_ptr(shared_ptr &other) : p(other.p), control(other.control) {
+      if (control)
+          control->retain();
+    }
+    ~shared_ptr() {
+      if (control && control->release() == 0) {
+        delete p;
+        delete control;
+      }
+    };
+
+    T &operator *() {
+      return *p;
+    };
+
+    void swap(shared_ptr &other) {
+      T *tmp = p;
+      p = other.p;
+      other.p = tmp;
+
+      control_block *ctrlTmp = control;
+      control = other.control;
+      other.control = ctrlTmp;
+    }
+  };
+
+  void testSingle() {
+    shared_ptr<int> a(new int);
+    *a = 1;
+  }
+
+  void testDouble() {
+    shared_ptr<int> a(new int);
+    shared_ptr<int> b = a;
+    *a = 1;
+  }
+
+  void testInvalidated() {
+    shared_ptr<int> a(new int);
+    shared_ptr<int> b = a;
+    *a = 1;
+
+    extern void use(shared_ptr<int> &);
+    use(b);
+  }
+
+  void testNestedScope() {
+    shared_ptr<int> a(new int);
+    {
+      shared_ptr<int> b = a;
+    }
+    *a = 1;
+  }
+
+  void testSwap() {
+    shared_ptr<int> a(new int);
+    shared_ptr<int> b;
+    shared_ptr<int> c = a;
+    shared_ptr<int>(c).swap(b);
+  }
+
+  void testUseAfterFree() {
+    int *p = new int;
+    {
+      shared_ptr<int> a(p);
+      shared_ptr<int> b = a;
+    }
+
+    // FIXME: We should get a warning here, but we don't because we've
+    // conservatively modeled ~shared_ptr.
+    *p = 1;
+  }
+}
+
+// Test double delete
+class DerefClass{
+public:
+  int *x;
+  DerefClass() {}
+  ~DerefClass() {*x = 1;}
+};
+
+void testDoubleDeleteClassInstance() {
+  DerefClass *foo = new DerefClass();
+  delete foo;
+  delete foo; // expected-warning {{Attempt to delete released memory}}
+}
+
+class EmptyClass{
+public:
+  EmptyClass() {}
+  ~EmptyClass() {}
+};
+
+void testDoubleDeleteEmptyClass() {
+  EmptyClass *foo = new EmptyClass();
+  delete foo;
+  delete foo;  // expected-warning {{Attempt to delete released memory}}
+}

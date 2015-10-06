@@ -1,17 +1,28 @@
 set(LLVM_LINK_COMPONENTS support)
-set(LLVM_USED_LIBS clangFormat clangTooling clangBasic clangAST)
 
 add_clang_executable(clang-format
   ClangFormat.cpp
   )
 
-target_link_libraries(clang-format
-  clangFormat
-  clangTooling
+set(CLANG_FORMAT_LIB_DEPS
   clangBasic
-  clangRewriteFrontend
+  clangFormat
+  clangRewrite
+  clangToolingCore
   )
 
-install(TARGETS clang-format
-  RUNTIME DESTINATION bin)
+target_link_libraries(clang-format
+  ${CLANG_FORMAT_LIB_DEPS}
+  )
 
+if( LLVM_USE_SANITIZE_COVERAGE )
+  add_subdirectory(fuzzer)
+endif()
+
+install(TARGETS clang-format RUNTIME DESTINATION bin)
+install(PROGRAMS clang-format-bbedit.applescript DESTINATION share/clang)
+install(PROGRAMS clang-format-diff.py DESTINATION share/clang)
+install(PROGRAMS clang-format-sublime.py DESTINATION share/clang)
+install(PROGRAMS clang-format.el DESTINATION share/clang)
+install(PROGRAMS clang-format.py DESTINATION share/clang)
+install(PROGRAMS git-clang-format DESTINATION bin)

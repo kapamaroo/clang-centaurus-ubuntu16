@@ -1,6 +1,6 @@
 // RUN: %clang_cc1 %s -fsyntax-only -std=c99 -pedantic -verify -Wundef
 // RUN: %clang_cc1 %s -fsyntax-only -x c++ -pedantic -verify -Wundef
-// RUN: %clang_cc1 %s -fsyntax-only -std=c99 -pedantic -Wundef 2>&1 | FileCheck -strict-whitespace %s
+// RUN: not %clang_cc1 %s -fsyntax-only -std=c99 -pedantic -Wundef 2>&1 | FileCheck -strict-whitespace %s
 
 #define \u00FC
 #define a\u00FD() 0
@@ -24,9 +24,9 @@
 #endif
 
 // Make sure we reject disallowed UCNs
-#define \ufffe // expected-error {{macro names must be identifiers}}
-#define \U10000000  // expected-error {{macro names must be identifiers}}
-#define \u0061  // expected-error {{character 'a' cannot be specified by a universal character name}} expected-error {{macro names must be identifiers}}
+#define \ufffe // expected-error {{macro name must be an identifier}}
+#define \U10000000  // expected-error {{macro name must be an identifier}}
+#define \u0061  // expected-error {{character 'a' cannot be specified by a universal character name}} expected-error {{macro name must be an identifier}}
 
 // FIXME: Not clear what our behavior should be here; \u0024 is "$".
 #define a\u0024  // expected-warning {{whitespace}}

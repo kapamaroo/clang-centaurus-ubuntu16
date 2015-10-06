@@ -16,3 +16,18 @@ void bar() __attribute__((__const));
 // FIXME: Print this with correct format and order.
 // CHECK: void foo1() __attribute__((pure)) __attribute__((noinline));
 void foo1() __attribute__((noinline, pure));
+
+// CHECK: typedef int Small1 __attribute__((mode(byte)));
+typedef int Small1 __attribute__((mode(byte)));
+
+// CHECK: int small __attribute__((mode(byte)));
+int small __attribute__((mode(byte)));
+
+// CHECK: int v __attribute__((visibility("hidden")));
+int v __attribute__((visibility("hidden")));
+
+// CHECK: class __attribute__((consumable("unknown"))) AttrTester1
+class __attribute__((consumable(unknown))) AttrTester1 {
+  // CHECK: void callableWhen() __attribute__((callable_when("unconsumed", "consumed")));
+  void callableWhen()  __attribute__((callable_when("unconsumed", "consumed")));
+};

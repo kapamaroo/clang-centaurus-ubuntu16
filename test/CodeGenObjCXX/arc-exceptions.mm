@@ -11,7 +11,7 @@ void test0(void) {
   } @catch (Ety *e) {
   }
 }
-// CHECK: define void @_Z5test0v()
+// CHECK-LABEL: define void @_Z5test0v()
 // CHECK:      [[E:%.*]] = alloca [[ETY:%.*]]*, align 8
 // CHECK-NEXT: invoke void @_Z12test0_helperv()
 // CHECK:      [[T0:%.*]] = call i8* @objc_begin_catch(
@@ -31,7 +31,7 @@ void test1(void) {
   } @catch (__weak Ety *e) {
   }
 }
-// CHECK: define void @_Z5test1v()
+// CHECK-LABEL: define void @_Z5test1v()
 // CHECK:      [[E:%.*]] = alloca [[ETY:%.*]]*, align 8
 // CHECK-NEXT: invoke void @_Z12test1_helperv()
 // CHECK:      [[T0:%.*]] = call i8* @objc_begin_catch(
@@ -50,7 +50,7 @@ void test2(void) {
   } catch (Ety *e) {
   }
 }
-// CHECK: define void @_Z5test2v()
+// CHECK-LABEL: define void @_Z5test2v()
 // CHECK:      [[E:%.*]] = alloca [[ETY:%.*]]*, align 8
 // CHECK-NEXT: invoke void @_Z12test2_helperv()
 // CHECK:      [[T0:%.*]] = call i8* @__cxa_begin_catch(
@@ -70,7 +70,7 @@ void test3(void) {
   } catch (Ety * __weak e) {
   }
 }
-// CHECK: define void @_Z5test3v()
+// CHECK-LABEL: define void @_Z5test3v()
 // CHECK:      [[E:%.*]] = alloca [[ETY:%.*]]*, align 8
 // CHECK-NEXT: invoke void @_Z12test3_helperv()
 // CHECK:      [[T0:%.*]] = call i8* @__cxa_begin_catch(
@@ -93,13 +93,13 @@ namespace test4 {
   A::A() {
     throw 0;
   }
-  // CHECK:    define void @_ZN5test41AC2Ev(
-  // CHECK:      [[THIS:%.*]] = load [[A:%.*]]** {{%.*}}
+  // CHECK-LABEL:    define void @_ZN5test41AC2Ev(
+  // CHECK:      [[THIS:%.*]] = load [[A:%.*]]*, [[A:%.*]]** {{%.*}}
   //   Construct single.
-  // CHECK-NEXT: [[SINGLE:%.*]] = getelementptr inbounds [[A]]* [[THIS]], i32 0, i32 0
+  // CHECK-NEXT: [[SINGLE:%.*]] = getelementptr inbounds [[A]], [[A]]* [[THIS]], i32 0, i32 0
   // CHECK-NEXT: store i8* null, i8** [[SINGLE]], align 8
   //   Construct array.
-  // CHECK-NEXT: [[ARRAY:%.*]] = getelementptr inbounds [[A]]* [[THIS]], i32 0, i32 1
+  // CHECK-NEXT: [[ARRAY:%.*]] = getelementptr inbounds [[A]], [[A]]* [[THIS]], i32 0, i32 1
   // CHECK-NEXT: [[T0:%.*]] = bitcast [2 x [3 x i8*]]* [[ARRAY]] to i8*
   // CHECK-NEXT: call void @llvm.memset.p0i8.i64(i8* [[T0]], i8 0, i64 48, i32 8, i1 false)
   //   throw 0;
@@ -107,11 +107,11 @@ namespace test4 {
   //   Landing pad from throw site:
   // CHECK:      landingpad
   //     - First, destroy all of array.
-  // CHECK:      [[ARRAYBEGIN:%.*]] = getelementptr inbounds [2 x [3 x i8*]]* [[ARRAY]], i32 0, i32 0, i32 0
-  // CHECK-NEXT: [[ARRAYEND:%.*]] = getelementptr inbounds i8** [[ARRAYBEGIN]], i64 6
+  // CHECK:      [[ARRAYBEGIN:%.*]] = getelementptr inbounds [2 x [3 x i8*]], [2 x [3 x i8*]]* [[ARRAY]], i32 0, i32 0, i32 0
+  // CHECK-NEXT: [[ARRAYEND:%.*]] = getelementptr inbounds i8*, i8** [[ARRAYBEGIN]], i64 6
   // CHECK-NEXT: br label
   // CHECK:      [[AFTER:%.*]] = phi i8** [ [[ARRAYEND]], {{%.*}} ], [ [[ELT:%.*]], {{%.*}} ]
-  // CHECK-NEXT: [[ELT]] = getelementptr inbounds i8** [[AFTER]], i64 -1
+  // CHECK-NEXT: [[ELT]] = getelementptr inbounds i8*, i8** [[AFTER]], i64 -1
   // CHECK-NEXT: call void @objc_storeStrong(i8** [[ELT]], i8* null) [[NUW]]
   // CHECK-NEXT: [[DONE:%.*]] = icmp eq i8** [[ELT]], [[ARRAYBEGIN]]
   // CHECK-NEXT: br i1 [[DONE]],

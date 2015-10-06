@@ -4,7 +4,6 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Parse/ParseDiagnostic.h"
-#include "ParsePragma.h"
 #include "clang/Sema/SemaOpenACC.h"
 #include "clang/Sema/Lookup.h"
 

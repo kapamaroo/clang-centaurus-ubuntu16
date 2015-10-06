@@ -22,7 +22,7 @@ public:
 A a, b;
 
 // PR9593
-// CHECK:      define void @_Z4funcv()
+// CHECK-LABEL:      define void @_Z4funcv()
 // CHECK:      call i32 @__cxa_guard_acquire(i64* @_ZGVZ4funcvE2a1)
 // CHECK:      call void @_ZN1AC1Ev([[A]]* @_ZZ4funcvE2a1)
 // CHECK-NEXT: call i32 @atexit(void ()* @__dtor__ZZ4funcvE2a1)
@@ -43,4 +43,4 @@ void func() {
   static A a1, a2;
 }
 
-// CHECK: attributes [[NUW]] = { nounwind }
+// CHECK: attributes [[NUW]] = { nounwind{{.*}} }

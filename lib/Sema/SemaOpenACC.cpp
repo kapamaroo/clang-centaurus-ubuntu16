@@ -734,7 +734,7 @@ OpenACC::isValidClauseEvalfun(DirectiveKind DK, ClauseInfo *CI) {
             return false;
         }
 
-        QualType ReturnType = FD->getResultType();
+        QualType ReturnType = FD->getReturnType();
         if (!FD->getNumParams() && ReturnType->isVoidType()) {
             S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
                 << "expected at least one parameter of type 'pointer to double' or return value of double type";
@@ -1257,7 +1257,7 @@ OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
     }
     }
 
-    return S.Owned(ACC);
+    return ACC;
 }
 
 bool

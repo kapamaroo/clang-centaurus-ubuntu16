@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-store=region -verify %s
+// RUN: %clang_cc1 -analyze -analyzer-checker=core -analyzer-store=region -verify %s -Wno-undefined-bool-conversion
 
 typedef __INTPTR_TYPE__ intptr_t;
 
@@ -18,6 +18,10 @@ const int& g3() {
   int &s2 = s1; // expected-note {{binding reference variable 's2' here}}
   int &s3 = s2; // expected-note {{binding reference variable 's3' here}}
   return s3; // expected-warning{{Address of stack memory associated with local variable 's1' returned}} expected-warning {{reference to stack memory associated with local variable 's1' returned}}
+}
+
+void g4() {
+  static const int &x = 3; // no warning
 }
 
 int get_value();

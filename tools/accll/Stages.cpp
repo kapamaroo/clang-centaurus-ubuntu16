@@ -114,7 +114,7 @@ ObjRefDef printFunction(clang::FunctionDecl *FD, clang::ASTContext *Context,
 #else
         Ref = getUniqueKernelName(FD->getNameAsString());
 #endif
-       if (Context->getSourceManager().isFromMainFile(FD->getLocStart()))
+       if (Context->getSourceManager().isInMainFile(FD->getLocStart()))
             FD->print(OS,Context->getPrintingPolicy());
         break;
     case K_PRINT_ACCURATE_SUBTASK: {
@@ -173,7 +173,7 @@ KernelRefDef::KernelRefDef(const CentaurusConfig &ACLConfig,
         // always write a new version if kernel has subtasks
         DeviceCode = printFunction(FD,Context,AlternativeName,SubtaskPrintMode);
     }
-    else if (Context->getSourceManager().isFromMainFile(FD->getLocStart())) {
+    else if (Context->getSourceManager().isInMainFile(FD->getLocStart())) {
         // if kernel has no subtasks write it on the new file only if it cannot
         // be found through headers
         DeviceCode = printFunction(FD,Context,AlternativeName,SubtaskPrintMode);
@@ -237,7 +237,7 @@ KernelRefDef::KernelRefDef(const CentaurusConfig &ACLConfig,
             __offline += Src.Definition;
             PreDef += Src.Definition;
         }
-        else if (Context->getSourceManager().isFromMainFile(DepFD->getLocStart())) {
+        else if (Context->getSourceManager().isInMainFile(DepFD->getLocStart())) {
             Src = printFunction(DepFD,Context,AlternativeName,SubtaskPrintMode);
             // it appears as it is, in both accurate and approximate
             // version (if exists), add it only once in the final *.cl file
@@ -1126,7 +1126,7 @@ Stage1_ASTVisitor::TraverseFunctionDecl(FunctionDecl *FD) {
         return true;
 #endif
 
-    if (!SM.isFromMainFile(FD->getSourceRange().getBegin()))
+    if (!SM.isInMainFile(FD->getSourceRange().getBegin()))
         return true;
 
     if (FD->isMain()) {
@@ -1766,7 +1766,7 @@ Stage1_ASTVisitor::VisitVarDecl(VarDecl *VD) {
     std::string DefFile = SM.getFileEntryForID(SM.getFileID(Loc))->getName();
 
     //maybe the implementation headers are not in system directories
-    if (!SM.isFromMainFile(Loc)) {
+    if (!SM.isInMainFile(Loc)) {
         if (TrackThisHeader(DefFile)) {
 #if 0
             const TagType *TT = Ty->getAs<TagType>();
@@ -1842,7 +1842,7 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
     std::string DefFile = FE->getName();
 
     //maybe the implementation headers are not in system directories
-    if (!SM.isFromMainFile(Loc)) {
+    if (!SM.isInMainFile(Loc)) {
         if (TrackThisHeader(DefFile)) {
             DepCFG[FD].DepHeaders[DefFile] = true;
 #if 0

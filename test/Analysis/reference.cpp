@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core,alpha.core,debug.ExprInspection -analyzer-store=region -analyzer-constraints=range -verify -Wno-null-dereference %s
+// RUN: %clang_cc1 -analyze -analyzer-checker=core,alpha.core,debug.ExprInspection -analyzer-store=region -analyzer-constraints=range -verify -Wno-null-dereference -Wno-tautological-undefined-compare %s
 
 void clang_analyzer_eval(bool);
 
@@ -75,6 +75,13 @@ namespace PR13440 {
     int (&x)[1];
 
     int *m() { return x; }
+
+    void testArrayToPointerDecayWithNonTypedValueRegion() {
+      int *p = x;
+      int *q = x;
+      clang_analyzer_eval(p[0] == q[0]); // expected-warning{{TRUE}}
+    }
+
   };
 
   void test() {

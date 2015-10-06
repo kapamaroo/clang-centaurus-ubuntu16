@@ -37,6 +37,8 @@ using namespace accll;
 //                        Main Tool
 ///////////////////////////////////////////////////////////////////////////////
 
+static llvm::cl::OptionCategory accllCategory("accll options");
+
 int runClang(const accll::CentaurusConfig &Config, std::string Path, SmallVector<const char *, 256> &cli) {
 #if 1
     llvm::outs() << "\n" << DEBUG << Path << " ";
@@ -58,13 +60,16 @@ int runClang(const accll::CentaurusConfig &Config, std::string Path, SmallVector
     IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
     DiagnosticsEngine Diags(DiagID, &*DiagOpts, DiagClient);
 
-    Driver TheDriver(Path, llvm::sys::getDefaultTargetTriple(), "a.out", Diags);
+    //llvm::StringRef A_OUT = "a.out";
+    Driver TheDriver(Path, llvm::sys::getDefaultTargetTriple(), Diags);
     TheDriver.setTitle("centaurus");
-    TheDriver.CCCIsCXX = Config.isCXX;
+    llvm::ArrayRef<const char *> Args("g++");
+    TheDriver.ParseDriverMode(Args);
+    //TheDriver.CCCIsCXX = Config.isCXX;
 
     llvm::InitializeAllTargets();
 
-    OwningPtr<Compilation> C(TheDriver.BuildCompilation(cli));
+    std::unique_ptr<Compilation> C(TheDriver.BuildCompilation(cli));
     if (!C.get())
         return 1;
 
@@ -116,11 +121,11 @@ int CheckGeneratedSourceFiles(int argc, const char *argv[], const accll::Centaur
     llvm::outs() << "\n";
 #endif
 
-    CommonOptionsParser OptionsParser(ARGC, ARGV.data());
+    CommonOptionsParser OptionsParser(ARGC, ARGV.data(), accllCategory);
 
     {
         ClangTool Tool5(OptionsParser.getCompilations(),Config.OutputFiles);
-        if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
+        if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>().get())) {
             llvm::errs() << "\nFATAL: __internal_error__: illegal generated source code  -  Exit.\n";
             return 1;
         }
@@ -129,7 +134,7 @@ int CheckGeneratedSourceFiles(int argc, const char *argv[], const accll::Centaur
 #if 0
     {
         ClangTool Tool5(OptionsParser.getCompilations(),Config.KernelFiles);
-        if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
+        if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>().get())) {
             llvm::errs() << "\nFATAL: __internal_error__: illegal generated source code  -  Exit.\n";
             return 1;
         }
@@ -138,7 +143,7 @@ int CheckGeneratedSourceFiles(int argc, const char *argv[], const accll::Centaur
 
     {
         ClangTool Tool5(OptionsParser.getCompilations(),Config.LibOCLFiles);
-        if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
+        if (Tool5.run(newFrontendActionFactory<SyntaxOnlyAction>().get())) {
             llvm::errs() << "\nFATAL: __internal_error__: illegal generated source code  -  Exit.\n";
             return 1;
         }
@@ -250,7 +255,7 @@ int main(int argc, const char *argv[]) {
     llvm::outs() << "\n";
 #endif
 
-    CommonOptionsParser OptionsParser(ARGC, ARGV.data());
+    CommonOptionsParser OptionsParser(ARGC, ARGV.data(), accllCategory);
 
     Config.InputFiles = OptionsParser.getSourcePathList();
 
@@ -264,7 +269,7 @@ int main(int argc, const char *argv[]) {
     llvm::outs() << "Stage0: Check input files ...\n";
     RefactoringTool Tool0(OptionsParser.getCompilations(), Config.InputFiles);
     Stage0_ConsumerFactory Stage0(Config,Config.OutputFiles,Config.RegularFiles);
-    if (Tool0.runAndSave(newFrontendActionFactory(&Stage0))) {
+    if (Tool0.runAndSave(newFrontendActionFactory(&Stage0).get())) {
         llvm::errs() << "Stage0 failed - exit.\n";
         return 1;
     }
@@ -309,7 +314,7 @@ int main(int argc, const char *argv[]) {
     llvm::outs() << "Stage1: Transform source code ...\n";
     RefactoringTool Tool1(OptionsParser.getCompilations(), Config.OutputFiles);
     Stage1_ConsumerFactory Stage1(Config,Tool1.getReplacements(),Config.LibOCLFiles,Config.KernelFiles);
-    if (Tool1.runAndSave(newFrontendActionFactory(&Stage1))) {
+    if (Tool1.runAndSave(newFrontendActionFactory(&Stage1).get())) {
         llvm::errs() << "Stage1 failed - exit.\n";
         return 1;
     }
@@ -354,9 +359,9 @@ int main(int argc, const char *argv[]) {
             KernelARGV[1 + Config.KernelFiles.size() + i] = kernel_conf[i].c_str();
 
         llvm::outs() << "Check new generated device files ...\n";
-        CommonOptionsParser KernelOptionsParser(KernelARGC, KernelARGV);
+        CommonOptionsParser KernelOptionsParser(KernelARGC, KernelARGV, accllCategory);
         ClangTool Tool6(KernelOptionsParser.getCompilations(),Config.KernelFiles);
-        if (Tool6.run(newFrontendActionFactory<SyntaxOnlyAction>())) {
+        if (Tool6.run(newFrontendActionFactory<SyntaxOnlyAction>().get())) {
             llvm::errs() << "FATAL: __internal_error__: illegal device code  -  Exit.\n";
             return 1;
         }

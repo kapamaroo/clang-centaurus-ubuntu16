@@ -16,6 +16,9 @@
 //
 //===----------------------------------------------------------------------===//
 
+#ifndef LLVM_CLANG_UNITTESTS_AST_MATCHVERIFIER_H
+#define LLVM_CLANG_UNITTESTS_AST_MATCHVERIFIER_H
+
 #include "clang/AST/ASTContext.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/ASTMatchers/ASTMatchers.h"
@@ -25,7 +28,14 @@
 namespace clang {
 namespace ast_matchers {
 
-enum Language { Lang_C, Lang_C89, Lang_CXX, Lang_OpenCL };
+enum Language { 
+    Lang_C,
+    Lang_C89,
+    Lang_CXX,
+    Lang_CXX11,
+    Lang_OpenCL,
+    Lang_OBJCXX
+};
 
 /// \brief Base class for verifying some property of nodes found by a matcher.
 template <typename NodeType>
@@ -34,15 +44,26 @@ public:
   template <typename MatcherType>
   testing::AssertionResult match(const std::string &Code,
                                  const MatcherType &AMatcher) {
-    return match(Code, AMatcher, Lang_CXX);
+    std::vector<std::string> Args;
+    return match(Code, AMatcher, Args, Lang_CXX);
   }
 
   template <typename MatcherType>
   testing::AssertionResult match(const std::string &Code,
-                                 const MatcherType &AMatcher, Language L);
+                                 const MatcherType &AMatcher,
+                                 Language L) {
+    std::vector<std::string> Args;
+    return match(Code, AMatcher, Args, L);
+  }
+
+  template <typename MatcherType>
+  testing::AssertionResult match(const std::string &Code,
+                                 const MatcherType &AMatcher,
+                                 std::vector<std::string>& Args,
+                                 Language L);
 
 protected:
-  virtual void run(const MatchFinder::MatchResult &Result);
+  void run(const MatchFinder::MatchResult &Result) override;
   virtual void verify(const MatchFinder::MatchResult &Result,
                       const NodeType &Node) {}
 
@@ -64,13 +85,13 @@ private:
 /// verifier for the matched node.
 template <typename NodeType> template <typename MatcherType>
 testing::AssertionResult MatchVerifier<NodeType>::match(
-    const std::string &Code, const MatcherType &AMatcher, Language L) {
+    const std::string &Code, const MatcherType &AMatcher,
+    std::vector<std::string>& Args, Language L) {
   MatchFinder Finder;
   Finder.addMatcher(AMatcher.bind(""), this);
-  OwningPtr<tooling::FrontendActionFactory> Factory(
+  std::unique_ptr<tooling::FrontendActionFactory> Factory(
       tooling::newFrontendActionFactory(&Finder));
 
-  std::vector<std::string> Args;
   StringRef FileName;
   switch (L) {
   case Lang_C:
@@ -85,8 +106,16 @@ testing::AssertionResult MatchVerifier<NodeType>::match(
     Args.push_back("-std=c++98");
     FileName = "input.cc";
     break;
+  case Lang_CXX11:
+    Args.push_back("-std=c++11");
+    FileName = "input.cc";
+    break;
   case Lang_OpenCL:
     FileName = "input.cl";
+    break;
+  case Lang_OBJCXX:
+    FileName = "input.mm";
+    break;
   }
 
   // Default to failure in case callback is never called
@@ -110,6 +139,20 @@ void MatchVerifier<NodeType>::run(const MatchFinder::MatchResult &Result) {
   }
 }
 
+template <>
+inline void MatchVerifier<ast_type_traits::DynTypedNode>::run(
+    const MatchFinder::MatchResult &Result) {
+  BoundNodes::IDToNodeMap M = Result.Nodes.getMap();
+  BoundNodes::IDToNodeMap::const_iterator I = M.find("");
+  if (I == M.end()) {
+    setFailure("Node was not bound");
+  } else {
+    // Callback has been called, default to success.
+    setSuccess();
+    verify(Result, I->second);
+  }
+}
+
 /// \brief Verify whether a node has the correct source location.
 ///
 /// By default, Node.getSourceLocation() is checked. This can be changed
@@ -123,7 +166,8 @@ public:
   }
 
 protected:
-  void verify(const MatchFinder::MatchResult &Result, const NodeType &Node) {
+  void verify(const MatchFinder::MatchResult &Result,
+              const NodeType &Node) override {
     SourceLocation Loc = getLocation(Node);
     unsigned Line = Result.SourceManager->getSpellingLineNumber(Loc);
     unsigned Column = Result.SourceManager->getSpellingColumnNumber(Loc);
@@ -162,7 +206,8 @@ public:
   }
 
 protected:
-  void verify(const MatchFinder::MatchResult &Result, const NodeType &Node) {
+  void verify(const MatchFinder::MatchResult &Result,
+              const NodeType &Node) override {
     SourceRange R = getRange(Node);
     SourceLocation Begin = R.getBegin();
     SourceLocation End = R.getEnd();
@@ -192,5 +237,61 @@ private:
   unsigned ExpectBeginLine, ExpectBeginColumn, ExpectEndLine, ExpectEndColumn;
 };
 
+/// \brief Verify whether a node's dump contains a given substring.
+class DumpVerifier : public MatchVerifier<ast_type_traits::DynTypedNode> {
+public:
+  void expectSubstring(const std::string &Str) {
+    ExpectSubstring = Str;
+  }
+
+protected:
+  void verify(const MatchFinder::MatchResult &Result,
+              const ast_type_traits::DynTypedNode &Node) override {
+    std::string DumpStr;
+    llvm::raw_string_ostream Dump(DumpStr);
+    Node.dump(Dump, *Result.SourceManager);
+
+    if (Dump.str().find(ExpectSubstring) == std::string::npos) {
+      std::string MsgStr;
+      llvm::raw_string_ostream Msg(MsgStr);
+      Msg << "Expected dump substring <" << ExpectSubstring << ">, found <"
+          << Dump.str() << '>';
+      this->setFailure(Msg.str());
+    }
+  }
+
+private:
+  std::string ExpectSubstring;
+};
+
+/// \brief Verify whether a node's pretty print matches a given string.
+class PrintVerifier : public MatchVerifier<ast_type_traits::DynTypedNode> {
+public:
+  void expectString(const std::string &Str) {
+    ExpectString = Str;
+  }
+
+protected:
+  void verify(const MatchFinder::MatchResult &Result,
+              const ast_type_traits::DynTypedNode &Node) override {
+    std::string PrintStr;
+    llvm::raw_string_ostream Print(PrintStr);
+    Node.print(Print, Result.Context->getPrintingPolicy());
+
+    if (Print.str() != ExpectString) {
+      std::string MsgStr;
+      llvm::raw_string_ostream Msg(MsgStr);
+      Msg << "Expected pretty print <" << ExpectString << ">, found <"
+          << Print.str() << '>';
+      this->setFailure(Msg.str());
+    }
+  }
+
+private:
+  std::string ExpectString;
+};
+
 } // end namespace ast_matchers
 } // end namespace clang
+
+#endif

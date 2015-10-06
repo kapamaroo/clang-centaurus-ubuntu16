@@ -1,4 +1,7 @@
-set(LLVM_LINK_COMPONENTS support)
+set(LLVM_LINK_COMPONENTS
+  ${LLVM_TARGETS_TO_BUILD}
+  Support
+  )
 set(LLVM_USED_LIBS clangTooling clangBasic clangAST)
 
 set(CMAKE_MODULE_PATH
@@ -17,11 +20,11 @@ ocl_utils.cpp
 ocl_compiler.cpp
 )
 target_link_libraries(accll
-clangTooling
-clangBasic
 clangASTMatchers
+clangBasic
 clangFormat
 clangRewriteFrontend
+clangTooling
 ${OPENCL_LIBRARIES}
 )
 
@@ -35,4 +38,4 @@ add_definitions(${LLVM_DEFINITIONS})
 include_directories(${LLVM_INCLUDE_DIRS})
 link_directories(${LLVM_LIBRARY_DIRS})
 
-add_subdirectory(Transforms/OCLInfo)
+# add_subdirectory(Transforms/OCLInfo)

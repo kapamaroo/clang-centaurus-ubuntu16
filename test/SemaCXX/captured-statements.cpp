@@ -81,11 +81,11 @@ void test_capture_var() {
 }
 
 template <typename S, typename T>
-S template_capture_var(S x, T y) {
+S template_capture_var(S x, T y) {  // expected-note{{variable 'y' declared const here}}
   #pragma clang _debug captured
   {
     x++;
-    y++;  // expected-error{{read-only variable is not assignable}}
+    y++;  // expected-error{{cannot assign to variable 'y' with const-qualified type 'const int'}}
   }
 
   return x;
@@ -163,4 +163,11 @@ T captured_sum(const T &a, const Args&... args) {
 void test_capture_variadic() {
   (void)captured_sum(1, 2, 3); // OK
   (void)captured_sum(1, 2, 3, 4, 5); // OK
+}
+
+void test_capture_with_attributes() {
+  [[]] // expected-error {{an attribute list cannot appear here}}
+  #pragma clang __debug captured
+  {
+  }
 }

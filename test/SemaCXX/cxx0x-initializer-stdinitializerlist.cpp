@@ -117,6 +117,7 @@ void argument_deduction() {
 
 void auto_deduction() {
   auto l = {1, 2, 3, 4};
+  auto l2 {1, 2, 3, 4}; // expected-warning {{will change meaning in a future version of Clang}}
   static_assert(same_type<decltype(l), std::initializer_list<int>>::value, "");
   auto bl = {1, 2.0}; // expected-error {{cannot deduce}}
 
@@ -144,7 +145,7 @@ namespace PR12119 {
   template<typename T> void g(std::initializer_list<std::initializer_list<T>>);
 
   void foo() {
-    f({0, {1}});
+    f({0, {1}}); // expected-warning{{braces around scalar initializer}}
     g({{0, 1}, {2, 3}});
     std::initializer_list<int> il = {1, 2};
     g({il, {2, 3}});
@@ -207,4 +208,77 @@ namespace init_list_deduction_failure {
   // expected-note@-1 {{candidate template ignored: couldn't resolve reference to overloaded function 'f'}}
   void h() { g({f}); }
   // expected-error@-1 {{no matching function for call to 'g'}}
+}
+
+namespace deleted_copy {
+  struct X {
+    X(int i) {}
+    X(const X& x) = delete; // expected-note {{here}}
+    void operator=(const X& x) = delete;
+  };
+
+  std::initializer_list<X> x{1}; // expected-error {{invokes deleted constructor}}
+}
+
+namespace RefVersusInitList {
+  struct S {};
+  void f(const S &) = delete;
+  void f(std::initializer_list<S>);
+  void g(S s) { f({S()}); }
+}
+
+namespace PR18013 {
+  int f();
+  std::initializer_list<long (*)()> x = {f}; // expected-error {{cannot initialize an array element of type 'long (*const)()' with an lvalue of type 'int ()': different return type ('long' vs 'int')}}
+}
+
+namespace DR1070 {
+  struct S {
+    S(std::initializer_list<int>);
+  };
+  S s[3] = { {1, 2, 3}, {4, 5} }; // ok
+  S *p = new S[3] { {1, 2, 3}, {4, 5} }; // ok
+}
+
+namespace ListInitInstantiate {
+  struct A {
+    A(std::initializer_list<A>);
+    A(std::initializer_list<int>);
+  };
+  struct B : A {
+    B(int);
+  };
+  template<typename T> struct X {
+    X();
+    A a;
+  };
+  template<typename T> X<T>::X() : a{B{0}, B{1}} {}
+
+  X<int> x;
+
+  int f(const A&);
+  template<typename T> void g() { int k = f({0}); }
+  template void g<int>();
+}
+
+namespace TemporaryInitListSourceRange_PR22367 {
+  struct A {
+    constexpr A() {}
+    A(std::initializer_list<int>); // expected-note {{here}}
+  };
+  constexpr int f(A) { return 0; }
+  constexpr int k = f( // expected-error {{must be initialized by a constant expression}}
+      // The point of this test is to check that the caret points to
+      // 'std::initializer_list', not to '{0}'.
+      std::initializer_list // expected-note {{constructor}}
+      <int>
+      {0}
+      );
+}
+
+namespace ParameterPackNestedInitializerLists_PR23904c3 {
+  template <typename ...T>
+  void f(std::initializer_list<std::initializer_list<T>> ...tt);
+
+  void foo() { f({{0}}, {{'\0'}}); }
 }

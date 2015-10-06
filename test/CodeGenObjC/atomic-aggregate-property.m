@@ -1,5 +1,5 @@
-// RUN: %clang_cc1 -triple x86_64-apple-darwin10  -fobjc-gc -emit-llvm -o - %s | FileCheck -check-prefix LP64 %s
-// RUN: %clang_cc1 -x objective-c++ -triple x86_64-apple-darwin10  -fobjc-gc -emit-llvm -o - %s | FileCheck -check-prefix LP64 %s
+// RUN: %clang_cc1 -triple x86_64-apple-darwin10  -fobjc-gc -emit-llvm -o - %s | FileCheck -check-prefix CHECK-LP64 %s
+// RUN: %clang_cc1 -x objective-c++ -triple x86_64-apple-darwin10  -fobjc-gc -emit-llvm -o - %s | FileCheck -check-prefix CHECK-LP64 %s
 // rdar: // 7849824
 // <rdar://problem/12547611>
 
@@ -29,7 +29,7 @@ struct s2 {};
 @synthesize a;
 @end
 // CHECK-LP64: define internal double @"\01-[A x]"(
-// CHECK-LP64: load atomic i64* {{%.*}} unordered, align 8
+// CHECK-LP64: load atomic i64, i64* {{%.*}} unordered, align 8
 
 // CHECK-LP64: define internal void @"\01-[A setX:]"(
 // CHECK-LP64: store atomic i64 {{%.*}}, i64* {{%.*}} unordered, align 8

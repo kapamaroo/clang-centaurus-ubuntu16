@@ -1,5 +1,5 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=alpha.core.FixedAddr,alpha.core.PointerArithm,alpha.core.PointerSub,debug.ExprInspection -analyzer-store=region -verify -triple x86_64-apple-darwin9 %s
-// RUN: %clang_cc1 -analyze -analyzer-checker=alpha.core.FixedAddr,alpha.core.PointerArithm,alpha.core.PointerSub,debug.ExprInspection -analyzer-store=region -verify -triple i686-apple-darwin9 %s
+// RUN: %clang_cc1 -analyze -analyzer-checker=alpha.core.FixedAddr,alpha.core.PointerArithm,alpha.core.PointerSub,debug.ExprInspection -analyzer-store=region -verify -triple x86_64-apple-darwin9 -Wno-tautological-pointer-compare %s
+// RUN: %clang_cc1 -analyze -analyzer-checker=alpha.core.FixedAddr,alpha.core.PointerArithm,alpha.core.PointerSub,debug.ExprInspection -analyzer-store=region -verify -triple i686-apple-darwin9 -Wno-tautological-pointer-compare %s
 
 void clang_analyzer_eval(int);
 
@@ -280,3 +280,19 @@ void canonical_equal(int *lhs, int *rhs) {
   // FIXME: Should be FALSE.
   clang_analyzer_eval(rhs == lhs); // expected-warning{{UNKNOWN}}
 }
+
+void compare_element_region_and_base(int *p) {
+  int *q = p - 1;
+  clang_analyzer_eval(p == q); // expected-warning{{FALSE}}
+}
+
+struct Point {
+  int x;
+  int y;
+};
+void symbolicFieldRegion(struct Point *points, int i, int j) {
+  clang_analyzer_eval(&points[i].x == &points[j].x);// expected-warning{{UNKNOWN}}
+  clang_analyzer_eval(&points[i].x == &points[i].y);// expected-warning{{FALSE}}
+  clang_analyzer_eval(&points[i].x < &points[i].y);// expected-warning{{TRUE}}
+}
+

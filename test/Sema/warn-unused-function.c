@@ -1,6 +1,6 @@
 // RUN: %clang_cc1 -fsyntax-only -Wused-but-marked-unused -Wunused-function -Wunneeded-internal-declaration -verify %s
 // RUN: %clang_cc1 -fsyntax-only -verify -Wunused %s
-// RUN: %clang_cc1 -fsyntax-only -verify -Wall %s
+// RUN: %clang_cc1 -fsyntax-only -verify -Wall -Wno-infinite-recursion %s
 
 void foo() {}
 static void f2() {} 
@@ -12,10 +12,8 @@ int x = sizeof(f0());
 static void f3();
 extern void f3() { } // expected-warning{{unused}}
 
-// FIXME: This will trigger a warning when it should not.
-// Update once PR6281 is fixed.
-//inline static void f4();
-//void f4() { }
+inline static void f4();
+void f4() { } // expected-warning{{unused}}
 
 static void __attribute__((used)) f5() {}
 static void f6();

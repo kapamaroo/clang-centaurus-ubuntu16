@@ -132,6 +132,22 @@ def test_equal():
     assert a.type != None
     assert a.type != 'foo'
 
+def test_type_spelling():
+    """Ensure Type.spelling works."""
+    tu = get_tu('int c[5]; int i[]; int x; int v[x];')
+    c = get_cursor(tu, 'c')
+    i = get_cursor(tu, 'i')
+    x = get_cursor(tu, 'x')
+    v = get_cursor(tu, 'v')
+    assert c is not None
+    assert i is not None
+    assert x is not None
+    assert v is not None
+    assert c.type.spelling == "int [5]"
+    assert i.type.spelling == "int []"
+    assert x.type.spelling == "int"
+    assert v.type.spelling == "int [x]"
+
 def test_typekind_spelling():
     """Ensure TypeKind.spelling works."""
     tu = get_tu('int a;')
@@ -237,12 +253,20 @@ void bar(int a, int b);
 
 def test_element_type():
     """Ensure Type.element_type works."""
-    tu = get_tu('int i[5];')
+    tu = get_tu('int c[5]; int i[]; int x; int v[x];')
+    c = get_cursor(tu, 'c')
     i = get_cursor(tu, 'i')
+    v = get_cursor(tu, 'v')
+    assert c is not None
     assert i is not None
+    assert v is not None
 
-    assert i.type.kind == TypeKind.CONSTANTARRAY
+    assert c.type.kind == TypeKind.CONSTANTARRAY
+    assert c.type.element_type.kind == TypeKind.INT
+    assert i.type.kind == TypeKind.INCOMPLETEARRAY
     assert i.type.element_type.kind == TypeKind.INT
+    assert v.type.kind == TypeKind.VARIABLEARRAY
+    assert v.type.element_type.kind == TypeKind.INT
 
 @raises(Exception)
 def test_invalid_element_type():
@@ -339,6 +363,7 @@ def test_offset():
     """Ensure Cursor.get_record_field_offset works in anonymous records"""
     source="""
 struct Test {
+  struct {int a;} typeanon;
   struct {
     int bariton;
     union {
@@ -347,17 +372,35 @@ struct Test {
   };
   int bar;
 };"""
-    tries=[(['-target','i386-linux-gnu'],(4,16,0,32,64)),
-           (['-target','nvptx64-unknown-unknown'],(8,24,0,32,64)),
-           (['-target','i386-pc-win32'],(8,16,0,32,64)),
-           (['-target','msp430-none-none'],(2,14,0,32,64))]
+    tries=[(['-target','i386-linux-gnu'],(4,16,0,32,64,96)),
+           (['-target','nvptx64-unknown-unknown'],(8,24,0,32,64,96)),
+           (['-target','i386-pc-win32'],(8,16,0,32,64,96)),
+           (['-target','msp430-none-none'],(2,14,0,32,64,96))]
     for flags, values in tries:
-        align,total,bariton,foo,bar = values
+        align,total,f1,bariton,foo,bar = values
         tu = get_tu(source)
         teststruct = get_cursor(tu, 'Test')
-        fields = list(teststruct.get_children())
+        children = list(teststruct.get_children())
+        fields = list(teststruct.type.get_fields())
+        assert children[0].kind == CursorKind.STRUCT_DECL
+        assert children[0].spelling != "typeanon"
+        assert children[1].spelling == "typeanon"
+        assert fields[0].kind == CursorKind.FIELD_DECL
+        assert fields[1].kind == CursorKind.FIELD_DECL
+        assert fields[1].is_anonymous()
+        assert teststruct.type.get_offset("typeanon") == f1
         assert teststruct.type.get_offset("bariton") == bariton
         assert teststruct.type.get_offset("foo") == foo
         assert teststruct.type.get_offset("bar") == bar
 
 
+def test_decay():
+    """Ensure decayed types are handled as the original type"""
+
+    tu = get_tu("void foo(int a[]);")
+    foo = get_cursor(tu, 'foo')
+    a = foo.type.argument_types()[0]
+
+    assert a.kind == TypeKind.INCOMPLETEARRAY
+    assert a.element_type.kind == TypeKind.INT
+    assert a.get_canonical().kind == TypeKind.INCOMPLETEARRAY

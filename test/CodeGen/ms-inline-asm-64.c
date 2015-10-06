@@ -1,5 +1,5 @@
-// REQUIRES: x86-64-registered-target
-// RUN: %clang_cc1 %s -triple x86_64-apple-darwin10 -O0 -fasm-blocks -emit-llvm -o - | FileCheck %s
+// REQUIRES: x86-registered-target
+// RUN: %clang_cc1 %s -triple x86_64-apple-darwin10 -fasm-blocks -emit-llvm -o - | FileCheck %s
 
 void t1() {
   int var = 10;
@@ -37,7 +37,9 @@ int t4() {
   foo.b = 2;
   __asm {
      lea ebx, foo
-     mov eax, [ebx].foo.a
+     {
+       mov eax, [ebx].foo.a
+     }
      mov [ebx].foo.b, ecx
   }
   return foo.b;

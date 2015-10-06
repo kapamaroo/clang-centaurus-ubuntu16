@@ -1,5 +1,5 @@
 // RUN: rm -rf %t
-// RUN: %clang_cc1 -fmodules-cache-path=%t -fmodules -I %S/Inputs %s -verify
+// RUN: %clang_cc1 -fmodules-cache-path=%t -fmodules -fimplicit-module-maps -I %S/Inputs %s -verify
 
 
 @import MethodPoolA;
@@ -45,6 +45,10 @@ void testMethod3(id object) {
 
 void testMethod3Again(id object) {
   char *str = [object method3]; // okay: only found in MethodPoolB.Sub
+}
+
+void testMethod6(id object) {
+  [object method6];
 }
 
 @import MethodPoolA.Sub;

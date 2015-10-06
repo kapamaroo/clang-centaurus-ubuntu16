@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -triple x86_64-apple-darwin11 -fsyntax-only -fobjc-arc -fblocks -verify %s
-// RUN: %clang_cc1 -triple x86_64-apple-darwin11 -fsyntax-only -fobjc-arc -fblocks -fdiagnostics-parseable-fixits %s 2>&1 | FileCheck %s
+// RUN: not %clang_cc1 -triple x86_64-apple-darwin11 -fsyntax-only -fobjc-arc -fblocks -fdiagnostics-parseable-fixits %s 2>&1 | FileCheck %s
 
 typedef const void *CFTypeRef;
 CFTypeRef CFBridgingRetain(id X);
@@ -62,3 +62,30 @@ CFTypeRef fixitsWithSpace(id obj) {
   // CHECK: fix-it:"{{.*}}":{59:9-59:9}:"(__bridge CFTypeRef)"
   // CHECK: fix-it:"{{.*}}":{59:9-59:9}:" CFBridgingRetain"
 }
+
+// rdar://problem/20107345
+typedef const struct __attribute__((objc_bridge(id))) __CFAnnotatedObject *CFAnnotatedObjectRef;
+CFAnnotatedObjectRef CFGetAnnotated();
+
+void testObjCBridgeId() {
+  id obj;
+  obj = (__bridge id)CFGetAnnotated();
+  obj = (__bridge NSString*)CFGetAnnotated();
+  obj = (__bridge_transfer id)CFGetAnnotated();
+  obj = (__bridge_transfer NSString*)CFGetAnnotated();
+
+  CFAnnotatedObjectRef ref;
+  ref = (__bridge CFAnnotatedObjectRef) CreateSomething();
+  ref = (__bridge CFAnnotatedObjectRef) CreateNSString();
+  ref = (__bridge_retained CFAnnotatedObjectRef) CreateSomething();
+  ref = (__bridge_retained CFAnnotatedObjectRef) CreateNSString();
+}
+
+// rdar://20113785
+typedef const struct __attribute__((objc_bridge(UIFont))) __CTFont * CTFontRef;
+
+id testObjCBridgeUnknownTypeToId(CTFontRef font) {
+  id x = (__bridge id)font;
+  return x;
+}
+

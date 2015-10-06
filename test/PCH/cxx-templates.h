@@ -269,3 +269,92 @@ template<typename T> struct ContainsDoNotDeserialize2 {
 };
 template<typename T> int ContainsDoNotDeserialize<T>::doNotDeserialize = 0;
 template<typename T> void ContainsDoNotDeserialize2<T>::doNotDeserialize() {}
+
+
+template<typename T> void DependentSpecializedFunc(T x) { x.foo(); }
+template<typename T> class DependentSpecializedFuncClass {
+  void foo() {}
+  friend void DependentSpecializedFunc<>(DependentSpecializedFuncClass);
+};
+
+namespace cyclic_module_load {
+  // Reduced from a libc++ modules crasher.
+  namespace std {
+    template<class> class mask_array;
+    template<class> class valarray {
+    public:
+      valarray(const valarray &v);
+    };
+
+    class gslice {
+      valarray<int> x;
+      valarray<int> stride() const { return x; }
+    };
+
+    template<class> class mask_array {
+      template<class> friend class valarray;
+    };
+  }
+}
+
+namespace local_extern {
+  template<typename T> int f() {
+    extern int arr[3];
+    {
+      extern T arr;
+      return sizeof(arr);
+    }
+  }
+  template<typename T> int g() {
+    extern int arr[3];
+    extern T arr;
+    return sizeof(arr);
+  }
+}
+
+namespace rdar15468709a {
+  template<typename> struct decay {};
+
+  template<typename FooParamTy> auto foo(FooParamTy fooParam) -> decltype(fooParam);
+  template<typename BarParamTy> auto bar(BarParamTy barParam) -> decay<decltype(barParam)>;
+
+  struct B {};
+
+  void crash() {
+    B some;
+    bar(some);
+  }
+}
+
+namespace rdar15468709b {
+  template<typename> struct decay {};
+
+  template<typename... Foos> int returnsInt(Foos... foos);
+
+  template<typename... FooParamTy> auto foo(FooParamTy... fooParam) -> decltype(returnsInt(fooParam...));
+  template<typename... BarParamTy> auto bar(BarParamTy... barParam) -> decay<decltype(returnsInt(barParam...))>;
+
+  struct B {};
+
+  void crash() {
+    B some;
+    bar(some);
+  }
+}
+
+namespace rdar15468709c {
+  template<typename> struct decay {};
+
+  template<class... Foos> int returnsInt(Foos... foos);
+
+  template<typename FooParamTy> void foo(FooParamTy fooParam) { decltype(fooParam) a; }
+  template<typename BarParamTy> auto bar(BarParamTy barParam) -> decay<decltype(barParam)>;
+
+  struct B {};
+
+  void crash() {
+    B some;
+    bar(some);
+  }
+}
+

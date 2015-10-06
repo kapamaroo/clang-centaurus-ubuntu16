@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -analyze -analyzer-checker=core,osx.cocoa.RetainCount,alpha.core -analyzer-store=region -analyzer-constraints=range -fblocks -analyzer-output=plist -o %t %s
+// RUN: %clang_cc1 -analyze -analyzer-checker=core,osx.cocoa.RetainCount,alpha.core -fblocks -analyzer-output=plist -analyzer-config path-diagnostics-alternate=false -o %t %s
 // RUN: FileCheck --input-file %t %s
 
 void test_null_init(void) {
@@ -158,6 +158,7 @@ void rdar8331641(int x) {
 // CHECK-NEXT:    <key>description</key><string>Dereference of null pointer (loaded from variable &apos;p&apos;)</string>
 // CHECK-NEXT:    <key>category</key><string>Logic error</string>
 // CHECK-NEXT:    <key>type</key><string>Dereference of null pointer</string>
+// CHECK-NEXT:    <key>check_name</key><string>core.NullDereference</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>function</string>
 // CHECK-NEXT:   <key>issue_context</key><string>test_null_init</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>2</string>
@@ -301,6 +302,7 @@ void rdar8331641(int x) {
 // CHECK-NEXT:    <key>description</key><string>Dereference of null pointer (loaded from variable &apos;p&apos;)</string>
 // CHECK-NEXT:    <key>category</key><string>Logic error</string>
 // CHECK-NEXT:    <key>type</key><string>Dereference of null pointer</string>
+// CHECK-NEXT:    <key>check_name</key><string>core.NullDereference</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>function</string>
 // CHECK-NEXT:   <key>issue_context</key><string>test_null_assign</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>3</string>
@@ -507,6 +509,7 @@ void rdar8331641(int x) {
 // CHECK-NEXT:    <key>description</key><string>Dereference of null pointer (loaded from variable &apos;q&apos;)</string>
 // CHECK-NEXT:    <key>category</key><string>Logic error</string>
 // CHECK-NEXT:    <key>type</key><string>Dereference of null pointer</string>
+// CHECK-NEXT:    <key>check_name</key><string>core.NullDereference</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>function</string>
 // CHECK-NEXT:   <key>issue_context</key><string>test_null_assign_transitive</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>4</string>
@@ -684,6 +687,7 @@ void rdar8331641(int x) {
 // CHECK-NEXT:    <key>description</key><string>Dereference of null pointer (loaded from variable &apos;p&apos;)</string>
 // CHECK-NEXT:    <key>category</key><string>Logic error</string>
 // CHECK-NEXT:    <key>type</key><string>Dereference of null pointer</string>
+// CHECK-NEXT:    <key>check_name</key><string>core.NullDereference</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>function</string>
 // CHECK-NEXT:   <key>issue_context</key><string>test_null_cond</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>2</string>
@@ -890,6 +894,7 @@ void rdar8331641(int x) {
 // CHECK-NEXT:    <key>description</key><string>Dereference of null pointer (loaded from variable &apos;p&apos;)</string>
 // CHECK-NEXT:    <key>category</key><string>Logic error</string>
 // CHECK-NEXT:    <key>type</key><string>Dereference of null pointer</string>
+// CHECK-NEXT:    <key>check_name</key><string>core.NullDereference</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>function</string>
 // CHECK-NEXT:   <key>issue_context</key><string>test_null_cond_transitive</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>3</string>
@@ -925,12 +930,12 @@ void rdar8331641(int x) {
 // CHECK-NEXT:          <array>
 // CHECK-NEXT:           <dict>
 // CHECK-NEXT:            <key>line</key><integer>36</integer>
-// CHECK-NEXT:            <key>col</key><integer>10</integer>
+// CHECK-NEXT:            <key>col</key><integer>24</integer>
 // CHECK-NEXT:            <key>file</key><integer>0</integer>
 // CHECK-NEXT:           </dict>
 // CHECK-NEXT:           <dict>
 // CHECK-NEXT:            <key>line</key><integer>36</integer>
-// CHECK-NEXT:            <key>col</key><integer>10</integer>
+// CHECK-NEXT:            <key>col</key><integer>24</integer>
 // CHECK-NEXT:            <key>file</key><integer>0</integer>
 // CHECK-NEXT:           </dict>
 // CHECK-NEXT:          </array>
@@ -946,12 +951,12 @@ void rdar8331641(int x) {
 // CHECK-NEXT:          <array>
 // CHECK-NEXT:           <dict>
 // CHECK-NEXT:            <key>line</key><integer>36</integer>
-// CHECK-NEXT:            <key>col</key><integer>10</integer>
+// CHECK-NEXT:            <key>col</key><integer>24</integer>
 // CHECK-NEXT:            <key>file</key><integer>0</integer>
 // CHECK-NEXT:           </dict>
 // CHECK-NEXT:           <dict>
 // CHECK-NEXT:            <key>line</key><integer>36</integer>
-// CHECK-NEXT:            <key>col</key><integer>10</integer>
+// CHECK-NEXT:            <key>col</key><integer>24</integer>
 // CHECK-NEXT:            <key>file</key><integer>0</integer>
 // CHECK-NEXT:           </dict>
 // CHECK-NEXT:          </array>
@@ -1067,6 +1072,7 @@ void rdar8331641(int x) {
 // CHECK-NEXT:    <key>description</key><string>Dereference of null pointer (loaded from field &apos;p&apos;)</string>
 // CHECK-NEXT:    <key>category</key><string>Logic error</string>
 // CHECK-NEXT:    <key>type</key><string>Dereference of null pointer</string>
+// CHECK-NEXT:    <key>check_name</key><string>core.NullDereference</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>function</string>
 // CHECK-NEXT:   <key>issue_context</key><string>test_null_field</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>3</string>
@@ -1360,6 +1366,7 @@ void rdar8331641(int x) {
 // CHECK-NEXT:    <key>description</key><string>Potential leak of an object stored into &apos;value&apos;</string>
 // CHECK-NEXT:    <key>category</key><string>Memory (Core Foundation/Objective-C)</string>
 // CHECK-NEXT:    <key>type</key><string>Leak</string>
+// CHECK-NEXT:    <key>check_name</key><string>osx.cocoa.RetainCount</string>
 // CHECK-NEXT:   <key>issue_context_kind</key><string>function</string>
 // CHECK-NEXT:   <key>issue_context</key><string>rdar8331641</string>
 // CHECK-NEXT:   <key>issue_hash</key><string>2</string>

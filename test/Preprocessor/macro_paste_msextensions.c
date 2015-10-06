@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -P -E -fms-extensions %s | FileCheck -strict-whitespace %s
+// RUN: not %clang_cc1 -P -E -fms-extensions %s | FileCheck -strict-whitespace %s
 
 // This horrible stuff should preprocess into (other than whitespace):
 //   int foo;
@@ -32,3 +32,10 @@ nested(baz)  rise of the dead tokens
 bar(q)
 
 // CHECK: abc(baz(q))
+
+
+#define str(x) #x
+#define collapse_spaces(a, b, c, d) str(a ## - ## b ## - ## c ## d)
+collapse_spaces(1a, b2, 3c, d4)
+
+// CHECK: "1a-b2-3cd4"

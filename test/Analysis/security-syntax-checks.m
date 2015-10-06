@@ -2,6 +2,10 @@
 // RUN: %clang_cc1 -triple i386-apple-darwin10 -analyze -DUSE_BUILTINS -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
 // RUN: %clang_cc1 -triple i386-apple-darwin10 -analyze -DVARIANT -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
 // RUN: %clang_cc1 -triple i386-apple-darwin10 -analyze -DUSE_BUILTINS -DVARIANT -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
+// RUN: %clang_cc1 -triple x86_64-unknown-cloudabi -analyze -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
+// RUN: %clang_cc1 -triple x86_64-unknown-cloudabi -analyze -DUSE_BUILTINS -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
+// RUN: %clang_cc1 -triple x86_64-unknown-cloudabi -analyze -DVARIANT -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
+// RUN: %clang_cc1 -triple x86_64-unknown-cloudabi -analyze -DUSE_BUILTINS -DVARIANT -analyzer-checker=security.insecureAPI,security.FloatLoopCounter %s -verify
 
 #ifdef USE_BUILTINS
 # define BUILTIN(f) __builtin_ ## f
@@ -82,10 +86,11 @@ void test_setuid()
 }
 
 // <rdar://problem/6337100> CWE-338: Use of cryptographically weak prng
+typedef  unsigned short *ushort_ptr_t;  // Test that sugar doesn't confuse the warning.
 int      rand(void);
 double   drand48(void);
 double   erand48(unsigned short[3]);
-long     jrand48(unsigned short[3]);
+long     jrand48(ushort_ptr_t);
 void     lcong48(unsigned short[7]);
 long     lrand48(void);
 long     mrand48(void);

@@ -9,6 +9,9 @@
 //
 // RUN: %clang -### -fno-honor-infinities -c %s 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-NO-INFS %s
+// infinites [sic] is a supported alternative spelling of infinities.
+// RUN: %clang -### -fno-honor-infinites -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-NO-INFS %s
 // CHECK-NO-INFS: "-cc1"
 // CHECK-NO-INFS: "-menable-no-infs"
 //
@@ -21,6 +24,36 @@
 // RUN:   | FileCheck --check-prefix=CHECK-NO-INFS-NO-FAST-MATH %s
 // CHECK-NO-INFS-NO-FAST-MATH: "-cc1"
 // CHECK-NO-INFS-NO-FAST-MATH-NOT: "-menable-no-infs"
+//
+// RUN: %clang -### -fno-signed-zeros -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-NO-SIGNED-ZEROS %s
+// CHECK-NO-SIGNED-ZEROS: "-cc1"
+// CHECK-NO-SIGNED-ZEROS: "-fno-signed-zeros"
+//
+// RUN: %clang -### -fno-fast-math -fno-signed-zeros -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-NO-FAST-MATH-NO-SIGNED-ZEROS %s
+// CHECK-NO-FAST-MATH-NO-SIGNED-ZEROS: "-cc1"
+// CHECK-NO-FAST-MATH-NO-SIGNED-ZEROS: "-fno-signed-zeros"
+//
+// RUN: %clang -### -fno-signed-zeros -fno-fast-math -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-NO-SIGNED-ZEROS-NO-FAST-MATH %s
+// CHECK-NO-SIGNED-ZEROS-NO-FAST-MATH: "-cc1"
+// CHECK-NO-SIGNED-ZEROS-NO-FAST-MATH-NOT: "-fno-signed-zeros"
+//
+// RUN: %clang -### -freciprocal-math -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-RECIPROCAL-MATH %s
+// CHECK-RECIPROCAL-MATH: "-cc1"
+// CHECK-RECIPROCAL-MATH: "-freciprocal-math"
+//
+// RUN: %clang -### -fno-fast-math -freciprocal-math -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-NO-FAST-MATH-RECIPROCAL-MATH %s
+// CHECK-NO-FAST-MATH-RECIPROCAL-MATH: "-cc1"
+// CHECK-NO-FAST-MATH-RECIPROCAL-MATH: "-freciprocal-math"
+//
+// RUN: %clang -### -freciprocal-math -fno-fast-math -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-RECIPROCAL-MATH-NO-FAST-MATH %s
+// CHECK-RECIPROCAL-MATH-NO-FAST-MATH: "-cc1"
+// CHECK-RECIPROCAL-MATH-NO-FAST-MATH-NOT: "-freciprocal-math"
 //
 // RUN: %clang -### -fno-honor-nans -c %s 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-NO-NANS %s
@@ -42,18 +75,14 @@
 // CHECK-MATH-ERRNO: "-cc1"
 // CHECK-MATH-ERRNO: "-fmath-errno"
 //
-// RUN: %clang -### -fno-fast-math -fmath-errno -c %s 2>&1 \
-// RUN:   | FileCheck --check-prefix=CHECK-NO-FAST-MATH-MATH-ERRNO %s
-// CHECK-NO-FAST-MATH-MATH-ERRNO: "-cc1"
-// CHECK-NO-FAST-MATH-MATH-ERRNO: "-fmath-errno"
-//
-// RUN: %clang -### -fmath-errno -fno-fast-math -c %s 2>&1 \
-// RUN:   | FileCheck --check-prefix=CHECK-MATH-ERRNO-NO-FAST-MATH %s
-// CHECK-MATH-ERRNO-NO-FAST-MATH: "-cc1"
-// CHECK-MATH-ERRNO-NO-FAST-MATH-NOT: "-fmath-errno"
-//
 // RUN: %clang -### -fmath-errno -fno-math-errno -c %s 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-NO-MATH-ERRNO %s
+// CHECK-NO-MATH-ERRNO: "-cc1"
+// CHECK-NO-MATH-ERRNO-NOT: "-fmath-errno"
+//
+// Target defaults for -fmath-errno (reusing the above checks).
+// RUN: %clang -### -target i686-unknown-linux -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-MATH-ERRNO %s
 // RUN: %clang -### -target i686-apple-darwin -c %s 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-NO-MATH-ERRNO %s
 // RUN: %clang -### -target x86_64-unknown-freebsd -c %s 2>&1 \
@@ -64,8 +93,26 @@
 // RUN:   | FileCheck --check-prefix=CHECK-NO-MATH-ERRNO %s
 // RUN: %clang -### -target x86_64-unknown-dragonfly -c %s 2>&1 \
 // RUN:   | FileCheck --check-prefix=CHECK-NO-MATH-ERRNO %s
-// CHECK-NO-MATH-ERRNO: "-cc1"
-// CHECK-NO-MATH-ERRNO-NOT: "-fmath-errno"
+//
+// Check that -ffast-math disables -fmath-errno, and -fno-fast-math merely
+// preserves the target default. Also check various flag set operations between
+// the two flags. (Resuses above checks.)
+// RUN: %clang -### -ffast-math -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-NO-MATH-ERRNO %s
+// RUN: %clang -### -fmath-errno -ffast-math -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-NO-MATH-ERRNO %s
+// RUN: %clang -### -ffast-math -fmath-errno -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-MATH-ERRNO %s
+// RUN: %clang -### -target i686-unknown-linux -fno-fast-math -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-MATH-ERRNO %s
+// RUN: %clang -### -target i686-unknown-linux -fno-math-errno -fno-fast-math -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-MATH-ERRNO %s
+// RUN: %clang -### -target i686-apple-darwin -fno-fast-math -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-NO-MATH-ERRNO %s
+// RUN: %clang -### -target i686-apple-darwin -fno-math-errno -fno-fast-math -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-NO-MATH-ERRNO %s
+// RUN: %clang -### -fno-fast-math -fno-math-errno -c %s 2>&1 \
+// RUN:   | FileCheck --check-prefix=CHECK-NO-MATH-ERRNO %s
 //
 // RUN: %clang -### -fno-math-errno -fassociative-math -freciprocal-math \
 // RUN:     -fno-signed-zeros -fno-trapping-math -c %s 2>&1 \

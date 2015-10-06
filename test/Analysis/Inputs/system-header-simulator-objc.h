@@ -66,8 +66,11 @@ typedef struct {
 NSFastEnumerationState;
 @protocol NSFastEnumeration  - (NSUInteger)countByEnumeratingWithState:(NSFastEnumerationState *)state objects:(id *)stackbuf count:(NSUInteger)len;
 @end           @class NSString, NSDictionary;
-@interface NSValue : NSObject <NSCopying, NSCoding>  - (void)getValue:(void *)value;
-@end  @interface NSNumber : NSValue  - (char)charValue;
+@interface NSValue : NSObject <NSCopying, NSCoding>
++ (NSValue *)valueWithPointer:(const void *)p;
+- (void)getValue:(void *)value;
+@end
+@interface NSNumber : NSValue  - (char)charValue;
 - (id)initWithInt:(int)value;
 @end   @class NSString;
 @interface NSArray : NSObject <NSCopying, NSMutableCopying, NSCoding, NSFastEnumeration>  - (NSUInteger)count;
@@ -102,6 +105,7 @@ typedef double NSTimeInterval;
 + (id)dataWithBytesNoCopy:(void *)bytes length:(NSUInteger)length freeWhenDone:(BOOL)b;
 - (id)initWithBytesNoCopy:(void *)bytes length:(NSUInteger)length;
 - (id)initWithBytesNoCopy:(void *)bytes length:(NSUInteger)length freeWhenDone:(BOOL)b;
+- (id)initWithBytes:(void *)bytes length:(NSUInteger) length;
 @end
 
 typedef struct {

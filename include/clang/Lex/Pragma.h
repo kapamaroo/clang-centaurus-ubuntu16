@@ -11,8 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_CLANG_PRAGMA_H
-#define LLVM_CLANG_PRAGMA_H
+#ifndef LLVM_CLANG_LEX_PRAGMA_H
+#define LLVM_CLANG_LEX_PRAGMA_H
 
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/StringMap.h"
@@ -34,19 +34,19 @@ namespace clang {
      * \brief The pragma was introduced via \#pragma.
      */
     PIK_HashPragma,
-    
+
     /**
      * \brief The pragma was introduced via the C99 _Pragma(string-literal).
      */
     PIK__Pragma,
-    
+
     /**
-     * \brief The pragma was introduced via the Microsoft 
+     * \brief The pragma was introduced via the Microsoft
      * __pragma(token-string).
      */
     PIK___pragma
   };
-  
+
 /// PragmaHandler - Instances of this interface defined to handle the various
 /// pragmas that the language front-end uses.  Each handler optionally has a
 /// name (e.g. "pack") and the HandlePragma method is invoked when a pragma with
@@ -75,7 +75,7 @@ public:
 
   /// getIfNamespace - If this is a namespace, return it.  This is equivalent to
   /// using a dynamic_cast, but doesn't require RTTI.
-  virtual PragmaNamespace *getIfNamespace() { return 0; }
+  virtual PragmaNamespace *getIfNamespace() { return nullptr; }
 
   bool isExtension() const { return Extension; }
 
@@ -125,8 +125,8 @@ class EmptyPragmaHandler : public PragmaHandler {
 public:
   EmptyPragmaHandler();
 
-  virtual void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                            Token &FirstToken);
+  void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
+                    Token &FirstToken) override;
 };
 
 /// PragmaNamespace - This PragmaHandler subdivides the namespace of pragmas,
@@ -140,7 +140,7 @@ class PragmaNamespace : public PragmaHandler {
   llvm::StringMap<PragmaHandler*> Handlers;
 public:
   explicit PragmaNamespace(StringRef Name) : PragmaHandler(Name) {}
-  virtual ~PragmaNamespace();
+  ~PragmaNamespace() override;
 
   /// FindHandler - Check to see if there is already a handler for the
   /// specified name.  If not, return the handler for the null name if it
@@ -161,10 +161,10 @@ public:
     return Handlers.empty();
   }
 
-  virtual void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
-                            Token &FirstToken);
+  void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
+                    Token &FirstToken) override;
 
-  virtual PragmaNamespace *getIfNamespace() { return this; }
+  PragmaNamespace *getIfNamespace() override { return this; }
 };
 
 

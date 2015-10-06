@@ -8,6 +8,9 @@ extern int printf(const char *restrict, ...);
 void f(char **sp, float *fp) {
   scanf("%as", sp); // expected-warning{{format specifies type 'float *' but the argument has type 'char **'}}
 
+  printf("%p", sp); // expected-warning{{format specifies type 'void *' but the argument has type 'char **'}}
+  scanf("%p", sp);  // expected-warning{{format specifies type 'void **' but the argument has type 'char **'}}
+
   printf("%a", 1.0);
   scanf("%afoobar", fp);
   printf(nullptr);
@@ -24,4 +27,8 @@ void f(char **sp, float *fp) {
       \u1234\U0010fffe
       %d)foo" // expected-warning {{more '%' conversions than data arguments}}
   );
+
+  printf("init list: %d", { 0 }); // expected-error {{cannot pass initializer list to variadic function; expected type from format string was 'int'}}
+  printf("void: %d", f(sp, fp)); // expected-error {{cannot pass expression of type 'void' to variadic function; expected type from format string was 'int'}}
+  printf(0, { 0 }); // expected-error {{cannot pass initializer list to variadic function}}
 }

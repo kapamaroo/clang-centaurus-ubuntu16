@@ -1,6 +1,5 @@
 // Check that we split debug output properly
 //
-// REQUIRES: asserts
 // RUN: %clang -target x86_64-unknown-linux-gnu -gsplit-dwarf -c -### %s 2> %t
 // RUN: FileCheck -check-prefix=CHECK-ACTIONS < %t %s
 //
@@ -23,3 +22,13 @@
 // RUN: FileCheck -check-prefix=CHECK-OPTION < %t %s
 //
 // CHECK-OPTION: "-split-dwarf-file" "split-debug.dwo"
+
+// RUN: %clang -target x86_64-unknown-linux-gnu -gsplit-dwarf -S -### %s 2> %t
+// RUN: FileCheck -check-prefix=CHECK-ASM < %t %s
+//
+// CHECK-ASM-NOT: objcopy
+
+// RUN: %clang -target x86_64-unknown-linux-gnu -no-integrated-as -gsplit-dwarf -c -### %s 2> %t
+// RUN: FileCheck -check-prefix=CHECK-IAS < %t %s
+//
+// CHECK-IAS: objcopy

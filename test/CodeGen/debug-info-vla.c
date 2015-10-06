@@ -1,9 +1,11 @@
 // RUN: %clang_cc1 -emit-llvm -g -triple x86_64-apple-darwin %s -o - | FileCheck %s
 
-// CHECK: metadata !{i32 {{.*}}, metadata {{.*}}, metadata !"vla", metadata {{.*}}, i32 7, metadata {{.*}}, i32 0, i32 0, i64 2} ; [ DW_TAG_auto_variable ]
-
 void testVLAwithSize(int s)
 {
+// CHECK: dbg.declare
+// CHECK: dbg.declare({{.*}}, metadata ![[VAR:.*]], metadata ![[EXPR:.*]])
+// CHECK: ![[VAR]] = !DILocalVariable(tag: DW_TAG_auto_variable, name: "vla",{{.*}} line: [[@LINE+2]]
+// CHECK: ![[EXPR]] = !DIExpression(DW_OP_deref)
   int vla[s];
   int i;
   for (i = 0; i < s; i++) {

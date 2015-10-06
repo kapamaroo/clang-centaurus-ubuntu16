@@ -75,7 +75,6 @@
       <optional>
         <ref name="USR" />
       </optional>
-      <!-- TODO: Add exception specification. -->
       <optional>
         <ref name="Headerfile" />
       </optional>
@@ -90,6 +89,9 @@
       </optional>
       <optional>
         <ref name="Parameters" />
+      </optional>
+      <optional>
+        <ref name="Exceptions" />
       </optional>
       <zeroOrMore>
         <ref name="Availability" />
@@ -410,9 +412,14 @@
             </data>
           </element>
           <optional>
-            <element name="Index">
-              <data type="nonNegativeInteger" />
-            </element>
+            <choice>
+              <element name="Index">
+                <data type="nonNegativeInteger" />
+              </element>
+              <element name="IsVarArg">
+                <empty />
+              </element>
+            </choice>
           </optional>
           <element name="Direction">
             <attribute name="isExplicit">
@@ -431,6 +438,14 @@
             <ref name="TextBlockContent" />
           </element>
         </element>
+      </oneOrMore>
+    </element>
+  </define>
+
+  <define name="Exceptions">
+    <element name="Exceptions">
+      <oneOrMore>
+        <ref name="TextBlockContent" />
       </oneOrMore>
     </element>
   </define>
@@ -565,6 +580,14 @@
         </data>
       </element>
       <element name="rawHTML">
+        <optional>
+          <!-- If not specified, the default value is 'false'. -->
+          <!-- The value 'false' or absence of the attribute does not imply
+               that the HTML is actually well-formed. -->
+          <attribute name="isMalformed">
+            <data type="boolean" />
+          </attribute>
+        </optional>
         <!-- Non-empty text content. -->
         <data type="string">
           <param name="pattern">.*\S.*</param>

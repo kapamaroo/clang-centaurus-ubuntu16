@@ -29,7 +29,7 @@
 @end
 
 // CHECK: define internal i8* @"\01-[Derived init]"
-// CHECK: [[IVAR:%.*]] = load i64* @"OBJC_IVAR_$_Derived.member", !invariant.load
+// CHECK: [[IVAR:%.*]] = load i64, i64* @"OBJC_IVAR_$_Derived.member", !invariant.load
 
 void * variant_load_1(int i) {
     void *ptr;
@@ -40,8 +40,8 @@ void * variant_load_1(int i) {
     return ptr;
 }
 
-// CHECK: define i8* @variant_load_1(i32 %i)
-// CHECK: [[IVAR:%.*]] = load i64* @"OBJC_IVAR_$_Derived.member"{{$}}
+// CHECK-LABEL: define i8* @variant_load_1(i32 %i)
+// CHECK: [[IVAR:%.*]] = load i64, i64* @"OBJC_IVAR_$_Derived.member"{{$}}
 
 @interface Container : Derived @end
 @implementation Container
@@ -52,7 +52,7 @@ void * variant_load_1(int i) {
 @end
 
 // CHECK: define internal i8* @"\01-[Container invariant_load_1]"
-// CHECK: [[IVAR:%.*]] = load i64* @"OBJC_IVAR_$_Derived.member", !invariant.load
+// CHECK: [[IVAR:%.*]] = load i64, i64* @"OBJC_IVAR_$_Derived.member", !invariant.load
 
 @interface ForBlock
 { 
@@ -61,8 +61,8 @@ void * variant_load_1(int i) {
 }
 @end
 
-// CHECK: define internal i8* @block_block_invoke
-// CHECK: load i64* @"OBJC_IVAR_$_ForBlock.foo"
+// CHECK-LABEL: define internal i8* @block_block_invoke
+// CHECK: load i64, i64* @"OBJC_IVAR_$_ForBlock.foo"
 id (^block)(ForBlock*) = ^(ForBlock* a) {
   return a->foo;
 };
