@@ -141,6 +141,9 @@ std::string Arg::getPrettyArg() const {
         }
     }
 
+    if (const FunctionArg *FA = dyn_cast<FunctionArg>(this))
+        return FA->getFunctionDecl()->getName();
+
     //common case
     E->printPretty(OS,/*Helper=*/0,Policy,/*Indentation=*/0);
     return OS.str();  //flush
