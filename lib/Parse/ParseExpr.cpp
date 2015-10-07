@@ -1397,38 +1397,14 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       T.consumeOpen();
       Loc = T.getOpenLocation();
 
-      //early fail
-      if (LHS.isInvalid()) {
-          LHS = ExprError();
-          // Match the ']'.
-          T.consumeClose();
-          break;
-      }
-
-      const bool isSubArrayWithMissingLowBound(getLangOpts().OpenACC && Tok.is(tok::colon));
-      const bool SubArraysAreAllowed = Actions.getACCInfo()->SubArraysAreAllowed();
+#if 1
       SourceLocation ColonLoc;
-      if (!SubArraysAreAllowed && isSubArrayWithMissingLowBound) {
-          Diag(Tok,diag::err_pragma_acc_invalid_subarray)
-              << "subarray list";
-          // Match the ']'.
-          T.consumeClose();
-          break;
-      }
-
-      if (isSubArrayWithMissingLowBound) {
-          //eat the colon
+      bool FrontColon = Tok.is(tok::colon);
+      if (FrontColon) {
           ColonLoc = ConsumeToken();
           Loc = Tok.getLocation();
-          if (Tok.is(tok::r_square)) {
-              PP.Diag(ColonLoc,diag::warn_pragma_acc_incomplete_subarray);
-              // Match the ']'.
-              T.consumeClose();
-              return LHS;
-          }
       }
 
-      //decide later whether this expression is actually an index or length
       ExprResult Idx;
       if (getLangOpts().CPlusPlus11 && Tok.is(tok::l_brace)) {
         Diag(Tok, diag::warn_cxx98_compat_generalized_initializer_lists);
@@ -1436,78 +1412,99 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
       } else
         Idx = ParseExpression();
 
-      //early fail
+      SourceLocation RLoc = Tok.getLocation();
+#if 0
       if (Idx.isInvalid()) {
           LHS = ExprError();
+          Idx = ExprError();
           // Match the ']'.
           T.consumeClose();
           break;
       }
+#endif
 
-      SourceLocation RLoc = Tok.getLocation();
-
-      ExprResult LowBound;
       ExprResult Length;
+      if (Tok.is(tok::r_square) && FrontColon) {
+          // A[:idx]
+          Length = Idx;
+          Idx = Actions.ActOnIntegerConstant(ColonLoc,0);
 
-      bool isSimpleSubArray(false);
+          RLoc = Tok.getLocation();
+          LHS = Actions.ActOnArraySubscriptExpr(getCurScope(), LHS.get(), Loc,
+                                                Idx.get(), RLoc);
 
-      //early failure
-      if (isSubArrayWithMissingLowBound && Tok.is(tok::colon)) {
-          //early failure in case of a colon or other token
-          Diag(Tok,diag::err_pragma_acc_invalid_subarray)
-              << "subarray list";
+          Actions.getACCInfo()->FindAndKeepSubArrayLength(ColonLoc,LHS.get(),Length.get());
 
           // Match the ']'.
           T.consumeClose();
           break;
       }
-      else if (!isSubArrayWithMissingLowBound && Tok.is(tok::l_brace)) {
-          //Default Behavior
+      else if (Tok.is(tok::r_square)) {
+          // A[idx]
+          //default behavior
+
+          RLoc = Tok.getLocation();
           LHS = Actions.ActOnArraySubscriptExpr(getCurScope(), LHS.get(), Loc,
                                                 Idx.get(), RLoc);
 
           // Match the ']'.
           T.consumeClose();
-          //do not return
           break;
       }
-      else if (isSubArrayWithMissingLowBound) {
-          LowBound = Actions.ActOnIntegerConstant(ColonLoc,0);
-          RLoc = ColonLoc;
-      }
-      else if (Tok.is(tok::colon)) {
-          if (!SubArraysAreAllowed) {
-              //early failure in case of a colon or other token
-              Diag(Tok,diag::err_pragma_acc_invalid_subarray)
-                  << "subarray list";
+      else if (FrontColon) {
+          // A[:idx --no-]--
 
-              // Match the ']'.
-              T.consumeClose();
-              break;
-          }
-          //eat the colon
-          ColonLoc = ConsumeToken();
-          RLoc = ColonLoc;
-          LowBound = Idx;
-          //we have both LowBound and Length by the user
-          isSimpleSubArray = true;
+          // Match the ']'
+          T.consumeClose();
+          break;
+      }
+      else if (Tok.isNot(tok::colon)) {
+          // A[idx --no-:--
+
+          Diag(Tok,diag::err_pragma_acc_parser_test)
+              << "expected colon for subarray";
+          // Match the ']'.
+          T.consumeClose();
+          break;
       }
 
-      if (getLangOpts().CPlusPlus11 && Tok.is(tok::l_brace)) {
+      ColonLoc = ConsumeToken();
+      Loc = Tok.getLocation();
+
+      if (Tok.is(tok::r_square)) {
+          // A[idx:]
+
+          RLoc = Tok.getLocation();
+          LHS = Actions.ActOnArraySubscriptExpr(getCurScope(), LHS.get(), Loc,
+                                                Idx.get(), RLoc);
+
+          Actions.getACCInfo()->FindAndKeepSubArrayLength(ColonLoc,LHS.get(),nullptr);
+
+          // Match the ']'.
+          T.consumeClose();
+          break;
+      }
+
+      if (getLangOpts().CPlusPlus11 && Tok.is(tok::l_square)) {
           Diag(Tok, diag::warn_cxx98_compat_generalized_initializer_lists);
           Length = ParseBraceInitializer();
       } else
           Length = ParseExpression();
 
-      ExprResult ASE = Actions.ActOnArraySubscriptExpr(getCurScope(), LHS.get(), Loc,
-                                                       LowBound.get(), RLoc);
+      RLoc = Tok.getLocation();
+      LHS = Actions.ActOnArraySubscriptExpr(getCurScope(), LHS.get(), Loc,
+                                            Idx.get(), RLoc);
 
-      if (isSimpleSubArray || isSubArrayWithMissingLowBound)
-          Actions.getACCInfo()->FindAndKeepSubArrayLength(ColonLoc,ASE.get(),Length.get());
-      else
-          Actions.getACCInfo()->FindAndKeepSubArrayLength(ColonLoc,ASE.get(),nullptr);
+      Actions.getACCInfo()->FindAndKeepSubArrayLength(ColonLoc,LHS.get(),Length.get());
+#else
+      ExprResult Idx;
+      if (getLangOpts().CPlusPlus11 && Tok.is(tok::l_square)) {
+        Diag(Tok, diag::warn_cxx98_compat_generalized_initializer_lists);
+        Idx = ParseBraceInitializer();
+      } else
+        Idx = ParseExpression();
 
-      /*
+      SourceLocation RLoc = Tok.getLocation();
       if (!LHS.isInvalid() && !Idx.isInvalid() && Tok.is(tok::r_square)) {
         LHS = Actions.ActOnArraySubscriptExpr(getCurScope(), LHS.get(), Loc,
                                               Idx.get(), RLoc);
@@ -1517,11 +1514,11 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
         LHS = ExprError();
         Idx = ExprError();
       }
-      */
+#endif
 
       // Match the ']'.
       T.consumeClose();
-      return ASE;
+      break;
     }
 
     case tok::l_paren:         // p-e: p-e '(' argument-expression-list[opt] ')'
