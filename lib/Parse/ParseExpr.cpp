@@ -1413,15 +1413,18 @@ Parser::ParsePostfixExpressionSuffix(ExprResult LHS) {
         Idx = ParseExpression();
 
       SourceLocation RLoc = Tok.getLocation();
-#if 0
-      if (Idx.isInvalid()) {
+
+      if (LHS.isInvalid() || Idx.isInvalid()) {
           LHS = ExprError();
           Idx = ExprError();
+
+          (void)Actions.CorrectDelayedTyposInExpr(LHS);
+          (void)Actions.CorrectDelayedTyposInExpr(Idx);
+
           // Match the ']'.
           T.consumeClose();
           break;
       }
-#endif
 
       ExprResult Length;
       if (Tok.is(tok::r_square) && FrontColon) {
