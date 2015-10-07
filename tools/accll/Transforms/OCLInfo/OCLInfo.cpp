@@ -352,8 +352,12 @@ bool OclProf::runOnModule(Module &M) {
         //replaceNullPtrWithProfileCounters(AA,CG,NEW_CGN);
     }
 
+#if 0
+    // use it if we have OpenCL metadata that need update
+
     OCLModuleInfo MDHandler(M);
     MDHandler.update();
+#endif
 
     return true;
 }
