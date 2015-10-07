@@ -15,7 +15,6 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/CallGraph.h"
-#include "llvm/Analysis/CallGraphSCCPass.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/LLVMContext.h"
@@ -63,8 +62,8 @@ struct OCLModuleInfo {
     OCLModuleInfo(Module &M)
         : M(M), Context(M.getContext()), _MDNext(0) {}
 
-    MDNode *appendValueToNewMD(MDNode *OldOp, Value *Val) {
-        SmallVector<Value *, 1> _tmp;
+    MDNode *appendValueToNewMD(MDNode *OldOp, Metadata *Val) {
+        SmallVector<Metadata *, 1> _tmp;
         for (unsigned i = 0, e = OldOp->getNumOperands(); i!=e; ++i)
             _tmp.push_back(OldOp->getOperand(i));
         _tmp.push_back(Val);
@@ -72,7 +71,7 @@ struct OCLModuleInfo {
         return NewMD;
     }
 
-    MDNode *insertValueToMDOperand(MDNode *Parent, unsigned Idx, Value *Val) {
+    MDNode *insertValueToMDOperand(MDNode *Parent, unsigned Idx, Metadata *Val) {
         MDNode *Op = dyn_cast<MDNode>(Parent->getOperand(Idx));
         MDNode *NewOp = appendValueToNewMD(Op,Val);
         Parent->replaceOperandWith(Idx,NewOp);
@@ -115,16 +114,19 @@ struct OCLModuleInfo {
         assert(NMDclKernels->getNumOperands() == SPIR_Kernels.size());
         for (unsigned i = 0, e = NMDclKernels->getNumOperands(); i != e; ++i) {
             MDNode *Op = NMDclKernels->getOperand(i);
-            Op->replaceOperandWith(0,SPIR_Kernels[i]);
+            ValueAsMetadata *ValMD = ValueAsMetadata::get(SPIR_Kernels[i]);
+            Op->replaceOperandWith(0,ValMD);
 
-            Value *AddrSpace = Constant::getIntegerValue(Type::getInt32Ty(Context),APInt(32,0));
-            Value *AddrSpace1 = Constant::getIntegerValue(Type::getInt32Ty(Context),APInt(32,1));
-            Value *AccessQual = MDString::get(Context,"none");
-            Value *ArgIntPtrType = MDString::get(Context,"int*");
-            Value *ArgIntType = MDString::get(Context,"int");
-            Value *TypeQual = MDString::get(Context,"");
-            Value *BaseIntPtrType = MDString::get(Context,"int*");
-            Value *BaseIntType = MDString::get(Context,"int");
+            Metadata *AddrSpace =
+                ValueAsMetadata::get(Constant::getIntegerValue(Type::getInt32Ty(Context),APInt(32,0)));
+            Metadata *AddrSpace1 =
+                ValueAsMetadata::get(Constant::getIntegerValue(Type::getInt32Ty(Context),APInt(32,1)));
+            Metadata *AccessQual = MDString::get(Context,"none");
+            Metadata *ArgIntPtrType = MDString::get(Context,"int*");
+            Metadata *ArgIntType = MDString::get(Context,"int");
+            Metadata *TypeQual = MDString::get(Context,"");
+            Metadata *BaseIntPtrType = MDString::get(Context,"int*");
+            Metadata *BaseIntType = MDString::get(Context,"int");
 
 
             // add metadata for __oclprof__
@@ -211,7 +213,7 @@ struct OclProf : public ModulePass {
     //virtual bool doInitialization(CallGraph &CG);
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
         AU.addRequired<AliasAnalysis>();
-        AU.addRequired<CallGraph>();
+        AU.addRequired<CallGraphWrapperPass>();
         //CallGraphSCCPass::getAnalysisUsage(AU);
         ModulePass::getAnalysisUsage(AU);
     }
@@ -233,7 +235,7 @@ struct OclProf2 : public ModulePass {
     //virtual bool doInitialization(CallGraph &CG);
     virtual void getAnalysisUsage(AnalysisUsage &AU) const {
         AU.addRequired<AliasAnalysis>();
-        AU.addRequired<CallGraph>();
+        AU.addRequired<CallGraphWrapperPass>();
         //AU.addRequired<OclProf>();
         //CallGraphSCCPass::getAnalysisUsage(AU);
         ModulePass::getAnalysisUsage(AU);
@@ -312,7 +314,7 @@ bool OclProf::runOnModule(Module &M) {
 
     // Get the callgraph information that we need to update to reflect our
     // changes.
-    CallGraph &CG = getAnalysis<CallGraph>();
+    CallGraph &CG = getAnalysis<CallGraphWrapperPass>().getCallGraph();
 
     DenseMap<Function *, Function *> New;
 
@@ -364,7 +366,7 @@ bool OclProf2::runOnModule(Module &M) {
 
     // Get the callgraph information that we need to update to reflect our
     // changes.
-    CallGraph &CG = getAnalysis<CallGraph>();
+    CallGraph &CG = getAnalysis<CallGraphWrapperPass>().getCallGraph();
 
     //CG.print(outs(),&CG.getModule());
 
@@ -522,7 +524,7 @@ CallGraphNode *OclProf::backpatchWithNullPtr(AliasAnalysis &AA, CallGraph &CG,
     //
     SmallVector<Value*, 16> Args;
     while (!F->use_empty()) {
-        CallSite CS(F->use_back());
+        CallSite CS(F->user_back());
         assert(CS.getCalledFunction() == F);
         Instruction *Call = CS.getInstruction();
         const AttributeSet &CallPAL = CS.getAttributes();
@@ -598,7 +600,7 @@ CallGraphNode *OclProf::backpatchWithNullPtr(AliasAnalysis &AA, CallGraph &CG,
 
         // Update the callgraph to know that the callsite has been transformed.
         CallGraphNode *CalleeNode = CG[Call->getParent()->getParent()];
-        CalleeNode->replaceCallEdge(Call, New, NF_CGN);
+        CalleeNode->replaceCallEdge(CallSite(Call), CallSite(New), NF_CGN);
 
         if (!Call->use_empty()) {
             Call->replaceAllUsesWith(New);
@@ -722,7 +724,7 @@ void OclProf2::replaceNullPtrWithProfileCounters(AliasAnalysis &AA, CallGraph &C
 
         // Update the callgraph to know that the callsite has been transformed.
         CallGraphNode *CalleeNode = CG[Call->getParent()->getParent()];
-        CalleeNode->replaceCallEdge(Call, New, NF_CGN);
+        CalleeNode->replaceCallEdge(CallSite(Call), CallSite(New), NF_CGN);
 
         if (!Call->use_empty()) {
             Call->replaceAllUsesWith(New);
