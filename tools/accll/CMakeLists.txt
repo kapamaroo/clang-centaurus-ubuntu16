@@ -20,11 +20,18 @@ ocl_utils.cpp
 ocl_compiler.cpp
 )
 target_link_libraries(accll
+clangAnalysis
+clangAST
 clangASTMatchers
 clangBasic
+clangDriver
 clangFormat
+clangFrontend
+clangRewrite
 clangRewriteFrontend
+clangSema
 clangTooling
+clangToolingCore
 ${OPENCL_LIBRARIES}
 )
 
