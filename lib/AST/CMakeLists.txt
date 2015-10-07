@@ -39,6 +39,7 @@ add_clang_library(clangAST
   MicrosoftMangle.cpp
   NestedNameSpecifier.cpp
   NSAPI.cpp
+  OpenACC.cpp
   ParentMap.cpp
   RawCommentList.cpp
   RecordLayout.cpp
