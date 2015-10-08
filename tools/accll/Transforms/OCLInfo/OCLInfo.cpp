@@ -382,7 +382,9 @@ bool OclProf2::runOnModule(Module &M) {
 
     //CG.print(outs(),&CG.getModule());
 
-    Function *Builtin_inc = M.getFunction("__acl_builtin__incBB");
+    StringRef Name = "__acl_builtin__incBB";
+    //StringRef Name = "__clc_atomic_add_addr1";
+    Function *Builtin_inc = M.getFunction(Name);
     assert(Builtin_inc);
     if (!Builtin_inc)
         return false;
