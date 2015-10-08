@@ -81,39 +81,47 @@ struct OCLModuleInfo {
     }
 
     void update() {
-        //warning: assume one spir kernel per module
+        NamedMDNode *OpenCLKernelMetadata = M.getNamedMetadata("opencl.kernels");
+        NamedMDNode *NvvmAnnotations = M.getNamedMetadata("nvvm.annotations");
+        assert(OpenCLKernelMetadata && NvvmAnnotations);
+        assert(OpenCLKernelMetadata->getNumOperands() == NvvmAnnotations.getNumOperands());
+        if (!OpenCLKernelMetadata || !NvvmAnnotations)
+            return;
 
         std::vector<Function *> SPIR_Kernels;
+
         for (Module::iterator mi = M.begin(), me = M.end(); mi != me; ++mi) {
             Function *F = &*mi;
             if (!F || !F->size())
                 continue;
-            if (F->getCallingConv() == CallingConv::SPIR_KERNEL)
+            if (F->getReturnType()->isVoidTy() && F->getNumUses() == 0) {
+                errs() << F->getName() << ": treat as kernel\n";
                 SPIR_Kernels.push_back(F);
-        }
-        assert(SPIR_Kernels.size());
-
-        NamedMDNode *NMDclKernels = 0;
-        for (Module::named_metadata_iterator MI = M.named_metadata_begin(),
-                 ME = M.named_metadata_end(); MI != ME; ++MI) {
-            NamedMDNode *NMD = &*MI;
-            StringRef Name = NMD->getName();
-            //outs() << Name <<  "\n";
-            if (Name.equals("opencl.kernels")) {
-                NMDclKernels = NMD;
-                break;
             }
-#if 0
-            for (unsigned i = 0, e = NMD.getNumOperands(); i!=e; ++i)
-                if(MDNode *MD = dyn_cast_or_null<MDNode>(NMD.getOperand(i)))
-                    keepMetadata(MD);
-#endif
         }
-        assert(NMDclKernels);
 
-        assert(NMDclKernels->getNumOperands() == SPIR_Kernels.size());
-        for (unsigned i = 0, e = NMDclKernels->getNumOperands(); i != e; ++i) {
-            MDNode *Op = NMDclKernels->getOperand(i);
+        assert(OpenCLKernelMetadata->getNumOperands() == SPIR_Kernels.size());
+        if (!(OpenCLKernelMetadata->getNumOperands() == SPIR_Kernels.size())) {
+            errs() << "aoua\n";
+            return;
+        }
+
+        for (unsigned i = 0, e = NvvmAnnotations->getNumOperands(); i != e; ++i) {
+            MDNode *Op = NvvmAnnotations->getOperand(i);
+            ValueAsMetadata *ValMD = ValueAsMetadata::get(SPIR_Kernels[i]);
+            if (Op->isDistinct()) {
+                SmallVector<Metadata *, 3> NewMD;
+                NewMD.push_back(ValMD);
+                NewMD.push_back(Op->getOperand(1));
+                NewMD.push_back(Op->getOperand(2));
+                NvvmAnnotations->setOperand(i,MDNode::get(Context,NewMD));
+            }
+            else
+                Op->replaceOperandWith(0,ValMD);
+        }
+
+        for (unsigned i = 0, e = OpenCLKernelMetadata->getNumOperands(); i != e; ++i) {
+            MDNode *Op = OpenCLKernelMetadata->getOperand(i);
             ValueAsMetadata *ValMD = ValueAsMetadata::get(SPIR_Kernels[i]);
             Op->replaceOperandWith(0,ValMD);
 
@@ -133,15 +141,15 @@ struct OCLModuleInfo {
             insertValueToMDOperand(Op,1,AddrSpace1);
             insertValueToMDOperand(Op,2,AccessQual);
             insertValueToMDOperand(Op,3,ArgIntPtrType);
-            insertValueToMDOperand(Op,4,TypeQual);
-            insertValueToMDOperand(Op,5,BaseIntPtrType);
+            insertValueToMDOperand(Op,4,BaseIntPtrType);
+            insertValueToMDOperand(Op,5,TypeQual);
 
             // add metadata for __oclprof_size__
             insertValueToMDOperand(Op,1,AddrSpace);
             insertValueToMDOperand(Op,2,AccessQual);
             insertValueToMDOperand(Op,3,ArgIntType);
-            insertValueToMDOperand(Op,4,TypeQual);
-            insertValueToMDOperand(Op,5,BaseIntType);
+            insertValueToMDOperand(Op,4,BaseIntType);
+            insertValueToMDOperand(Op,5,TypeQual);
         }
     }
 
@@ -352,7 +360,7 @@ bool OclProf::runOnModule(Module &M) {
         //replaceNullPtrWithProfileCounters(AA,CG,NEW_CGN);
     }
 
-#if 0
+#if 1
     // use it if we have OpenCL metadata that need update
 
     OCLModuleInfo MDHandler(M);
@@ -376,6 +384,8 @@ bool OclProf2::runOnModule(Module &M) {
 
     Function *Builtin_inc = M.getFunction("__acl_builtin__incBB");
     assert(Builtin_inc);
+    if (!Builtin_inc)
+        return false;
 
     // reset basic block counter for each module
     BBCounter = 0;
