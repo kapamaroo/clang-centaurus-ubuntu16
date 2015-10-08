@@ -392,7 +392,8 @@ int main(int argc, const char *argv[]) {
         status += clang_format_main(*II,Style);
     }
 
-    if (!status) {
+    //errs() << "status = " << status << "\n";
+    if (status != 0) {
         llvm::outs() << "Fail\n";
         return 1;
     }

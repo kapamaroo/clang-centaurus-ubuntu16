@@ -90,9 +90,6 @@ Cursor("cursor",
                 "clang-format from an editor integration"),
        cl::init(0), cl::cat(ClangFormatCategory));
 
-static cl::list<std::string> FileNames(cl::Positional, cl::desc("[<file> ...]"),
-                                       cl::cat(ClangFormatCategory));
-
 namespace clang {
 namespace format {
 
@@ -263,7 +260,9 @@ static bool format(StringRef FileName) {
 }  // namespace format
 }  // namespace clang
 
-int clang_format_main(std::string FileName, std::string Style) {
+int clang_format_main(std::string FileName, std::string _Style) {
+    Style = _Style;
+
     //llvm::sys::PrintStackTraceOnErrorSignal();
 
     cl::HideUnrelatedOptions(ClangFormatCategory);
@@ -280,25 +279,11 @@ int clang_format_main(std::string FileName, std::string Style) {
 #endif
 
     Inplace = true;
-    FileNames.push_back(FileName);
 
     bool Error = false;
-    switch (FileNames.size()) {
-    case 0:
-        Error = clang::format::format("-");
-        break;
-    case 1:
-        Error = clang::format::format(FileNames[0]);
-        break;
-    default:
-        if (!Offsets.empty() || !Lengths.empty() || !LineRanges.empty()) {
-            llvm::errs() << "error: -offset, -length and -lines can only be used for "
-                "single file.\n";
-            return 1;
-        }
-        for (unsigned i = 0; i < FileNames.size(); ++i)
-            Error |= clang::format::format(FileNames[i]);
-        break;
-    }
+
+    //errs() << "formatting " << FileName << "status: " << Error <<  "\n";
+    Error = clang::format::format(FileName);
+
     return Error ? 1 : 0;
 }
