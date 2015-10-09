@@ -433,6 +433,7 @@ struct KernelSrc {
                     + ",.host_ptr = (void*)" + ClauseEstimation->getArg()->getPrettyArg()
                     + ",.start_offset = 0"
                     + ",.size = sizeof(double)"
+                    + ",.element_size = sizeof(double)"
                     + "};";
                 Definition += EstimationCode;
                 EstimationName = "&" + EstimationName;
@@ -1225,6 +1226,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
     std::string Prologue;
     std::string Address;
     std::string StartOffset = "0";
+    std::string ElementSize;
 
     std::string DataDepType;
     ClauseKind CK = A->getParent()->getAsClause()->getKind();
@@ -1254,6 +1256,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
             + ",.host_ptr = 0"
             + ",.start_offset = 0"
             + ",.size = 0"
+            + ",.element_size = 0"
             + "};";
 
         return ObjRefDef(NewName,NewCode);
@@ -1266,15 +1269,18 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         StartOffset = getPrettyExpr(Context,ASE->getIdx());
         SizeExpr = "sizeof(" + SA->getExpr()->getType().getAsString()
             + ")*(" + getPrettyExpr(Context,SA->getLength()) + ")";
+        ElementSize = "sizeof(" + SA->getExpr()->getType().getAsString() + ")";
     }
     else if (Ty->isPointerType()) {
         // ignore casts here, explicit cast to (void *)
         Address = getPrettyExpr(Context,A->getExpr()->IgnoreParenCasts());
         SizeExpr = "malloc_usable_size((void*)" + Address + ")";
+        ElementSize = "sizeof(" + Ty->getAs<PointerType>()->getPointeeType().getAsString() + ")";
     }
     else if (isa<ArrayArg>(A)) {
         Address = getPrettyExpr(Context,A->getExpr()->IgnoreParenCasts());
         SizeExpr = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
+        ElementSize = "sizeof(" + Ty->getAsArrayTypeUnsafe()->getElementType().getAsString() + ")";
     }
     else {
         SizeExpr = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
@@ -1288,6 +1294,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         Prologue += TypeName + " *" + AllocName + " = malloc(" + SizeExpr + ");";
         Prologue += "memcpy(" + AllocName + ",&" + HiddenName + "," + SizeExpr + ");";
         Address = AllocName;
+        ElementSize = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
     }
 
     std::string NewCode = Prologue
@@ -1297,6 +1304,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         + ",.dependency = " + DataDepType
         + ",.host_ptr = (void*)" + Address
         + ",.start_offset = " + StartOffset
+        + ",.element_size = " + ElementSize
         + ",.size = " + SizeExpr
         + "};";
 
