@@ -402,6 +402,18 @@ bool Preprocessor::HandleEndOfFile(Token &Result, bool isEndOfMacro) {
     if (Callbacks && !isEndOfMacro && CurPPLexer)
       ExitedFID = CurPPLexer->getFileID();
 
+    if (getLangOpts().OpenACC && CurPPLexer) {
+        StringRef ExitedName =
+            SourceMgr.getFilename(SourceMgr.getLocForStartOfFile(CurPPLexer->getFileID()));
+        if (ExitedName.endswith(".cl")) {
+            SourceMgr.OpenCLIncludeFiles--;
+            if (SourceMgr.OpenCLIncludeFiles == 0) {
+                SetOpenCL(false);
+                //Diag(SourceMgr.OpenCLIncludeDirectives.back(),diag::warn_pragma_acc_lex_test) << msg;
+            }
+        }
+    }
+
     bool LeavingSubmodule = CurSubmodule && CurLexer;
     if (LeavingSubmodule) {
       // Notify the parser that we've left the module.

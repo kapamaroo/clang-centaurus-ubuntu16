@@ -678,8 +678,11 @@ void Parser::ParseOpenCLAttributes(ParsedAttributes &attrs) {
     SourceLocation AttrNameLoc = ConsumeToken();
     attrs.addNew(AttrName, AttrNameLoc, nullptr, AttrNameLoc, nullptr, 0,
                  AttributeList::AS_Keyword);
-    if (getLangOpts().OpenACC)
+    // Handle the case of inline OpenCL kernels inside a C file.
+    if (getLangOpts().OpenACC && PP.getSourceManager().OpenCLIncludeFiles == 0) {
         PP.SetOpenCL(true);
+        //Diag(AttrNameLoc,diag::warn_pragma_acc_parser_test) << "start inline OpenCL mode";
+    }
   }
 }
 
@@ -1760,9 +1763,13 @@ Parser::DeclGroupPtrTy Parser::ParseDeclGroup(ParsingDeclSpec &DS,
 
         Decl *TheDecl =
           ParseFunctionDefinition(D, ParsedTemplateInfo(), &LateParsedAttrs);
-        if (getLangOpts().OpenACC && getLangOpts().OpenCL)
-            if (!PP.getSourceManager().OpenCLIncludeFiles.count(PP.getSourceManager().getFileID(TheDecl->getLocStart())))
-                PP.SetOpenCL(false);
+
+        // Handle the case of inline OpenCL kernels inside a C file.
+        if (getLangOpts().OpenACC && getLangOpts().OpenCL
+            && PP.getSourceManager().OpenCLIncludeFiles == 0) {
+            PP.SetOpenCL(false);
+            //Diag(TheDecl->getLocStart(),diag::warn_pragma_acc_parser_test) << "end inline OpenCL mode";
+        }
         return Actions.ConvertDeclToDeclGroup(TheDecl);
       }
 

@@ -908,7 +908,10 @@ void Preprocessor::createPreprocessingRecord() {
   addPPCallbacks(std::unique_ptr<PPCallbacks>(Record));
 }
 
+// Change the OpenCL status, keeps the OpenACC flag enabled.
 void Preprocessor::SetOpenCL(bool EnableOpenCL) {
+    assert(LangOpts.OpenACC && "bad call outside OpenACC mode");
+
     if (EnableOpenCL) {
         //enable support for OpenCL 1.1
 

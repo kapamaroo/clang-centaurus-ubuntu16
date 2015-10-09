@@ -1778,13 +1778,13 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
   FileID FID = SourceMgr.createFileID(File, IncludePos, FileCharacter);
   assert(!FID.isInvalid() && "Expected valid file ID");
 
-  if (Filename.endswith(".cl")) {
-      SourceMgr.OpenCLIncludeDirectives.push_back(HashLoc);
-      SourceMgr.OpenCLIncludeFiles.insert(FID);
+  if (getLangOpts().OpenACC && Filename.endswith(".cl")) {
+      if (SourceMgr.isInMainFile(HashLoc))
+          SourceMgr.OpenCLIncludeDirectives.push_back(HashLoc);
+      SourceMgr.OpenCLIncludeFiles++;
       SetOpenCL(true);
+      //Diag(HashLoc,diag::warn_pragma_acc_lex_test) << "Enable OpenCL";
   }
-  else
-      SetOpenCL(false);
 
   // If all is good, enter the new file!
   if (EnterSourceFile(FID, CurDir, FilenameTok.getLocation()))
