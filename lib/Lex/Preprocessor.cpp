@@ -156,6 +156,14 @@ Preprocessor::Preprocessor(IntrusiveRefCntPtr<PreprocessorOptions> PPOpts,
   //extra
   LangOptsOpenCL.Bool = 1;
 
+  // disable C++
+  LangOptsOpenCL.CPlusPlus = 0;
+  LangOptsOpenCL.CPlusPlus11 = 0;
+  LangOptsOpenCL.CPlusPlus14 = 0;
+  LangOptsOpenCL.CPlusPlus1z = 0;
+  LangOptsOpenCL.Wchar = 0;
+  LangOptsOpenCL.ImplicitInt = !LangOptsOpenCL.C99;
+
 }
 
 Preprocessor::~Preprocessor() {
