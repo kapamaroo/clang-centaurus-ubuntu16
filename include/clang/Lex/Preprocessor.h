@@ -97,6 +97,8 @@ class Preprocessor : public RefCountedBase<Preprocessor> {
   IntrusiveRefCntPtr<PreprocessorOptions> PPOpts;
   DiagnosticsEngine        *Diags;
   LangOptions       &LangOpts;
+  LangOptions       LangOptsDefault;  // WARNING: this is not a reference !!!
+  LangOptions       LangOptsOpenCL;  // WARNING: this is not a reference !!!
   const TargetInfo  *Target;
   FileManager       &FileMgr;
   SourceManager     &SourceMgr;

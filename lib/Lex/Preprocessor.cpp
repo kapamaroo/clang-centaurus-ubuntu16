@@ -61,7 +61,9 @@ Preprocessor::Preprocessor(IntrusiveRefCntPtr<PreprocessorOptions> PPOpts,
                            ModuleLoader &TheModuleLoader,
                            IdentifierInfoLookup *IILookup, bool OwnsHeaders,
                            TranslationUnitKind TUKind)
-    : PPOpts(PPOpts), Diags(&diags), LangOpts(opts), Target(nullptr),
+    : PPOpts(PPOpts), Diags(&diags), LangOpts(opts),
+      LangOptsDefault(opts), LangOptsOpenCL(opts),
+      Target(nullptr),
       FileMgr(Headers.getFileMgr()), SourceMgr(SM),
       ScratchBuf(new ScratchBuffer(SourceMgr)),HeaderInfo(Headers),
       TheModuleLoader(TheModuleLoader), ExternalSource(nullptr),
@@ -138,6 +140,22 @@ Preprocessor::Preprocessor(IntrusiveRefCntPtr<PreprocessorOptions> PPOpts,
     Ident_GetExceptionInfo = Ident_GetExceptionCode = nullptr;
     Ident_AbnormalTermination = nullptr;
   }
+
+  //enable support for OpenCL 1.1
+
+  //see CompilerInvocation.cpp about OpenCL initialization
+  LangOptsOpenCL.OpenCL = 1;
+  LangOptsOpenCL.OpenCLVersion = 110;
+  //some more additional defaults
+  LangOptsOpenCL.AltiVec = 0;
+  LangOptsOpenCL.CXXOperatorNames = 1;
+  LangOptsOpenCL.LaxVectorConversions = 0;
+  LangOptsOpenCL.DefaultFPContract = 1;
+  LangOptsOpenCL.NativeHalfType = 1;
+
+  //extra
+  LangOptsOpenCL.Bool = 1;
+
 }
 
 Preprocessor::~Preprocessor() {
@@ -911,35 +929,5 @@ void Preprocessor::createPreprocessingRecord() {
 // Change the OpenCL status, keeps the OpenACC flag enabled.
 void Preprocessor::SetOpenCL(bool EnableOpenCL) {
     assert(LangOpts.OpenACC && "bad call outside OpenACC mode");
-
-    if (EnableOpenCL) {
-        //enable support for OpenCL 1.1
-
-        //see CompilerInvocation.cpp about OpenCL initialization
-        LangOpts.OpenCL = 1;
-        LangOpts.OpenCLVersion = 110;
-        //some more additional defaults
-        LangOpts.AltiVec = 0;
-        LangOpts.CXXOperatorNames = 1;
-        LangOpts.LaxVectorConversions = 0;
-        LangOpts.DefaultFPContract = 1;
-        LangOpts.NativeHalfType = 1;
-
-        //extra
-        LangOpts.Bool = 1;
-    }
-    else {
-        //reset to plain C default values, see LangOptions.def
-        LangOpts.OpenCL = 0;
-        LangOpts.OpenCLVersion = 0;
-
-        LangOpts.AltiVec = 0;
-        LangOpts.CXXOperatorNames = 0;
-        LangOpts.LaxVectorConversions = 1;
-        LangOpts.DefaultFPContract = 0;
-        LangOpts.NativeHalfType = 0;
-
-        //extra
-        LangOpts.Bool = 0;
-    }
+    LangOpts = (EnableOpenCL) ? LangOptsOpenCL : LangOptsDefault;
 }
