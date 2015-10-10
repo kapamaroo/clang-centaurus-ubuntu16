@@ -161,7 +161,7 @@ Preprocessor::Preprocessor(IntrusiveRefCntPtr<PreprocessorOptions> PPOpts,
   LangOptsOpenCL.CPlusPlus11 = 0;
   LangOptsOpenCL.CPlusPlus14 = 0;
   LangOptsOpenCL.CPlusPlus1z = 0;
-  LangOptsOpenCL.Wchar = 0;
+  LangOptsOpenCL.WChar = 0;
   LangOptsOpenCL.ImplicitInt = !LangOptsOpenCL.C99;
 
 }
