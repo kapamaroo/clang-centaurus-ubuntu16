@@ -102,8 +102,11 @@ int CheckGeneratedSourceFiles(int argc, const char *argv[], const accll::Centaur
     ARGV.push_back("--");
     //ARGV.push_back("-fopenacc");
     //ARGV.push_back("-D_GNU_SOURCE");
+    ARGV.push_back("-Wno-gnu-designator");
     ARGV.push_back(IncludeFlag.c_str());
     //ARGV.push_back("-include__acl_api_types.h");
+    ARGV.push_back("-include__acl_sys_impl.h");
+    ARGV.push_back("-includeclc/clctypes.h");
     //ARGV.push_back("-c");
 
     for (std::vector<std::string>::const_iterator
@@ -200,7 +203,7 @@ int main(int argc, const char *argv[]) {
         std::string LibPathFlag("-L" + Config.LibPath);
         cli.push_back(LibPathFlag.c_str());
         cli.push_back("-lcentaurus");
-        //cli.push_back("-lcentaurusapi");
+        cli.push_back("-lcentaurusapi");
 
         // -lpthread -lOpenCL -ldl -lrt -lm -lnvidia-ml -Lpapi-5.4.1/src/ -lpapi
 
@@ -238,7 +241,11 @@ int main(int argc, const char *argv[]) {
     ARGV.push_back("-D_GNU_SOURCE");
     ARGV.push_back(IncludeFlag.c_str());
     ARGV.push_back("-include__acl_api_types.h");
+
+    // hide warnings related to custom system headers
     ARGV.push_back("-Wno-incompatible-library-redeclaration");
+    ARGV.push_back("-Wno-gnu-designator");
+
     ARGV.push_back("-c");
 
     for (std::vector<std::string>::iterator
@@ -413,7 +420,9 @@ int main(int argc, const char *argv[]) {
         //cli.push_back("-###");
         cli.push_back("-Wall");
         //cli.push_back("-fopenacc");
+        cli.push_back("-Wno-gnu-designator");
         cli.push_back(IncludeFlag.c_str());
+        cli.push_back("-include__acl_sys_impl.h");
         cli.push_back("-c");
 
         for (std::vector<std::string>::iterator
@@ -564,7 +573,7 @@ int main(int argc, const char *argv[]) {
                 ldcli.push_back("-lm");
 
                 ldcli.push_back("-lcentaurus");
-                //ldcli.push_back("-lcentaurusapi");
+                ldcli.push_back("-lcentaurusapi");
 
                 //std::string LibStaticRuntime(LibPath + "/libcentaurus.a");
                 //ldcli.push_back(LibStaticRuntime.c_str());
