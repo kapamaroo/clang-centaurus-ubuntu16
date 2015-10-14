@@ -340,7 +340,7 @@ KernelRefDef::KernelRefDef(const CentaurusConfig &ACLConfig,
 
     HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
     HostCode.Definition = PreAPIDef + PlatformTable
-        + "struct _kernel_struct *" + HostCode.NameRef + " = (struct _kernel_struct*)malloc(sizeof(struct _kernel_struct));"
+        + "struct _kernel_struct *" + HostCode.NameRef + " = (struct _kernel_struct*)acl_malloc(sizeof(struct _kernel_struct));"
         "*" + HostCode.NameRef + " = (struct _kernel_struct){"
         + ".device_type = " + setDeviceType(DI,BindMode)
         + ",.UID = " + toString(getKernelUID(DeviceCode.NameRef))
@@ -1274,7 +1274,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
     else if (Ty->isPointerType()) {
         // ignore casts here, explicit cast to (void *)
         Address = getPrettyExpr(Context,A->getExpr()->IgnoreParenCasts());
-        SizeExpr = "malloc_usable_size((void*)" + Address + ")";
+        SizeExpr = "acl_usable_size((void*)" + Address + ")";
         ElementSize = "sizeof(" + Ty->getAs<PointerType>()->getPointeeType().getAsString() + ")";
     }
     else if (isa<ArrayArg>(A)) {
@@ -1291,7 +1291,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         std::string AllocName = NewName + "__alloc__";
         std::string HiddenName = NewName + "__hidden__";
         Prologue += TypeName + " " + HiddenName + " = " + OrigName + ";";
-        Prologue += TypeName + " *" + AllocName + " = malloc(" + SizeExpr + ");";
+        Prologue += TypeName + " *" + AllocName + " = acl_malloc(" + SizeExpr + ");";
         Prologue += "memcpy(" + AllocName + ",&" + HiddenName + "," + SizeExpr + ");";
         Address = AllocName;
         ElementSize = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
@@ -1472,8 +1472,6 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     // avoid redeclaration warning from main.c
     HostHeader += "#ifndef _GNU_SOURCE\n#define _GNU_SOURCE\n#endif\n";
     HostHeader += "#include <stdio.h>\n";
-    // malloc_usable_size()
-    HostHeader += "#include <malloc.h>\n";
     // atexit()
     HostHeader += "#include <stdlib.h>\n";
     // memcpy()
@@ -1810,9 +1808,16 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
     SourceManager &SM = Context->getSourceManager();
 
     if (Name.compare("free") == 0) {
-        SourceLocation Loc = CE->getLocStart();
-        std::string NewCode = "acl_garbage_collect(" + getPrettyExpr(Context,CE->getArg(0)) + ");";
-        Replacement R(SM,Loc,0,NewCode);
+        std::string NewCode = "acl_free(" + getPrettyExpr(Context,CE->getArg(0)) + ")";
+        Replacement R(SM,CE,NewCode);
+        applyReplacement(ReplacementPool,R);
+        return true;
+    }
+
+    if (Name.compare("malloc") == 0) {
+        // replace the CallExpr Node
+        std::string NewCode = "acl_malloc(" + getPrettyExpr(Context,CE->getArg(0)) + ")";
+        Replacement R(SM,CE,NewCode);
         applyReplacement(ReplacementPool,R);
         return true;
     }
