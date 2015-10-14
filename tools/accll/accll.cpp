@@ -106,7 +106,6 @@ int CheckGeneratedSourceFiles(int argc, const char *argv[], const accll::Centaur
     ARGV.push_back(IncludeFlag.c_str());
     //ARGV.push_back("-include__acl_api_types.h");
     ARGV.push_back("-include__acl_sys_impl.h");
-    ARGV.push_back("-includeclc/clctypes.h");
     //ARGV.push_back("-c");
 
     for (std::vector<std::string>::const_iterator
