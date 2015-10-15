@@ -282,7 +282,7 @@ Parser::ParseClauseApproxfun(DirectiveKind DK, ClauseInfo *CI) {
     LookupResult R(Actions,&Actions.Context.Idents.get(FunctionName),
                    Tok.getLocation(),Sema::LookupOrdinaryName);
     if (!Actions.LookupName(R,Actions.TUScope,/*AllowBuiltinCreation=*/false)) {
-        PP.Diag(Tok,diag::note_pragma_acc_parser_test) << "lookup failed";
+        PP.Diag(Tok,diag::err_pragma_acc_parser_test) << "lookup failed";
         return false;
     }
 
@@ -642,6 +642,9 @@ void Parser::HandlePragmaOpenACC() {
         }
         else
             DirectiveEndLoc = ConsumeToken();  //consume eod
+
+        // We have parse errors, ignore directive
+        return;
     }
     else {
         assert(Tok.is(tok::eod) && "unknown Parser state");
