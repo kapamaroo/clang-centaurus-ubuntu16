@@ -84,7 +84,7 @@ struct OCLModuleInfo {
         NamedMDNode *OpenCLKernelMetadata = M.getNamedMetadata("opencl.kernels");
         NamedMDNode *NvvmAnnotations = M.getNamedMetadata("nvvm.annotations");
         assert(OpenCLKernelMetadata && NvvmAnnotations);
-        assert(OpenCLKernelMetadata->getNumOperands() == NvvmAnnotations.getNumOperands());
+        assert(OpenCLKernelMetadata->getNumOperands() == NvvmAnnotations->getNumOperands());
         if (!OpenCLKernelMetadata || !NvvmAnnotations)
             return;
 
@@ -333,7 +333,7 @@ bool OclProf::runOnModule(Module &M) {
         Function *F = &*mi;
         if (!F || !F->size())
             continue;
-        if (F->getName().startswith("__acl_builtin__"))
+        if (F->getName().startswith("__clc_"))
             continue;
         Pool.push_back(F);
     }
@@ -382,12 +382,13 @@ bool OclProf2::runOnModule(Module &M) {
 
     //CG.print(outs(),&CG.getModule());
 
-    StringRef Name = "__acl_builtin__incBB";
-    //StringRef Name = "__clc_atomic_add_addr1";
+    StringRef Name = "__clc_atomic_add_addr1";
     Function *Builtin_inc = M.getFunction(Name);
     assert(Builtin_inc);
-    if (!Builtin_inc)
+    if (!Builtin_inc) {
+        errs() << Name << " not found inside module\n";
         return false;
+    }
 
     // reset basic block counter for each module
     BBCounter = 0;
@@ -401,7 +402,7 @@ bool OclProf2::runOnModule(Module &M) {
         if (!F || !F->size())
             continue;
 
-        if (F->getName().startswith("__acl_builtin__"))
+        if (F->getName().startswith("__clc_"))
             continue;
 #if 1
         if (F->getName().endswith(".__deprecated__")) {
@@ -764,15 +765,17 @@ void OclProf2::addCalltoProfileBuiltins(AliasAnalysis &AA, CallGraph &CG, CallGr
 
         Instruction *Term = BI->getTerminator();
 
-        SmallVector<Value*, 2> Args;
-
         Function::ArgumentListType::iterator E = F->getArgumentList().end();
         --E; --E;
         Argument *__oclprof__Arg = &*E;
         Value *__BBnum__ = ConstantInt::get(Type::getInt32Ty(F->getContext()),BBnum);
+        Value *__ProfPos__ = GetElementPtrInst::CreateInBounds(__oclprof__Arg,__BBnum__,"acl.prof.blockptr",Term);
+        Value *__One__ = ConstantInt::get(Type::getInt32Ty(F->getContext()),1);
 
-        Args.push_back(__oclprof__Arg);
-        Args.push_back(__BBnum__);
+        SmallVector<Value*, 2> Args;
+
+        Args.push_back(__ProfPos__);
+        Args.push_back(__One__);
 
         CallInst *New = CallInst::Create(Builtin_inc, Args, "", Term);
         New->setCallingConv(Builtin_inc->getCallingConv());
