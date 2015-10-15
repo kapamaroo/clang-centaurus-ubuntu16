@@ -681,8 +681,24 @@ void GeometrySrc::init(DirectiveInfo *DI, clang::ASTContext *Context) {
 }
 
 static bool isRuntimeCall(const std::string Name) {
-#warning do we need this? are these actually the runtime calls?
-    std::string data[] = {"create_task","taskwait"};
+    std::string data[] = {
+        "acl_centaurus_init"
+        ,"acl_centaurus_finish"
+        ,"acl_create_task"
+        ,"acl_taskwait_all"
+        ,"acl_taskwait_on"
+        ,"acl_taskwait_label"
+        ,"acl_taskwait_label_ratio"
+        ,"acl_taskwait_label_energy"
+        ,"acl_create_group_energy"
+        ,"acl_create_group_ratio"
+        ,"acl_malloc"
+        ,"acl_free"
+        ,"acl_calloc"
+        ,"acl_realloc"
+        ,"acl_usable_size"
+        ,"acl_set_group_quality"
+    };
     static const SmallVector<std::string,8> RuntimeCalls(data, data + sizeof(data)/sizeof(std::string));
 
     for (SmallVector<std::string,8>::const_iterator II = RuntimeCalls.begin(), EE = RuntimeCalls.end();
