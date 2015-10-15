@@ -1822,6 +1822,24 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
         return true;
     }
 
+    if (Name.compare("realloc") == 0) {
+        // replace the CallExpr Node
+        std::string NewCode = "acl_realloc(" + getPrettyExpr(Context,CE->getArg(0))
+            + "," + getPrettyExpr(Context,CE->getArg(1)) + ")";
+        Replacement R(SM,CE,NewCode);
+        applyReplacement(ReplacementPool,R);
+        return true;
+    }
+
+    if (Name.compare("calloc") == 0) {
+        // replace the CallExpr Node
+        std::string NewCode = "acl_calloc(" + getPrettyExpr(Context,CE->getArg(0))
+            + "," + getPrettyExpr(Context,CE->getArg(1)) + ")";
+        Replacement R(SM,CE,NewCode);
+        applyReplacement(ReplacementPool,R);
+        return true;
+    }
+
     SourceLocation Loc = FD->getSourceRange().getBegin();
     assert(!Loc.isInvalid());
     if (Loc.isInvalid())
