@@ -101,8 +101,7 @@ int CheckGeneratedSourceFiles(int argc, const char *argv[], const accll::Centaur
 
     ARGV.push_back("--");
     //ARGV.push_back("-fopenacc");
-    //ARGV.push_back("-D_GNU_SOURCE");
-    ARGV.push_back("-Wno-gnu-designator");
+    ARGV.push_back("-D_GNU_SOURCE");
     ARGV.push_back(IncludeFlag.c_str());
     //ARGV.push_back("-include__acl_api_types.h");
     ARGV.push_back("-include__acl_sys_impl.h");
@@ -233,17 +232,18 @@ int main(int argc, const char *argv[]) {
         ARGV.push_back(II->c_str());
 
     std::string IncludeFlag("-I" + Config.IncludePath);
+    std::string CustomSystemHeadersFlag("-I" + Config.CustomSystemHeaders);
     //std::string LibFlag("-L" + LibPath);
 
     ARGV.push_back("--");
     ARGV.push_back("-fopenacc");
     ARGV.push_back("-D_GNU_SOURCE");
     ARGV.push_back(IncludeFlag.c_str());
+    ARGV.push_back(CustomSystemHeadersFlag.c_str());
     ARGV.push_back("-include__acl_api_types.h");
 
-    // hide warnings related to custom system headers
+    // hide warnings related to redeclaration of OpenCL builtins on top of system builtins
     ARGV.push_back("-Wno-incompatible-library-redeclaration");
-    ARGV.push_back("-Wno-gnu-designator");
 
     ARGV.push_back("-c");
 
@@ -419,8 +419,9 @@ int main(int argc, const char *argv[]) {
         //cli.push_back("-###");
         cli.push_back("-Wall");
         //cli.push_back("-fopenacc");
-        cli.push_back("-Wno-gnu-designator");
+        //cli.push_back("-Wno-gnu-designator");
         cli.push_back(IncludeFlag.c_str());
+        cli.push_back("-D_GNU_SOURCE");
         cli.push_back("-include__acl_sys_impl.h");
         cli.push_back("-c");
 
@@ -651,6 +652,7 @@ accll::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
 {
     InstallPath = "/opt/LLVM";
     IncludePath = InstallPath + "/include";
+    CustomSystemHeaders = InstallPath + "/system_include";
     LibPath = InstallPath + "/lib";
     LinkerPath = "/usr/bin/ld";
     ClangPath = InstallPath + "/build-dev/bin/clang";

@@ -14,6 +14,7 @@ struct CentaurusConfig {
 
     std::string InstallPath;
     std::string IncludePath;
+    std::string CustomSystemHeaders;
     std::string LibPath;
     std::string LinkerPath;
     std::string ClangPath;
