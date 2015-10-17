@@ -1857,7 +1857,6 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
     }
 
     SourceLocation Loc = FD->getSourceRange().getBegin();
-    assert(!Loc.isInvalid());
     if (Loc.isInvalid())
         return true;
 
