@@ -416,7 +416,7 @@ bool OclProf2::runOnModule(Module &M) {
         addCalltoProfileBuiltins(AA,CG,CG[F],Builtin_inc);
     }
 
-    outs() << "Module: " << M.getModuleIdentifier() << ": " << BBCounter << " BacisBlocks\n";
+    outs() << "Module: " << M.getModuleIdentifier() << ": " << BBCounter << " BasicBlocks\n";
 
     return true;
 }
