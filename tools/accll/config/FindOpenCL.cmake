@@ -18,7 +18,7 @@ SET (OPENCL_VERSION_MINOR 1)
 SET (OPENCL_VERSION_PATCH 0)
 
 SET (ENV{OpenCL_INCPATH} "/usr/local/cuda/include")
-SET (ENV{OpenCL_LIBPATH} "/usr/local/cuda/lib")
+SET (ENV{OpenCL_LIBPATH} "/usr/local/cuda/lib64")
 
 IF (APPLE)
 
