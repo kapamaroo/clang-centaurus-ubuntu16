@@ -63,15 +63,21 @@ int runClang(const accll::CentaurusConfig &Config, std::string Path, SmallVector
     //llvm::StringRef A_OUT = "a.out";
     Driver TheDriver(Path, llvm::sys::getDefaultTargetTriple(), Diags);
     TheDriver.setTitle("centaurus");
-    llvm::ArrayRef<const char *> Args("g++");
-    TheDriver.ParseDriverMode(Args);
-    //TheDriver.CCCIsCXX = Config.isCXX;
 
     llvm::InitializeAllTargets();
+
+#if 0
+    if (Config.isCXX) {
+        cli.push_back("--driver-mode=g++");
+        llvm::outs() << DEBUG << "request for C++\n";
+    }
+#endif
 
     std::unique_ptr<Compilation> C(TheDriver.BuildCompilation(cli));
     if (!C.get())
         return 1;
+
+    // llvm::outs() << DEBUG << "CPP_MODE = " << TheDriver.CCCIsCXX() << "\n";
 
     int Res = 0;
     SmallVector<std::pair<int, const Command *>, 4> FailingCommands;
