@@ -495,7 +495,7 @@ KEYWORD(__generic                   , KEYOPENCL)
 //ALIAS("global", __global            , KEYOPENCL)
 ALIAS("local", __local              , KEYOPENCL)
 ALIAS("constant", __constant        , KEYOPENCL)
-ALIAS("private", __private          , KEYOPENCL)
+//ALIAS("private", __private          , KEYOPENCL)
 ALIAS("generic", __generic          , KEYOPENCL)
 // OpenCL function qualifiers
 KEYWORD(__kernel                    , KEYOPENCL)
