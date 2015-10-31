@@ -1476,6 +1476,7 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
 
 #if 1
     APIHeaderVector.push_back("/opt/LLVM/include/");
+    APIHeaderVector.push_back("/opt/LLVM/system_include/");
 #else
     APIHeaderVector.push_back("CL/centaurus_cl_platform.h");
     APIHeaderVector.push_back("centaurus_common.h");
