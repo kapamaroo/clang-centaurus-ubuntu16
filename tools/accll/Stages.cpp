@@ -1302,12 +1302,13 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         SizeExpr = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
         DataDepType = "D_PASS_BY_VALUE";
         std::string TypeName = A->getExpr()->getType().getAsString();
+        std::string TypeNameWithoutQual = A->getExpr()->getType().withoutLocalFastQualifiers().getAsString();
 
         std::string OrigName = A->getPrettyArg();
         std::string AllocName = NewName + "__alloc__";
         std::string HiddenName = NewName + "__hidden__";
         Prologue += TypeName + " " + HiddenName + " = " + OrigName + ";";
-        Prologue += TypeName + " *" + AllocName + " = acl_malloc(" + SizeExpr + ");";
+        Prologue += TypeNameWithoutQual + " *" + AllocName + " = (" + TypeNameWithoutQual + "*)acl_malloc(" + SizeExpr + ");";
         Prologue += "memcpy(" + AllocName + ",&" + HiddenName + "," + SizeExpr + ");";
         Address = AllocName;
         ElementSize = "sizeof(" + A->getExpr()->getType().getAsString() + ")";
