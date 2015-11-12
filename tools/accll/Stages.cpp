@@ -1825,9 +1825,11 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
     if (!FD)
         return true;
 
-    std::string Name = FD->getNameAsString();
-
     SourceManager &SM = Context->getSourceManager();
+    if (SM.isInSystemHeader(CE->getSourceRange().getBegin()))
+        return true;
+
+    std::string Name = FD->getNameAsString();
 
     if (Name.compare("free") == 0) {
         std::string NewCode = "acl_free(" + getPrettyExpr(Context,CE->getArg(0)) + ")";
@@ -1862,11 +1864,7 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
         return true;
     }
 
-    SourceLocation Loc = FD->getSourceRange().getBegin();
-    if (Loc.isInvalid())
-        return true;
-
-    if (SM.isInSystemHeader(Loc))
+    if (FD->getSourceRange().getBegin().isInvalid())
         return true;
 
     if (!Context->isOpenCLKernel(CurrentFunction)) {
@@ -1876,7 +1874,7 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
     // inside kernel function
 
 #if 0
-    PresumedLoc PLoc = SM.getPresumedLoc(Loc);
+    PresumedLoc PLoc = SM.getPresumedLoc(FD->getSourceRange().getBegin());
     if (PLoc.isInvalid())
         return true;
 
@@ -1886,7 +1884,7 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
                  << GetBasename(PLoc.getFilename()) << ":" << PLoc.getLine() << "\n";
 #endif
 
-    const FileEntry *FE = SM.getFileEntryForID(SM.getFileID(Loc));
+    const FileEntry *FE = SM.getFileEntryForID(SM.getFileID(FD->getSourceRange().getBegin()));
     if (!FE) {
         // this happens when we include files through the cmd (-include option)
         // if that happens, we already have the header's declarations
@@ -1898,7 +1896,7 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
     std::string DefFile = FE->getName();
 
     //maybe the implementation headers are not in system directories
-    if (!SM.isInMainFile(Loc)) {
+    if (!SM.isInMainFile(FD->getSourceRange().getBegin())) {
         if (TrackThisHeader(DefFile)) {
             DepCFG[FD].DepHeaders[DefFile] = true;
 #if 0
