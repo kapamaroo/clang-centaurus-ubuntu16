@@ -823,6 +823,10 @@ Stage0_ASTVisitor::VisitFunctionDecl(FunctionDecl *FD) {
     return true;
 }
 
+void Stage0_ASTVisitor::Init(ASTContext *C) {
+    Context = C;
+}
+
 void
 Stage0_ASTVisitor::Finish(ASTContext *Context) {
     SourceManager &SM = Context->getSourceManager();

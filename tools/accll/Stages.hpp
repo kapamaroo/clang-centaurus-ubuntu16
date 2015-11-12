@@ -48,18 +48,21 @@ private:
 
     std::vector<std::string> &InputFiles;
     std::vector<std::string> &RegularFiles;
+    clang::ASTContext *Context;
     bool hasDirectives;
     bool hasDeviceCode;
     bool hasRuntimeCalls;
     bool hasMain;
 
 public:
+    void Init(clang::ASTContext *C);
     void Finish(clang::ASTContext *Context);
 
     explicit Stage0_ASTVisitor(CentaurusConfig Config,
                                std::vector<std::string> &InputFiles,
                                std::vector<std::string> &RegularFiles) :
         Config(Config), InputFiles(InputFiles), RegularFiles(RegularFiles),
+        Context(0),
         hasDirectives(false), hasDeviceCode(false), hasRuntimeCalls(false), hasMain(false) {}
 
     bool VisitAccStmt(clang::AccStmt *ACC);
@@ -90,6 +93,7 @@ public:
 #endif
 
         clang::TranslationUnitDecl *TU = Context.getTranslationUnitDecl();
+        Visitor.Init(&Context);
         Visitor.TraverseDecl(TU);
         Visitor.Finish(&Context);
     }
