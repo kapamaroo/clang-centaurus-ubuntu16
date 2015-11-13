@@ -796,11 +796,18 @@ Stage0_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
 
 bool
 Stage0_ASTVisitor::VisitCallExpr(CallExpr *CE) {
-    //do nothing
-    return true;
-
     FunctionDecl *FD = CE->getDirectCallee();
     if (!FD)
+        return true;
+
+    if (FD->getSourceRange().getBegin().isInvalid())
+        return true;
+
+    SourceManager &SM = Context->getSourceManager();
+    if (SM.isInSystemHeader(CE->getSourceRange().getBegin()))
+        return true;
+
+    if (!SM.isInMainFile(CE->getSourceRange().getBegin()))
         return true;
 
     std::string Name = FD->getNameAsString();
