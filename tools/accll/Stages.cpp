@@ -708,6 +708,23 @@ static bool isRuntimeCall(const std::string Name) {
     return false;
 }
 
+static bool shouldOverrideCall(const std::string Name) {
+    std::string data[] = {
+        "malloc"
+        ,"realloc"
+        ,"calloc"
+        ,"free"
+        ,"malloc_usable_size"
+    };
+    static const SmallVector<std::string,8> RuntimeCalls(data, data + sizeof(data)/sizeof(std::string));
+
+    for (SmallVector<std::string,8>::const_iterator II = RuntimeCalls.begin(), EE = RuntimeCalls.end();
+         II != EE; ++II)
+        if (Name.compare(*II) == 0)
+            return true;
+    return false;
+}
+
 #if 0
 #warning FIXME: autodetect double extensions
 std::string accll::OpenCLExtensions = "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n\n";
@@ -815,6 +832,11 @@ Stage0_ASTVisitor::VisitCallExpr(CallExpr *CE) {
     if (isRuntimeCall(Name)) {
         hasRuntimeCalls = true;
         llvm::outs() << "Runtime call to '" << Name << "'\n";
+    }
+
+    if (shouldOverrideCall(Name)) {
+        hasRuntimeCalls = true;
+        llvm::outs() << "Override call to '" << Name << "'\n";
     }
 
     return true;
