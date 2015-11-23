@@ -532,7 +532,7 @@ private:
                  II = CList.begin(), EE = CList.end(); II != EE; ++II)
             if ((*II)->getKind() == CK_SIGNIFICANT)
                 return (*II)->getArg()->getPrettyArg();
-#warning FIXME:  default task significance
+        // default task significance
         return "100";
     }
 };
