@@ -165,15 +165,7 @@ KernelRefDef::KernelRefDef(const CentaurusConfig &ACLConfig,
 
     // always set the AlternativeName for the top level kernel function
     std::string AlternativeName = FD->getNameAsString();
-    if (Context->isFunctionWithSubtasks(FD)) {
-        if (SubtaskPrintMode == K_PRINT_ACCURATE_SUBTASK)
-            AlternativeName += "__accurate__";
-        else if (SubtaskPrintMode == K_PRINT_APPROXIMATE_SUBTASK)
-            AlternativeName += "__approx__";
-        // always write a new version if kernel has subtasks
-        DeviceCode = printFunction(FD,Context,AlternativeName,SubtaskPrintMode);
-    }
-    else if (Context->getSourceManager().isInMainFile(FD->getLocStart())) {
+    if (Context->getSourceManager().isInMainFile(FD->getLocStart())) {
         // if kernel has no subtasks write it on the new file only if it cannot
         // be found through headers
         DeviceCode = printFunction(FD,Context,AlternativeName,SubtaskPrintMode);
@@ -190,6 +182,15 @@ KernelRefDef::KernelRefDef(const CentaurusConfig &ACLConfig,
                      << FD->getNameAsString() << "-------------------kernel function from header, add header dependency -------------" << DefFile << "\n";
 #endif
         DeviceCode.NameRef = AlternativeName;
+    }
+
+    if (Context->isFunctionWithSubtasks(FD)) {
+        if (SubtaskPrintMode == K_PRINT_ACCURATE_SUBTASK)
+            AlternativeName += "__accurate__";
+        else if (SubtaskPrintMode == K_PRINT_APPROXIMATE_SUBTASK)
+            AlternativeName += "__approx__";
+        // always write a new version if kernel has subtasks
+        DeviceCode = printFunction(FD,Context,AlternativeName,SubtaskPrintMode);
     }
 
 #if 0
