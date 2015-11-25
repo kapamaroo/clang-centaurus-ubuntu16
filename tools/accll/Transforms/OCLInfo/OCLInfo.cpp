@@ -22,42 +22,85 @@
 #include "llvm/IR/CallSite.h"
 #include "llvm/Support/Debug.h"
 
+#include <fstream>
+
 using namespace llvm;
 
 //https://weaponshot.wordpress.com/2012/05/06/extract-all-the-metadata-nodes-in-llvm/
 
 namespace {
 
+enum StatisticsType {
+    STAT_INSTR_START = 0,
+    STAT_INSTR_TOTAL = 0,
+    STAT_INSTR_MEM,
+    STAT_INSTR_INT,
+    STAT_INSTR_FLOAT,
+    STAT_INSTR_END
+};
+
 struct BasicBlockStatistics {
     StringRef Name;
-    unsigned int TotalInstr;
-    unsigned int MemInstr;
-    unsigned int ScalarInstr;
-    unsigned int FloatInstr;
+    unsigned int BBnum;
+    unsigned int Counter[STAT_INSTR_END];
 
-    BasicBlockStatistics(const BasicBlock &BB) : Name(BB.getName()),
-                                                 TotalInstr(0), MemInstr(0),
-                                                 ScalarInstr(0), FloatInstr(0) {}
+    BasicBlockStatistics(const BasicBlock &BB, unsigned int BBnum) : Name(BB.getName()), BBnum(BBnum)
+    {
+        for (int i=STAT_INSTR_START; i < STAT_INSTR_END; ++i )
+            Counter[i] = 0;
+    }
 
-    void print() const {
-        outs() << Name << ": "
-               << MemInstr << "^mem + " << ScalarInstr << "^int + "
-               << FloatInstr << "^fp = " << TotalInstr << "\n";
+    void printStatistics() const {
+        // outs() << Name << ":";
+        outs() << BBnum << ":";
+        for (int i=STAT_INSTR_START; i < STAT_INSTR_END; ++i )
+            outs() << ":" << Counter[i];
+        outs() << "\n";
+    }
+
+    void writeStatistics(std::ofstream &profile_info) {
+        // profile_info << Name << ":";
+        profile_info << BBnum << ":";
+        for (int i=STAT_INSTR_START; i < STAT_INSTR_END; ++i )
+            profile_info << ":" << Counter[i];
+        profile_info << "\n";
     }
 
 };
 
-struct FunctionStatistics {
-    SmallVector<BasicBlockStatistics,16> BBStats;
+struct FunctionStatistics : public SmallVector<BasicBlockStatistics,16> {
+    Function &F;
+
+    FunctionStatistics(Function &F) : F(F) {}
+
+    void printStatistics() {
+        for (SmallVector<BasicBlockStatistics,16>::iterator
+                 II = begin(), EE = end(); II != EE; ++II) {
+            // outs() << F.getName() << "::";
+            II->printStatistics();
+        }
+    }
+
+    void writeStatistics(std::ofstream &profile_info) {
+        for (SmallVector<BasicBlockStatistics,16>::iterator
+                 II = begin(), EE = end(); II != EE; ++II) {
+            // profile_info << F.getName() << "::";
+            II->writeStatistics(profile_info);
+        }
+    }
+
 };
 
 struct OCLModuleInfo {
     Module &M;
     LLVMContext &Context;
 
-    DenseMap<Function *, FunctionStatistics> FunctionStats;
+    SmallVector<FunctionStatistics, 32> FunctionStats;
     DenseMap<MDNode*, unsigned> _MDMap; //Map for MDNodes.
     unsigned _MDNext;
+
+    // enumerate all basic blocks inside the module
+    static unsigned int BBCounter;
 
     OCLModuleInfo(Module &M)
         : M(M), Context(M.getContext()), _MDNext(0) {}
@@ -80,7 +123,7 @@ struct OCLModuleInfo {
         return NewOp;
     }
 
-    void update() {
+    void updateMetadata() {
         NamedMDNode *OpenCLKernelMetadata = M.getNamedMetadata("opencl.kernels");
         NamedMDNode *NvvmAnnotations = M.getNamedMetadata("nvvm.annotations");
         assert(OpenCLKernelMetadata && NvvmAnnotations);
@@ -95,7 +138,7 @@ struct OCLModuleInfo {
             if (!F || !F->size())
                 continue;
             if (F->getReturnType()->isVoidTy() && F->getNumUses() == 0) {
-                errs() << F->getName() << ": treat as kernel\n";
+                // errs() << F->getName() << ": treat as kernel\n";
                 SPIR_Kernels.push_back(F);
             }
         }
@@ -192,23 +235,55 @@ struct OCLModuleInfo {
             }
         }
     }
+#endif
 
-    bool runOnModule(Module &M) {
-        outs() << "OCLModuleInfo\n";
+    void printStatistics() {
+        outs() << "Module '" << M.getModuleIdentifier() << "': track " << BBCounter << " BasicBlocks\n";
 
+        // outs() << "Function::";
+        outs() << "BasicBlock::TOTAL:MEM:INT:FLOAT\n";
+        for (SmallVector<FunctionStatistics, 32>::iterator
+                 II = FunctionStats.begin(), EE = FunctionStats.end(); II != EE; ++II)
+            II->printStatistics();
+    }
+
+    void writeStatistics(std::string &ProfileInfoName) {
+        std::ofstream profile_info(ProfileInfoName);
+        writeStatistics(profile_info);
+        profile_info.flush();
+    }
+
+    void writeStatistics(std::ofstream &profile_info) {
+        profile_info << "# ";
+        // profile_info << "Function::";
+        profile_info << "BasicBlock::MEM:INT:FLOAT:TOTAL\n";
+        for (SmallVector<FunctionStatistics, 32>::iterator
+                 II = FunctionStats.begin(), EE = FunctionStats.end(); II != EE; ++II)
+            II->writeStatistics(profile_info);
+    }
+
+    bool collectStatistics(Module &M) {
         //CollectMD(M);
 
         for (Module::iterator mi = M.begin(), me = M.end(); mi != me; ++mi) {
-            Function &F = *mi;
-            FunctionStatistics Fout = analyzeFunc(F);
-            FunctionStats[&F] = Fout;
-        }
+            Function *F = &*mi;
 
-        print();
+            if (!F || !F->size())
+                continue;
+#if 1
+            // track OpenCL builtins
+            if (F->getName().startswith("__clc_"))
+                continue;
+#endif
+            if (F->getBasicBlockList().size() == 0)
+                continue;
+
+            FunctionStatistics Fout = analyzeFunc(*F);
+            FunctionStats.push_back(Fout);
+        }
 
         return false;
     }
-#endif
 
     FunctionStatistics analyzeFunc(Function &F);
     BasicBlockStatistics analyzeBB(BasicBlock &BB);
@@ -266,12 +341,13 @@ struct OclProf2 : public ModulePass {
 char OclProf::ID = 0;
 char OclProf2::ID = 0;
 unsigned OclProf2::BBCounter = 0;
+unsigned OCLModuleInfo::BBCounter = 0;
 
 static RegisterPass<OclProf> Y1("oclprof","Add Profile Counters to Device Code");
 static RegisterPass<OclProf2> Y2("oclprof2","Add Profile Counters to Device Code");
 
 BasicBlockStatistics OCLModuleInfo::analyzeBB(BasicBlock &BB) {
-    BasicBlockStatistics out(BB);
+    BasicBlockStatistics out(BB,BBCounter++);
     for (BasicBlock::iterator II = BB.begin(), IE = BB.end(); II != IE; ++II) {
         if (isa<PHINode>(*II))
             continue;
@@ -279,37 +355,28 @@ BasicBlockStatistics OCLModuleInfo::analyzeBB(BasicBlock &BB) {
         DataLayout TD(II->getParent()->getParent()->getParent()->getDataLayout());
         if (CI && CI->isNoopCast(TD.getIntPtrType(II->getParent()->getContext())))
             continue;
-        out.TotalInstr++;
+        out.Counter[STAT_INSTR_TOTAL]++;
         if (II->mayReadOrWriteMemory())
-            out.MemInstr++;
+            out.Counter[STAT_INSTR_MEM]++;
         else if ((CI && !CI->isIntegerCast()) ||
                  (II->getType()->isArrayTy() &&
                   II->getType()->getArrayElementType()->isFloatingPointTy()) ||
                  (II->getType()->isVectorTy() &&
                   II->getType()->getScalarType()->isFloatingPointTy())
                  || II->getType()->isFloatingPointTy())
-            out.FloatInstr++;
+            out.Counter[STAT_INSTR_FLOAT]++;
         else
-            out.ScalarInstr++;
+            out.Counter[STAT_INSTR_INT]++;
     }
     return out;
 }
 
 FunctionStatistics OCLModuleInfo::analyzeFunc(Function &F) {
-    FunctionStatistics out;
-
-    const unsigned BlockNum = F.getBasicBlockList().size();
-
-    // we care for Functions with 2 or more BasicBlocks
-    if (BlockNum == 0)
-        return out;
-
-    outs() << "\n****    Function: " << F.getName() << "    ****\n";
+    FunctionStatistics out(F);
 
     for (Function::iterator BI = F.begin(), BE = F.end(); BI != BE; ++BI) {
         BasicBlockStatistics BBout = analyzeBB(*BI);
-        out.BBStats.push_back(BBout);
-        BBout.print();
+        out.push_back(BBout);
     }
     return out;
 }
@@ -363,8 +430,12 @@ bool OclProf::runOnModule(Module &M) {
 #if 1
     // use it if we have OpenCL metadata that need update
 
-    OCLModuleInfo MDHandler(M);
-    MDHandler.update();
+    OCLModuleInfo Handler(M);
+    Handler.updateMetadata();
+    Handler.collectStatistics(M);
+    Handler.printStatistics();
+    std::string ProfileInfoName = M.getModuleIdentifier() + ".aclprofinfo";
+    Handler.writeStatistics(ProfileInfoName);
 #endif
 
     return true;
@@ -415,8 +486,6 @@ bool OclProf2::runOnModule(Module &M) {
         replaceNullPtrWithProfileCounters(AA,CG,CG[F]);
         addCalltoProfileBuiltins(AA,CG,CG[F],Builtin_inc);
     }
-
-    outs() << "Module: " << M.getModuleIdentifier() << ": " << BBCounter << " BasicBlocks\n";
 
     return true;
 }
