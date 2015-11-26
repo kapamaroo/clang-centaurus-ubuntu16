@@ -205,6 +205,13 @@ KernelRefDef::KernelRefDef(const CentaurusConfig &ACLConfig,
 #endif
 
     std::string __offline = KernelHeader + Extensions;
+
+    if (Context->getSourceManager().isInMainFile(FD->getLocStart())) {
+        // write any enabled OpenCL extensions
+#define OPENCLEXT(nm) if (Context->OpenCLFeatures->nm) { __offline += "#pragma OPENCL EXTENSION " #nm " : enable\n"; }
+#include "clang/Basic/OpenCLExtensions.def"
+    }
+
     std::string PreDef;  // = Extensions;
     for (llvm::StringMap<bool>::iterator
              II = DepCFG[FD].DepHeaders.begin(), EE = DepCFG[FD].DepHeaders.end(); II != EE; ++II) {

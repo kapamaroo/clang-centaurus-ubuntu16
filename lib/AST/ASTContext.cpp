@@ -745,7 +745,9 @@ ASTContext::ASTContext(LangOptions &LOpts, SourceManager &SM,
       Idents(idents), Selectors(sels), BuiltinInfo(builtins),
       DeclarationNames(*this), ExternalSource(nullptr), Listener(nullptr),
       Comments(SM), CommentsLoaded(false),
-      CommentCommandTraits(BumpAlloc, LOpts.CommentOpts), LastSDM(nullptr, 0) {
+      CommentCommandTraits(BumpAlloc, LOpts.CommentOpts), LastSDM(nullptr, 0),
+    OpenCLFeatures(nullptr)
+{
   TUDecl = TranslationUnitDecl::Create(*this);
 }
 

@@ -131,6 +131,8 @@ Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
 
   // Initilization of data sharing attributes stack for OpenMP
   InitDataSharingAttributesStack();
+
+  Context.OpenCLFeatures = &getOpenCLOptions();
 }
 
 void Sema::addImplicitTypedef(StringRef Name, QualType T) {

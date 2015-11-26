@@ -2484,6 +2484,8 @@ public:
     bool isOpenCLKernel(clang::FunctionDecl *FD) { return KernelFD.count(FD) ? true : false; }
     bool isFunctionWithSubtasks(clang::FunctionDecl *FD) { return FDS.count(FD) ? true : false; }
 
+    OpenCLOptions *OpenCLFeatures;
+
   llvm::StringMap<SectionInfo> SectionInfos;
 };
 
