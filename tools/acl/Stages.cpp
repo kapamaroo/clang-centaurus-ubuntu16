@@ -1951,14 +1951,3 @@ Stage1_ASTVisitor::VisitCallExpr(CallExpr *CE) {
 
     return true;
 }
-
-#if 0
-struct UniqueArgVector : ArgVector {
-    bool isUnique(Arg *Target) const {
-        for (const_iterator II = begin(), EE = end(); II != EE; ++II)
-            if (Target->Matches(*II))
-                return false;
-        return true;
-    }
-};
-#endif
