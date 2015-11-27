@@ -46,3 +46,6 @@ include_directories(${LLVM_INCLUDE_DIRS})
 link_directories(${LLVM_LIBRARY_DIRS})
 
 add_subdirectory(Transforms/OCLInfo)
+
+install(TARGETS acl
+  RUNTIME DESTINATION bin)

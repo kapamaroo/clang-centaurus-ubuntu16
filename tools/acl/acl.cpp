@@ -23,6 +23,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <cstdlib>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -656,12 +657,15 @@ int main(int argc, const char *argv[]) {
 acl::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
     ProfileMode(false), CompileOnly(false), isCXX(false), NoArgs(false)
 {
-    InstallPath = "/opt/LLVM";
-    IncludePath = InstallPath + "/include";
+    if (const char *path = std::getenv("CENTAURUS_INSTALL_PATH"))
+        InstallPath = path;
+    else
+        InstallPath = "/opt/Centaurus";
+    IncludePath = InstallPath + "/include/centaurus";
     CustomSystemHeaders = InstallPath + "/system_include";
     LibPath = InstallPath + "/lib";
     LinkerPath = "/usr/bin/ld";
-    ClangPath = InstallPath + "/build-dev/bin/clang";
+    ClangPath = InstallPath + "/bin/clang";
 
     // clang -emit-llvm -target spir -include ~/centaurus/acl/opencl_spir.h -S -o clang.ll ~/centaurus/acl/input.cl
     // ioc64 -cmd=compile -input=./input.cl -llvm-spir32=intel.ll

@@ -1511,16 +1511,8 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     NewHeader = RemoveDotExtension(FileName) + Suffix + ".h";
     HostHeader = CommonFileHeader;  // + "#include \"" + NewHeader + "\"\n";
 
-#if 1
-    APIHeaderVector.push_back("/opt/LLVM/include/");
-    APIHeaderVector.push_back("/opt/LLVM/system_include/");
-#else
-    APIHeaderVector.push_back("CL/centaurus_cl_platform.h");
-    APIHeaderVector.push_back("centaurus_common.h");
-    APIHeaderVector.push_back("__acl_api_types.h");
-    APIHeaderVector.push_back("include/clc/");
-    APIHeaderVector.push_back("include/math/");
-#endif
+    APIHeaderVector.push_back(ACLConfig.IncludePath);
+    APIHeaderVector.push_back(ACLConfig.CustomSystemHeaders);
 
     // asprintf()
     // avoid redeclaration warning from main.c
