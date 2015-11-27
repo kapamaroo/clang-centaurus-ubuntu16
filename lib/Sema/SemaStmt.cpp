@@ -219,7 +219,7 @@ void Sema::DiagnoseUnusedExprResult(const Stmt *S) {
     return;
 
   // do not warn on initializers like ( type )( value, value )
-  if (getLangOpts().OpenACC)
+  if (getLangOpts().Centaurus)
       return;
 
   // Okay, we have an unused result.  Depending on what the base expression is,

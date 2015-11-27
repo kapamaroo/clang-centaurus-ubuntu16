@@ -21,7 +21,7 @@
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/AST/Type.h"
 #include "clang/Basic/CharInfo.h"
-#include "clang/Basic/OpenACC.h"
+#include "clang/Basic/Centaurus.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Lex/Token.h"
 #include "llvm/ADT/StringExtras.h"
@@ -1174,14 +1174,14 @@ bool CapturedStmt::capturesVariable(const VarDecl *Var) const {
   return false;
 }
 
-AccStmt::AccStmt(openacc::DirectiveInfo *DI) :
-    Stmt(AccStmtClass), DI(DI), SubStmt(0) {}
+AclStmt::AclStmt(centaurus::DirectiveInfo *DI) :
+    Stmt(AclStmtClass), DI(DI), SubStmt(0) {}
 
 SourceLocation
-AccStmt::getLocStart() const { return DI->getLocStart(); }
+AclStmt::getLocStart() const { return DI->getLocStart(); }
 
 SourceLocation
-AccStmt::getLocEnd() const {
+AclStmt::getLocEnd() const {
     return SubStmt ? SubStmt->getLocEnd() : DI->getLocEnd();
 }
 StmtRange OMPClause::children() {

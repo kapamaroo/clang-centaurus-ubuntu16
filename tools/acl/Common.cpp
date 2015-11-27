@@ -1,10 +1,10 @@
 #include "llvm/ADT/SmallVector.h"
-#include "clang/Basic/OpenACC.h"
+#include "clang/Basic/Centaurus.h"
 
 #include "Common.hpp"
 
 using namespace clang;
-using namespace clang::openacc;
+using namespace clang::centaurus;
 
 ///////////////////////////////////////////////////////////////////////////////
 //                        Common tools

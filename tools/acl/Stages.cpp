@@ -12,8 +12,8 @@
 using namespace llvm;
 using namespace clang;
 using namespace clang::tooling;
-using namespace clang::openacc;
-using namespace accll;
+using namespace clang::centaurus;
+using namespace acl;
 
 namespace {
 
@@ -23,7 +23,7 @@ struct KernelDepInfo {
 };
 llvm::DenseMap<FunctionDecl *, struct KernelDepInfo> DepCFG;
 
-accll::CentaurusConfig ACLConfig;
+acl::CentaurusConfig ACLConfig;
 
 std::vector<std::string> APIHeaderVector;
 bool TrackThisHeader(std::string &Header) {
@@ -145,7 +145,7 @@ static ClauseInfo *getClauseOfKind(const ClauseList &CList, ClauseKind CK) {
 
 KernelRefDef::KernelRefDef(const CentaurusConfig &ACLConfig,
                            clang::ASTContext *Context,clang::FunctionDecl *FD, clang::CallGraph *CG,
-                           const clang::openacc::DirectiveInfo *DI,
+                           const clang::centaurus::DirectiveInfo *DI,
                            std::string &Extensions, std::string &UserTypes,
                            const enum PrintSubtaskType SubtaskPrintMode)
     : ACLConfig(ACLConfig)
@@ -346,7 +346,7 @@ KernelRefDef::KernelRefDef(const CentaurusConfig &ACLConfig,
 
     const ClauseKind BindMode = (SubtaskPrintMode == K_PRINT_ACCURATE_SUBTASK) ? CK_BIND : CK_BIND_APPROXIMATE;
 
-    HostCode.NameRef = "__accll_kernel_" + DeviceCode.NameRef;
+    HostCode.NameRef = "__acl_kernel_" + DeviceCode.NameRef;
     HostCode.Definition = PreAPIDef + PlatformTable
         + "struct _kernel_struct *" + HostCode.NameRef + " = (struct _kernel_struct*)acl_malloc(sizeof(struct _kernel_struct));"
         "*" + HostCode.NameRef + " = (struct _kernel_struct){"
@@ -414,7 +414,7 @@ struct KernelSrc {
     {
         CreateKernel(Context,CG,DI,Extensions,UserTypes);
 
-        NameRef = "__accll_task_exe";
+        NameRef = "__acl_task_exe";
         Definition = AccurateKernel->HostCode.Definition;
 
         std::string ApproxName = ApproximateKernel ? ApproximateKernel->HostCode.NameRef : "NULL";
@@ -430,10 +430,10 @@ struct KernelSrc {
 
                 ClauseInfo *ClauseEstimation = getClauseOfKind(DI->getClauseList(),CK_ESTIMATION);
                 ClauseInfo *ClauseEvalfun = getClauseOfKind(DI->getClauseList(),CK_EVALFUN);
-                // see SemaOpenACC.cpp
+                // see SemaCentaurus.cpp
                 unsigned Index = ClauseEvalfun->getArgAs<FunctionArg>()->getFunctionDecl()->getNumParams() - 1;
 
-                EstimationName = "__accll_arg_estimation";
+                EstimationName = "__acl_arg_estimation";
                 std::string EstimationCode = "struct _memory_object " + EstimationName + " = {"
                     + ".cl_obj = 0"
                     + ",.index = " + toString(Index)
@@ -459,7 +459,7 @@ struct KernelSrc {
 
 private:
     void CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG,
-                      clang::openacc::DirectiveInfo *DI,
+                      clang::centaurus::DirectiveInfo *DI,
                       std::string &Extensions, std::string &UserTypes);
 
 };
@@ -481,7 +481,7 @@ struct TaskSrc {
 
     TaskSrc(clang::ASTContext *Context, clang::CallGraph *CG, DirectiveInfo *DI,
             SmallVector<VarDecl *,4> &IterationSpace,
-            clang::openacc::RegionStack &RStack,
+            clang::centaurus::RegionStack &RStack,
             clang::tooling::Replacements &ReplacementPool,
             std::string &Extensions, std::string &UserTypes) :
         Label(getTaskLabel(DI)),
@@ -551,7 +551,7 @@ UIDKernelMap KernelRefDef::KernelUIDMap;
 void
 KernelSrc::CreateKernel(clang::ASTContext *Context, clang::CallGraph *CG, DirectiveInfo *DI,
                         std::string &Extensions, std::string &UserTypes) {
-    Stmt *SubStmt = DI->getAccStmt()->getSubStmt();
+    Stmt *SubStmt = DI->getAclStmt()->getSubStmt();
     assert(SubStmt && "Null SubStmt");
 
     //create device code
@@ -677,15 +677,15 @@ void GeometrySrc::init(DirectiveInfo *DI, clang::ASTContext *Context) {
             local_init_list += ",";
     }
 
-    std::string pre_global_code = "size_t __accll_geometry_global[" + Dims + "] = {" + global_init_list + "};";
-    std::string pre_local_code = "size_t __accll_geometry_local[" + Dims + "] = {" + local_init_list + "};";
+    std::string pre_global_code = "size_t __acl_geometry_global[" + Dims + "] = {" + global_init_list + "};";
+    std::string pre_local_code = "size_t __acl_geometry_local[" + Dims + "] = {" + local_init_list + "};";
 
     NameRef = "__task_geometry";
     Definition = pre_global_code + pre_local_code
         + "struct _geometry " + NameRef + " = {"
         + ".dimensions = " + Dims
-        + ",.acl_global = __accll_geometry_global"
-        + ",.acl_local = __accll_geometry_local };";
+        + ",.acl_global = __acl_geometry_global"
+        + ",.acl_local = __acl_geometry_local };";
 }
 
 static bool isRuntimeCall(const std::string Name) {
@@ -733,19 +733,14 @@ static bool shouldOverrideCall(const std::string Name) {
     return false;
 }
 
-#if 0
-#warning FIXME: autodetect double extensions
-std::string accll::OpenCLExtensions = "#pragma OPENCL EXTENSION cl_khr_fp64 : enable\n\n";
-#else
-std::string accll::OpenCLExtensions;
-#endif
+std::string acl::OpenCLExtensions;
 
 #if 0
-std::string accll::KernelHeader =
-    "/* Generated by accll */\n\n\n";
+std::string acl::KernelHeader =
+    "/* Generated by acl */\n\n\n";
 #else
-std::string accll::KernelHeader =
-    "/* Generated by accll */\n\n\
+std::string acl::KernelHeader =
+    "/* Generated by acl */\n\n\
 #ifdef __ACL_PROFILE_MODE__\n\
 int __acl_builtin__incBB(__global int *prof, int num) {\
     return atomic_inc(&prof[num]);\
@@ -756,8 +751,8 @@ int __acl_builtin__incBB(__global int *prof, int num) {\
 #endif
 
 std::string
-accll::getNewNameFromOrigName(std::string OrigName) {
-    std::string NewName("__accll_");  //prefix
+acl::getNewNameFromOrigName(std::string OrigName) {
+    std::string NewName("__acl_");  //prefix
     NewName += OrigName;
     ReplaceStringInPlace(NewName,"->","_");  //delimiter
     ReplaceStringInPlace(NewName,".","_");   //delimiter
@@ -768,7 +763,7 @@ accll::getNewNameFromOrigName(std::string OrigName) {
 }
 
 Arg*
-accll::CreateNewArgFrom(Expr *E, ClauseInfo *ImplicitCI, ASTContext *Context) {
+acl::CreateNewArgFrom(Expr *E, ClauseInfo *ImplicitCI, ASTContext *Context) {
     E = E->IgnoreParenImpCasts();
     Arg *Target = 0;
     if (isa<ArraySubscriptExpr>(E))
@@ -812,7 +807,7 @@ accll::CreateNewArgFrom(Expr *E, ClauseInfo *ImplicitCI, ASTContext *Context) {
 //                        Stage0
 ///////////////////////////////////////////////////////////////////////////////
 bool
-Stage0_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
+Stage0_ASTVisitor::VisitAclStmt(AclStmt *ACC) {
     hasDirectives = true;
     if (ACC->getDirective()->getKind() == DK_TASK)
         hasDeviceCode = true;
@@ -876,7 +871,7 @@ Stage0_ASTVisitor::Finish(ASTContext *Context) {
         return;
     }
 
-    std::string Suffix("_accll");
+    std::string Suffix("_acl");
     std::string Ext = GetDotExtension(FileName);
     std::string NewFile = RemoveDotExtension(FileName) + Suffix + Ext;
 
@@ -925,8 +920,8 @@ DiagnosticBuilder Diag(clang::ASTContext *Context, SourceLocation Loc, unsigned 
 }
 
 bool
-Stage1_ASTVisitor::TraverseAccStmt(AccStmt *S) {
-    TRY_TO(WalkUpFromAccStmt(S));
+Stage1_ASTVisitor::TraverseAclStmt(AclStmt *S) {
+    TRY_TO(WalkUpFromAclStmt(S));
     //{ CODE; }
     RStack.EnterRegion(S->getDirective());
     for (Stmt::child_range range = S->children(); range; ++range) {
@@ -960,14 +955,14 @@ Stage1_ASTVisitor::VisitBinaryOperator(BinaryOperator *BO) {
 }
 
 bool
-Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
+Stage1_ASTVisitor::VisitAclStmt(AclStmt *ACC) {
     DirectiveInfo *DI = ACC->getDirective();
     Stmt *SubStmt = ACC->getSubStmt();
 
     NamedDecl *ND = dyn_cast<NamedDecl>(CurrentFunction);
     llvm::outs()
         << " in " << ND->getName() << "(): "
-        << "Found OpenACC Directive: " << DI->getAsString() << "\n";
+        << "Found Centaurus Directive: " << DI->getAsString() << "\n";
 
     if (DI->getKind() == DK_TASKWAIT) {
         //generate runtime calls for taskwait
@@ -1038,7 +1033,7 @@ Stage1_ASTVisitor::VisitAccStmt(AccStmt *ACC) {
         }
 
         TaskSrc NewTask(Context,CG,DI,IterationSpace,RStack,ReplacementPool,
-                        accll::OpenCLExtensions,UserTypes);
+                        acl::OpenCLExtensions,UserTypes);
 
         std::string DirectiveSrc =
             DI->getPrettyDirective(Context->getPrintingPolicy(),false);
@@ -1240,7 +1235,7 @@ static Arg *getMatchedArg(Arg *A, SmallVector<Arg*,8> &Pool, ASTContext *Context
 }
 
 ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
-                              clang::openacc::DirectiveInfo *DI,
+                              clang::centaurus::DirectiveInfo *DI,
                               SmallVector<Arg*,8> &PragmaArgs,
                               RegionStack &RStack, const int Index) {
     //declare a new var here for the accelerator
@@ -1271,7 +1266,7 @@ ObjRefDef addVarDeclForDevice(clang::ASTContext *Context, Expr *E,
         A = TmpA;
     }
 
-    std::string NewName = "__accll_arg_" + toString(Index);
+    std::string NewName = "__acl_arg_" + toString(Index);
 
     //generate new code
 
@@ -1391,7 +1386,7 @@ SourceLocation getLocAfterDecl(FunctionDecl *CurrentFunction, VarDecl *VD, std::
                     CompoundStmt::body_iterator NextStmt = IS + 1;
                     assert(NextStmt != ES);
                     DeclLoc = (*NextStmt)->getLocStart();
-                    if (isa<AccStmt>(*NextStmt)) {
+                    if (isa<AclStmt>(*NextStmt)) {
                         DeclLoc = DeclLoc.getLocWithOffset(-9);
                         CreateMem += "\n";
                     }
@@ -1405,7 +1400,7 @@ SourceLocation getLocAfterDecl(FunctionDecl *CurrentFunction, VarDecl *VD, std::
 
 void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
                      RegionStack &RStack) {
-    Stmt *SubStmt = DI->getAccStmt()->getSubStmt();
+    Stmt *SubStmt = DI->getAclStmt()->getSubStmt();
 
     CallExpr *CE = dyn_cast<CallExpr>(SubStmt);
     assert(CE);
@@ -1465,7 +1460,7 @@ void DataIOSrc::init(clang::ASTContext *Context, DirectiveInfo *DI,
         InitList += MemObj.NameRef;
     }
 
-    NameRef = "__accll_kernel_args";
+    NameRef = "__acl_kernel_args";
     Definition = Prologue
         + "struct _memory_object " + NameRef + "[" + NumArgs + "] = {" + InitList + "};";
 }
@@ -1512,7 +1507,7 @@ void Stage1_ASTVisitor::Init(ASTContext *C, CallGraph *_CG) {
     std::string FileName = SM.getFileEntryForID(SM.getMainFileID())->getName();
 
     Suffix = "_ocl";
-    CommonFileHeader = "/* Generated by accll */\n";
+    CommonFileHeader = "/* Generated by acl */\n";
     NewHeader = RemoveDotExtension(FileName) + Suffix + ".h";
     HostHeader = CommonFileHeader;  // + "#include \"" + NewHeader + "\"\n";
 
@@ -1763,7 +1758,7 @@ Stage1_ASTVisitor::Finish() {
     DepCFG.clear();
 
     APIHeaderVector.clear();
-    ACLConfig = accll::CentaurusConfig();
+    ACLConfig = acl::CentaurusConfig();
 }
 
 bool Stage1_ASTVisitor::TraverseForStmt(ForStmt *F) {

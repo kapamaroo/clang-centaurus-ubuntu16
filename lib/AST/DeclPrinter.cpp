@@ -21,7 +21,7 @@
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/Basic/Module.h"
-#include "clang/Basic/OpenACC.h"
+#include "clang/Basic/Centaurus.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace clang;
 
@@ -53,10 +53,10 @@ namespace {
       : Out(Out), Policy(Policy), Indentation(Indentation),
         PrintInstantiation(PrintInstantiation)
       {
-          SubtaskPrintMode = openacc::K_PRINT_ALL;
+          SubtaskPrintMode = centaurus::K_PRINT_ALL;
       }
 
-    enum openacc::PrintSubtaskType SubtaskPrintMode;
+    enum centaurus::PrintSubtaskType SubtaskPrintMode;
     std::string AlternativeName;
 
     void VisitDeclContext(DeclContext *DC, bool Indent = true);
@@ -123,7 +123,7 @@ void Decl::printAccurateVersion(raw_ostream &Out, const PrintingPolicy &Policy,
                                 unsigned Indentation, bool PrintInstantiation) const {
   assert(isa<FunctionDecl>(this));
   DeclPrinter Printer(Out, Policy, Indentation, PrintInstantiation);
-  Printer.SubtaskPrintMode = openacc::K_PRINT_ACCURATE_SUBTASK;
+  Printer.SubtaskPrintMode = centaurus::K_PRINT_ACCURATE_SUBTASK;
   Printer.AlternativeName = AlternativeName;
   Printer.Visit(const_cast<Decl*>(this));
 }
@@ -133,7 +133,7 @@ void Decl::printApproximateVersion(raw_ostream &Out, const PrintingPolicy &Polic
                                    unsigned Indentation, bool PrintInstantiation) const {
   assert(isa<FunctionDecl>(this));
   DeclPrinter Printer(Out, Policy, Indentation, PrintInstantiation);
-  Printer.SubtaskPrintMode = openacc::K_PRINT_APPROXIMATE_SUBTASK;
+  Printer.SubtaskPrintMode = centaurus::K_PRINT_APPROXIMATE_SUBTASK;
   Printer.AlternativeName = AlternativeName;
   Printer.Visit(const_cast<Decl*>(this));
 }
@@ -671,13 +671,13 @@ void DeclPrinter::VisitFunctionDecl(FunctionDecl *D) {
 
     Stmt *Body = D->getBody();
     switch (SubtaskPrintMode) {
-    case openacc::K_PRINT_ALL:
+    case centaurus::K_PRINT_ALL:
         Body->printPretty(Out, nullptr, SubPolicy, Indentation);
         break;
-    case openacc::K_PRINT_ACCURATE_SUBTASK:
+    case centaurus::K_PRINT_ACCURATE_SUBTASK:
         Body->printPrettyAccurateVersion(Out, nullptr, SubPolicy, Indentation);
         break;
-    case openacc::K_PRINT_APPROXIMATE_SUBTASK:
+    case centaurus::K_PRINT_APPROXIMATE_SUBTASK:
         Body->printPrettyApproximateVersion(Out, nullptr, SubPolicy, Indentation);
         break;
     }

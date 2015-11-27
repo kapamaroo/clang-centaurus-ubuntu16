@@ -19,7 +19,7 @@
 #include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Sema/DeclSpec.h"
 #include "clang/Sema/ParsedTemplate.h"
-#include "clang/Sema/SemaOpenACC.h"
+#include "clang/Sema/SemaCentaurus.h"
 #include "clang/Sema/Scope.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace clang;
@@ -523,7 +523,7 @@ void Parser::Initialize() {
   }
 
   {
-      using namespace openacc;
+      using namespace centaurus;
       ParseClause[CK_LABEL] = &Parser::ParseClauseLabel;
       ParseClause[CK_TASKID] = &Parser::ParseClauseTaskid;
       ParseClause[CK_SIGNIFICANT] = &Parser::ParseClauseSignificant;
@@ -563,7 +563,7 @@ bool
 Parser::ProhibitExtensionPragmas() {
     PragmaExtensionHandler *Handler =
         reinterpret_cast<PragmaExtensionHandler*>
-        (OpenACCHandler.get());
+        (CentaurusHandler.get());
     return Handler->Prohibit();
 }
 
@@ -571,7 +571,7 @@ void
 Parser::AllowExtensionPragmas(bool OldValue) {
     PragmaExtensionHandler *Handler =
         reinterpret_cast<PragmaExtensionHandler*>
-        (OpenACCHandler.get());
+        (CentaurusHandler.get());
     Handler->Allow(OldValue);
 }
 
@@ -717,7 +717,7 @@ Parser::ParseExternalDeclaration(ParsedAttributesWithRange &attrs,
     HandlePragmaMSPragma();
     return DeclGroupPtrTy();
   case tok::annot_pragma_acc:
-      HandlePragmaOpenACC();
+      HandlePragmaCentaurus();
       return DeclGroupPtrTy();
   case tok::semi:
     // Either a C++11 empty-declaration or attribute-declaration.

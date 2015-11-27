@@ -8002,7 +8002,7 @@ Sema::ActOnFunctionDeclarator(Scope *S, Declarator &D, DeclContext *DC,
     for (auto Param : NewFD->params())
       checkIsValidOpenCLKernelParameter(*this, D, Param, ValidTypes);
 
-    //openacc extension
+    //centaurus extension
     getASTContext().markAsOpenCLKernel(NewFD);
   }
 

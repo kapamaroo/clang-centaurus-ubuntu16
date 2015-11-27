@@ -186,8 +186,8 @@ namespace clang {
   struct DeductionFailureInfo;
   class TemplateSpecCandidateSet;
 
-namespace openacc {
-class OpenACC;
+namespace centaurus {
+class Centaurus;
 }
 
 namespace sema {
@@ -301,8 +301,8 @@ public:
   DiagnosticsEngine &Diags;
   SourceManager &SourceMgr;
 
-  ///Internal object to handle openACC internals
-  openacc::OpenACC *ACCInfo;
+  ///Internal object to handle centaurus internals
+  centaurus::Centaurus *ACCInfo;
 
   /// \brief Flag indicating whether or not to collect detailed statistics.
   bool CollectStats;
@@ -1035,7 +1035,7 @@ public:
   ASTMutationListener *getASTMutationListener() const;
   ExternalSemaSource* getExternalSource() const { return ExternalSource; }
 
-  openacc::OpenACC *getACCInfo() {
+  centaurus::Centaurus *getACCInfo() {
       assert(ACCInfo && "ACCInfo not initialized");
       return ACCInfo;
   }

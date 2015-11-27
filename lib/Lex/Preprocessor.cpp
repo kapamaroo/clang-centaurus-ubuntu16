@@ -934,8 +934,8 @@ void Preprocessor::createPreprocessingRecord() {
   addPPCallbacks(std::unique_ptr<PPCallbacks>(Record));
 }
 
-// Change the OpenCL status, keeps the OpenACC flag enabled.
+// Change the OpenCL status, keeps the Centaurus flag enabled.
 void Preprocessor::SetOpenCL(bool EnableOpenCL) {
-    assert(LangOpts.OpenACC && "bad call outside OpenACC mode");
+    assert(LangOpts.Centaurus && "bad call outside Centaurus mode");
     LangOpts = (EnableOpenCL) ? LangOptsOpenCL : LangOptsDefault;
 }

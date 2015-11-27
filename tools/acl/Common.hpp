@@ -1,5 +1,5 @@
-#ifndef ACCLL_COMMON_HPP_
-#define ACCLL_COMMON_HPP_
+#ifndef ACL_COMMON_HPP_
+#define ACL_COMMON_HPP_
 
 #include <sstream>
 

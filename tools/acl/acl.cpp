@@ -31,15 +31,15 @@
 using namespace llvm;
 using namespace clang;
 using namespace clang::tooling;
-using namespace accll;
+using namespace acl;
 
 ///////////////////////////////////////////////////////////////////////////////
 //                        Main Tool
 ///////////////////////////////////////////////////////////////////////////////
 
-static llvm::cl::OptionCategory accllCategory("accll options");
+static llvm::cl::OptionCategory aclCategory("acl options");
 
-int runClang(const accll::CentaurusConfig &Config, std::string Path, SmallVector<const char *, 256> &cli) {
+int runClang(const acl::CentaurusConfig &Config, std::string Path, SmallVector<const char *, 256> &cli) {
 #if 1
     llvm::outs() << "\n" << DEBUG << Path << " ";
     for (SmallVector<const char *, 256>::iterator
@@ -90,7 +90,7 @@ int runClang(const accll::CentaurusConfig &Config, std::string Path, SmallVector
     return Res;
 }
 
-int CheckGeneratedSourceFiles(int argc, const char *argv[], const accll::CentaurusConfig &Config) {
+int CheckGeneratedSourceFiles(int argc, const char *argv[], const acl::CentaurusConfig &Config) {
     llvm::outs() << "Check new generated source files ... ";
 
     SmallVector<const char *, 256> ARGV;
@@ -106,7 +106,7 @@ int CheckGeneratedSourceFiles(int argc, const char *argv[], const accll::Centaur
     //std::string LibFlag("-L" + LibPath);
 
     ARGV.push_back("--");
-    //ARGV.push_back("-fopenacc");
+    //ARGV.push_back("-fcentaurus");
     ARGV.push_back("-D_GNU_SOURCE");
     ARGV.push_back(IncludeFlag.c_str());
     //ARGV.push_back("-include__acl_api_types.h");
@@ -128,7 +128,7 @@ int CheckGeneratedSourceFiles(int argc, const char *argv[], const accll::Centaur
     llvm::outs() << "\n";
 #endif
 
-    CommonOptionsParser OptionsParser(ARGC, ARGV.data(), accllCategory);
+    CommonOptionsParser OptionsParser(ARGC, ARGV.data(), aclCategory);
 
     {
         ClangTool Tool5(OptionsParser.getCompilations(),Config.OutputFiles);
@@ -169,7 +169,7 @@ static cl::extrahelp CommonHelp(CommonOptionsParser::HelpMessage);
 static cl::extrahelp MoreHelp("\nInvocation\n\t./acl input-files [-- compiler-flags]\n\n");
 
 int main(int argc, const char *argv[]) {
-    accll::CentaurusConfig Config(argc,argv);
+    acl::CentaurusConfig Config(argc,argv);
     //Config.print();
 
     if (Config.NoArgs) {
@@ -242,7 +242,7 @@ int main(int argc, const char *argv[]) {
     //std::string LibFlag("-L" + LibPath);
 
     ARGV.push_back("--");
-    ARGV.push_back("-fopenacc");
+    ARGV.push_back("-fcentaurus");
     ARGV.push_back("-D_GNU_SOURCE");
     ARGV.push_back(IncludeFlag.c_str());
     ARGV.push_back(CustomSystemHeadersFlag.c_str());
@@ -268,7 +268,7 @@ int main(int argc, const char *argv[]) {
     llvm::outs() << "\n";
 #endif
 
-    CommonOptionsParser OptionsParser(ARGC, ARGV.data(), accllCategory);
+    CommonOptionsParser OptionsParser(ARGC, ARGV.data(), aclCategory);
 
     Config.InputFiles = OptionsParser.getSourcePathList();
 
@@ -277,7 +277,7 @@ int main(int argc, const char *argv[]) {
         return 1;
     }
 
-    //After Stage0, proccess only the files that contain OpenACC Directives and main() function
+    //After Stage0, proccess only the files that contain Centaurus Directives and main() function
 
     llvm::outs() << "Stage0: Check input files ...\n";
     RefactoringTool Tool0(OptionsParser.getCompilations(), Config.InputFiles);
@@ -372,7 +372,7 @@ int main(int argc, const char *argv[]) {
             KernelARGV[1 + Config.KernelFiles.size() + i] = kernel_conf[i].c_str();
 
         llvm::outs() << "Check new generated device files ...\n";
-        CommonOptionsParser KernelOptionsParser(KernelARGC, KernelARGV, accllCategory);
+        CommonOptionsParser KernelOptionsParser(KernelARGC, KernelARGV, aclCategory);
         ClangTool Tool6(KernelOptionsParser.getCompilations(),Config.KernelFiles);
         if (Tool6.run(newFrontendActionFactory<SyntaxOnlyAction>().get())) {
             llvm::errs() << "FATAL: __internal_error__: illegal device code  -  Exit.\n";
@@ -424,7 +424,7 @@ int main(int argc, const char *argv[]) {
 
         //cli.push_back("-###");
         cli.push_back("-Wall");
-        //cli.push_back("-fopenacc");
+        //cli.push_back("-fcentaurus");
         //cli.push_back("-Wno-gnu-designator");
         cli.push_back(IncludeFlag.c_str());
         cli.push_back("-D_GNU_SOURCE");
@@ -653,7 +653,7 @@ int main(int argc, const char *argv[]) {
     return 0;
 }
 
-accll::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
+acl::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
     ProfileMode(false), CompileOnly(false), isCXX(false), NoArgs(false)
 {
     InstallPath = "/opt/LLVM";
@@ -723,7 +723,7 @@ accll::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
 }
 
 void
-accll::CentaurusConfig::print() const {
+acl::CentaurusConfig::print() const {
 #define PRINT(x) #x << " = " << x << "\n"
     llvm::outs() << DEBUG
                  << "\nCentaurus Configuration:\n"

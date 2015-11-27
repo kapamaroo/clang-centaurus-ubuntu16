@@ -25,7 +25,7 @@
 #include "clang/Sema/PrettyDeclStackTrace.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/SemaDiagnostic.h"
-#include "clang/Sema/SemaOpenACC.h"
+#include "clang/Sema/SemaCentaurus.h"
 #include "llvm/ADT/SmallString.h"
 using namespace clang;
 

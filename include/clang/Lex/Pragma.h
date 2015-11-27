@@ -60,7 +60,7 @@ class PragmaHandler {
   std::string Name;
 
   /// Set to true if the Handler handles Pragma Extensions
-  /// like OpenMP, OpenACC, etc.. Default value is false.
+  /// like OpenMP, Centaurus, etc.. Default value is false.
   const bool Extension;
 
 public:
@@ -102,7 +102,7 @@ public:
       LegalLocation(enabled) {}
 
   /// isEnabled - tells if this type of pragma directive is enabled for this
-  /// instantiantion (eg. for OpenACC pragmas, return true if the '-fopenacc'
+  /// instantiantion (eg. for Centaurus pragmas, return true if the '-fcentaurus'
   /// has been passed to command line, else return false).
   bool isNotEnabled() const { return !Enabled; }
 

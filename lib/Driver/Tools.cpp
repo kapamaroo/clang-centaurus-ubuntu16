@@ -4706,8 +4706,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                     options::OPT_fno_diagnostics_fixit_info))
     CmdArgs.push_back("-fno-diagnostics-fixit-info");
 
-  if (Args.hasArg(options::OPT_fopenacc))
-    CmdArgs.push_back("-fopenacc");
+  if (Args.hasArg(options::OPT_fcentaurus))
+    CmdArgs.push_back("-fcentaurus");
 
   // Enable -fdiagnostics-show-option by default.
   if (Args.hasFlag(options::OPT_fdiagnostics_show_option,

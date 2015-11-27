@@ -1,11 +1,11 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Parse/ParseDiagnostic.h"
-#include "clang/Sema/SemaOpenACC.h"
+#include "clang/Sema/SemaCentaurus.h"
 #include "clang/Sema/Lookup.h"
 
 using namespace clang;
-using namespace openacc;
+using namespace centaurus;
 
 #define BITMASK(x) ((unsigned int)1 << x)
 const unsigned DirectiveInfo::ValidDirective[DK_END] = {
@@ -45,7 +45,7 @@ const unsigned DirectiveInfo::ValidDirective[DK_END] = {
         BITMASK(CK_APPROXFUN),
         };
 
-const std::string clang::openacc::ExtensionName = "acl";
+const std::string clang::centaurus::ExtensionName = "acl";
 
 const std::string DirectiveInfo::Name[DK_END] = {
     "task",

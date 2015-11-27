@@ -8506,7 +8506,7 @@ OverloadCandidateSet::BestViableFunction(Sema &S, SourceLocation Loc,
         Best = Cand;
   }
 
-  if (S.getLangOpts().OpenACC && size() == 1 && S.Context.isOpenCLKernel(Candidates.begin()->Function)) {
+  if (S.getLangOpts().Centaurus && size() == 1 && S.Context.isOpenCLKernel(Candidates.begin()->Function)) {
       Best = begin();
       return OR_Success;
   }

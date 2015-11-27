@@ -156,9 +156,9 @@ struct PragmaUnrollHintHandler : public PragmaHandler {
                     Token &FirstToken) override;
 };
 
-class PragmaOpenACCHandler : public PragmaExtensionHandler {
+class PragmaCentaurusHandler : public PragmaExtensionHandler {
 public:
-  explicit PragmaOpenACCHandler(bool enabled) :
+  explicit PragmaCentaurusHandler(bool enabled) :
   PragmaExtensionHandler("acl", /*Enabled=*/enabled) {}
   virtual void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
                             Token &FirstToken);
@@ -195,10 +195,10 @@ void Parser::initializePragmaHandlers() {
   FPContractHandler.reset(new PragmaFPContractHandler());
   PP.AddPragmaHandler("STDC", FPContractHandler.get());
 
-  OpenACCHandler.reset(new PragmaOpenACCHandler(getLangOpts().OpenACC));
-  PP.AddPragmaHandler(OpenACCHandler.get());
+  CentaurusHandler.reset(new PragmaCentaurusHandler(getLangOpts().Centaurus));
+  PP.AddPragmaHandler(CentaurusHandler.get());
 
-  if (getLangOpts().OpenCL || getLangOpts().OpenACC) {
+  if (getLangOpts().OpenCL || getLangOpts().Centaurus) {
     OpenCLExtensionHandler.reset(new PragmaOpenCLExtensionHandler());
     PP.AddPragmaHandler("OPENCL", OpenCLExtensionHandler.get());
 
@@ -268,7 +268,7 @@ void Parser::resetPragmaHandlers() {
   PP.RemovePragmaHandler(RedefineExtnameHandler.get());
   RedefineExtnameHandler.reset();
 
-  if (getLangOpts().OpenCL || getLangOpts().OpenACC) {
+  if (getLangOpts().OpenCL || getLangOpts().Centaurus) {
     PP.RemovePragmaHandler("OPENCL", OpenCLExtensionHandler.get());
     OpenCLExtensionHandler.reset();
     PP.RemovePragmaHandler("OPENCL", FPContractHandler.get());
@@ -276,8 +276,8 @@ void Parser::resetPragmaHandlers() {
   PP.RemovePragmaHandler(OpenMPHandler.get());
   OpenMPHandler.reset();
 
-  PP.RemovePragmaHandler(OpenACCHandler.get());
-  OpenACCHandler.reset();
+  PP.RemovePragmaHandler(CentaurusHandler.get());
+  CentaurusHandler.reset();
 
   if (getLangOpts().MicrosoftExt || getTargetInfo().getTriple().isPS4()) {
     PP.RemovePragmaHandler(MSCommentHandler.get());
@@ -1469,7 +1469,7 @@ PragmaOpenCLExtensionHandler::HandlePragma(Preprocessor &PP,
 }
 
 void
-PragmaOpenACCHandler::HandlePragma(Preprocessor &PP,
+PragmaCentaurusHandler::HandlePragma(Preprocessor &PP,
                                    PragmaIntroducerKind Introducer,
                                    Token &FirstTok) {
     static bool FirstWarning(true);

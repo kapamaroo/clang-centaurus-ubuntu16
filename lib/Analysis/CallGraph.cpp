@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/Basic/OpenACC.h"
+#include "clang/Basic/Centaurus.h"
 #include "clang/Analysis/CallGraph.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Decl.h"
@@ -66,8 +66,8 @@ public:
       addCalledDecl(D);
   }
 
-  void VisitAccStmt(AccStmt *Acc) {
-      using namespace openacc;
+  void VisitAclStmt(AclStmt *Acc) {
+      using namespace centaurus;
       switch (Acc->getDirective()->getKind()) {
       case DK_SUBTASK: {
           ClauseList &CList = Acc->getDirective()->getClauseList();
@@ -148,7 +148,7 @@ bool CallGraph::includeInGraph(const Decl *D) {
       return false;
 
     const ASTContext &Context = D->getDeclContext()->getParentASTContext();
-    if (Context.getLangOpts().OpenACC) {
+    if (Context.getLangOpts().Centaurus) {
         const SourceManager &SM = Context.getSourceManager();
         if (SM.isInSystemHeader(FD->getSourceRange().getBegin()))
             return false;

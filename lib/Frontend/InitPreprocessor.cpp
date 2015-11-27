@@ -886,7 +886,7 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
     Builder.defineMacro("_OPENMP", "201307");
   }
 
-  if (LangOpts.OpenACC) {
+  if (LangOpts.Centaurus) {
       Builder.defineMacro("__CENTAURUS__","201506");
   }
 

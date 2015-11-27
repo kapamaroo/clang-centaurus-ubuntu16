@@ -1,7 +1,7 @@
 add_subdirectory(diagtool)
 add_subdirectory(driver)
 add_subdirectory(clang-format)
-add_subdirectory(accll)
+add_subdirectory(acl)
 add_subdirectory(clang-format-vs)
 add_subdirectory(clang-fuzzer)
 

@@ -135,7 +135,7 @@ std::vector<std::string> ocltLogBuildInfo(cl_program cpProgram, cl_device_id *cd
 // entry point
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace accll {
+namespace acl {
 
 DeviceBin::DeviceBin(std::string &PlatformName,
                      std::string &SymbolName,

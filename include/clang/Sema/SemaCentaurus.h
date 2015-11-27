@@ -1,18 +1,18 @@
-#ifndef LLVM_CLANG_SEMA_SEMAOPENACC
-#define LLVM_CLANG_SEMA_SEMAOPENACC
+#ifndef LLVM_CLANG_SEMA_SEMACENTAURUS
+#define LLVM_CLANG_SEMA_SEMACENTAURUS
 
-#include "clang/Basic/OpenACC.h"
+#include "clang/Basic/Centaurus.h"
 
 namespace clang {
 class Sema;
 class ForStmt;
 class FunctionDecl;
-namespace openacc {
+namespace centaurus {
 
 typedef SmallVector<unsigned,64> UVec;
 
 /// keep state of pragma acc parsing
-class OpenACC {
+class Centaurus {
 private:
     Sema &S;
 
@@ -37,11 +37,11 @@ private:
 public:
     typedef bool (isValidClauseFn) (DirectiveKind DK, ClauseInfo *CI);
     //pointer to member function
-    typedef bool (OpenACC::*isValidClauseFnPtr) (DirectiveKind DK, ClauseInfo *CI);
+    typedef bool (Centaurus::*isValidClauseFnPtr) (DirectiveKind DK, ClauseInfo *CI);
 
     typedef bool (isValidDirectiveFn) (DirectiveInfo *DI);
     //pointer to member function
-    typedef bool (OpenACC::*isValidDirectiveFnPtr) (DirectiveInfo *DI);
+    typedef bool (Centaurus::*isValidDirectiveFnPtr) (DirectiveInfo *DI);
 
     //array of clause handlers
     isValidClauseFnPtr isValidClause[CK_END];
@@ -88,7 +88,7 @@ public:
 
     ///////////////////////////////////////////////
 
-    OpenACC(Sema &s);
+    Centaurus(Sema &s);
 
     void SetOpenCL(bool value);
 
@@ -143,7 +143,7 @@ public:
 
 };
 
-}  // end namespace openacc
+}  // end namespace centaurus
 }  // end namespace clang
 
 #endif

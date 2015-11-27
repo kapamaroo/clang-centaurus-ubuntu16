@@ -5457,7 +5457,7 @@ ExprResult Sema::CheckExtVectorCast(SourceRange R, QualType DestTy,
   // (See OpenCL 6.2).
   if (SrcTy->isVectorType()) {
     if (!VectorTypesMatch(*this, SrcTy, DestTy)
-        || ((getLangOpts().OpenCL || getLangOpts().OpenACC) &&
+        || ((getLangOpts().OpenCL || getLangOpts().Centaurus) &&
             (DestTy.getCanonicalType() != SrcTy.getCanonicalType()))) {
       Diag(R.getBegin(),diag::err_invalid_conversion_between_ext_vectors)
         << DestTy << SrcTy << R;
@@ -5519,7 +5519,7 @@ Sema::ActOnCastExpr(Scope *S, SourceLocation LParenLoc,
   // i.e. all the elements are integer constants.
   ParenExpr *PE = dyn_cast<ParenExpr>(CastExpr);
   ParenListExpr *PLE = dyn_cast<ParenListExpr>(CastExpr);
-  if ((getLangOpts().AltiVec || getLangOpts().ZVector || (getLangOpts().OpenCL || getLangOpts().OpenACC))
+  if ((getLangOpts().AltiVec || getLangOpts().ZVector || (getLangOpts().OpenCL || getLangOpts().Centaurus))
        && castType->isVectorType() && (PE || PLE)) {
     if (PLE && PLE->getNumExprs() == 0) {
       Diag(PLE->getExprLoc(), diag::err_altivec_empty_initializer);
@@ -5617,7 +5617,7 @@ ExprResult Sema::BuildVectorLiteral(SourceLocation LParenLoc,
   else {
     // For OpenCL, when the number of initializers is a single value,
     // it will be replicated to all components of the vector.
-    if ((getLangOpts().OpenCL || getLangOpts().OpenACC) &&
+    if ((getLangOpts().OpenCL || getLangOpts().Centaurus) &&
         VTy->getVectorKind() == VectorType::GenericVector &&
         numExprs == 1) {
         QualType ElemTy = Ty->getAs<VectorType>()->getElementType();
@@ -7921,7 +7921,7 @@ static void DiagnoseBadShiftValues(Sema& S, ExprResult &LHS, ExprResult &RHS,
                                    QualType LHSType) {
   // OpenCL 6.3j: shift values are effectively % word size of LHS (more defined),
   // so skip remaining warnings as we don't want to modify values within Sema.
-  if (S.getLangOpts().OpenCL || S.getLangOpts().OpenACC)
+  if (S.getLangOpts().OpenCL || S.getLangOpts().Centaurus)
     return;
 
   llvm::APSInt Right;
@@ -11690,8 +11690,8 @@ bool Sema::DiagnoseAssignmentResult(AssignConvertType ConvTy,
     Qualifiers lhq = SrcType->getPointeeType().getQualifiers();
     Qualifiers rhq = DstType->getPointeeType().getQualifiers();
     if (lhq.getAddressSpace() != rhq.getAddressSpace()) {
-#warning FIXME: skip only when passing arguments to OpenCL kernels
-      if (getLangOpts().OpenACC)
+      // CENTAURUS FIXME: skip only when passing arguments to OpenCL kernels
+      if (getLangOpts().Centaurus)
           return isInvalid;
       DiagKind = diag::err_typecheck_incompatible_address_space;
       break;

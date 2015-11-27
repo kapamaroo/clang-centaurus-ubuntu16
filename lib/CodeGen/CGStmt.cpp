@@ -88,7 +88,7 @@ void CodeGenFunction::EmitStmt(const Stmt *S) {
   case Stmt::ContinueStmtClass:
   case Stmt::DefaultStmtClass:
   case Stmt::CaseStmtClass:
-  case Stmt::AccStmtClass:
+  case Stmt::AclStmtClass:
   case Stmt::SEHLeaveStmtClass:
     llvm_unreachable("should have emitted these statements as simple");
 
@@ -264,8 +264,8 @@ bool CodeGenFunction::EmitSimpleStmt(const Stmt *S) {
   case Stmt::ContinueStmtClass: EmitContinueStmt(cast<ContinueStmt>(*S)); break;
   case Stmt::DefaultStmtClass:  EmitDefaultStmt(cast<DefaultStmt>(*S));   break;
   case Stmt::CaseStmtClass:     EmitCaseStmt(cast<CaseStmt>(*S));         break;
-  case Stmt::AccStmtClass: {
-      if (Stmt *SubStmt = cast<AccStmt>(*S).getSubStmt())
+  case Stmt::AclStmtClass: {
+      if (Stmt *SubStmt = cast<AclStmt>(*S).getSubStmt())
           EmitSimpleStmt(SubStmt);
       break;
   }

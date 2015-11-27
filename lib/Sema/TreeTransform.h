@@ -847,7 +847,7 @@ public:
     // Note, IsDependent is always false here: we implicitly convert an 'auto'
     // which has been deduced to a dependent type into an undeduced 'auto', so
     // that we'll retry deduction after the transformation.
-    return SemaRef.Context.getAutoType(Deduced, IsDecltypeAuto, 
+    return SemaRef.Context.getAutoType(Deduced, IsDecltypeAuto,
                                        /*IsDependent*/ false);
   }
 
@@ -2663,7 +2663,7 @@ public:
                                     SourceLocation RBracLoc) {
     ObjCInterfaceDecl *Class = Method->getClassInterface();
     QualType ReceiverTy = SemaRef.Context.getObjCInterfaceType(Class);
-    
+
     return Method->isInstanceMethod() ? SemaRef.BuildInstanceMessage(nullptr,
                                           ReceiverTy,
                                           SuperLoc,
@@ -2675,7 +2675,7 @@ public:
                                           Sel, Method, LBracLoc, SelectorLocs,
                                           RBracLoc, Args);
 
-      
+
   }
 
   /// \brief Build a new Objective-C ivar reference expression.
@@ -3810,7 +3810,7 @@ TreeTransform<Derived>::TransformQualifiedType(TypeLocBuilder &TLB,
         Qs.removeObjCLifetime();
         Deduced = SemaRef.Context.getQualifiedType(Deduced.getUnqualifiedType(),
                                                    Qs);
-        Result = SemaRef.Context.getAutoType(Deduced, AutoTy->isDecltypeAuto(), 
+        Result = SemaRef.Context.getAutoType(Deduced, AutoTy->isDecltypeAuto(),
                                 AutoTy->isDependentType());
         TLB.TypeWasModifiedSafely(Result);
       } else {
@@ -5670,7 +5670,7 @@ TreeTransform<Derived>::TransformObjCObjectType(TypeLocBuilder &TLB,
 
         TypeLocBuilder TypeArgBuilder;
         TypeArgBuilder.reserve(PatternLoc.getFullDataSize());
-        QualType NewPatternType = getDerived().TransformType(TypeArgBuilder, 
+        QualType NewPatternType = getDerived().TransformType(TypeArgBuilder,
                                                              PatternLoc);
         if (NewPatternType.isNull())
           return QualType();
@@ -7470,11 +7470,11 @@ TreeTransform<Derived>::TransformOMPDependClause(OMPDependClause *C) {
 }
 
 //===----------------------------------------------------------------------===//
-// OpenACC transformation
+// Centaurus transformation
 //===----------------------------------------------------------------------===//
 template<typename Derived>
 StmtResult
-TreeTransform<Derived>::TransformAccStmt(AccStmt *S) {
+TreeTransform<Derived>::TransformAclStmt(AclStmt *S) {
     //FIXME: do something here
     return TransformStmt(S->getSubStmt());
 }
@@ -9434,7 +9434,7 @@ TreeTransform<Derived>::TransformLambdaExpr(LambdaExpr *E) {
   TypeSourceInfo *NewCallOpTSI = nullptr;
   {
     TypeSourceInfo *OldCallOpTSI = E->getCallOperator()->getTypeSourceInfo();
-    FunctionProtoTypeLoc OldCallOpFPTL = 
+    FunctionProtoTypeLoc OldCallOpFPTL =
         OldCallOpTSI->getTypeLoc().getAs<FunctionProtoTypeLoc>();
 
     TypeLocBuilder NewCallOpTLBuilder;
@@ -9513,7 +9513,7 @@ TreeTransform<Derived>::TransformLambdaExpr(LambdaExpr *E) {
 
     // Rebuild init-captures, including the implied field declaration.
     if (E->isInitCapture(C)) {
-      InitCaptureInfoTy InitExprTypePair = 
+      InitCaptureInfoTy InitExprTypePair =
           InitCaptureExprsAndTypes[C - E->capture_begin()];
       ExprResult Init = InitExprTypePair.first;
       QualType InitQualType = InitExprTypePair.second;
@@ -9523,7 +9523,7 @@ TreeTransform<Derived>::TransformLambdaExpr(LambdaExpr *E) {
       }
       VarDecl *OldVD = C->getCapturedVar();
       VarDecl *NewVD = getSema().createLambdaInitCaptureVarDecl(
-          OldVD->getLocation(), InitExprTypePair.second, 
+          OldVD->getLocation(), InitExprTypePair.second,
           OldVD->getIdentifier(), Init.get());
       if (!NewVD)
         Invalid = true;

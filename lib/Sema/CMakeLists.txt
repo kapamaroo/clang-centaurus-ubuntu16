@@ -38,7 +38,7 @@ add_clang_library(clangSema
   SemaObjCProperty.cpp
   SemaOpenMP.cpp
   SemaOverload.cpp
-  SemaOpenACC.cpp
+  SemaCentaurus.cpp
   SemaPseudoObject.cpp
   SemaStmt.cpp
   SemaStmtAsm.cpp

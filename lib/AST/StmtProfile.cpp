@@ -251,10 +251,10 @@ void StmtProfiler::VisitObjCAtThrowStmt(const ObjCAtThrowStmt *S) {
 }
 
 //===----------------------------------------------------------------------===//
-//  OpenACC profile methods.
+//  Centaurus profile methods.
 //===----------------------------------------------------------------------===//
 
-void StmtProfiler::VisitAccStmt(const AccStmt *S) {
+void StmtProfiler::VisitAclStmt(const AclStmt *S) {
     if (Stmt *SubStmt = S->getSubStmt())
         VisitStmt(SubStmt);
 }
@@ -633,13 +633,13 @@ void StmtProfiler::VisitOffsetOfExpr(const OffsetOfExpr *S) {
     case OffsetOfExpr::OffsetOfNode::Identifier:
       ID.AddPointer(ON.getFieldName());
       break;
-        
+
     case OffsetOfExpr::OffsetOfNode::Base:
       // These nodes are implicit, and therefore don't need profiling.
       break;
     }
   }
-  
+
   VisitExpr(S);
 }
 
@@ -835,22 +835,22 @@ static Stmt::StmtClass DecodeOperatorCall(const CXXOperatorCallExpr *S,
   case OO_Conditional:
   case NUM_OVERLOADED_OPERATORS:
     llvm_unreachable("Invalid operator call kind");
-      
+
   case OO_Plus:
     if (S->getNumArgs() == 1) {
       UnaryOp = UO_Plus;
       return Stmt::UnaryOperatorClass;
     }
-    
+
     BinaryOp = BO_Add;
     return Stmt::BinaryOperatorClass;
-      
+
   case OO_Minus:
     if (S->getNumArgs() == 1) {
       UnaryOp = UO_Minus;
       return Stmt::UnaryOperatorClass;
     }
-    
+
     BinaryOp = BO_Sub;
     return Stmt::BinaryOperatorClass;
 
@@ -859,14 +859,14 @@ static Stmt::StmtClass DecodeOperatorCall(const CXXOperatorCallExpr *S,
       UnaryOp = UO_Deref;
       return Stmt::UnaryOperatorClass;
     }
-    
+
     BinaryOp = BO_Mul;
     return Stmt::BinaryOperatorClass;
 
   case OO_Slash:
     BinaryOp = BO_Div;
     return Stmt::BinaryOperatorClass;
-      
+
   case OO_Percent:
     BinaryOp = BO_Rem;
     return Stmt::BinaryOperatorClass;
@@ -880,10 +880,10 @@ static Stmt::StmtClass DecodeOperatorCall(const CXXOperatorCallExpr *S,
       UnaryOp = UO_AddrOf;
       return Stmt::UnaryOperatorClass;
     }
-    
+
     BinaryOp = BO_And;
     return Stmt::BinaryOperatorClass;
-      
+
   case OO_Pipe:
     BinaryOp = BO_Or;
     return Stmt::BinaryOperatorClass;
@@ -907,7 +907,7 @@ static Stmt::StmtClass DecodeOperatorCall(const CXXOperatorCallExpr *S,
   case OO_Greater:
     BinaryOp = BO_GT;
     return Stmt::BinaryOperatorClass;
-      
+
   case OO_PlusEqual:
     BinaryOp = BO_AddAssign;
     return Stmt::CompoundAssignOperatorClass;
@@ -931,19 +931,19 @@ static Stmt::StmtClass DecodeOperatorCall(const CXXOperatorCallExpr *S,
   case OO_CaretEqual:
     BinaryOp = BO_XorAssign;
     return Stmt::CompoundAssignOperatorClass;
-    
+
   case OO_AmpEqual:
     BinaryOp = BO_AndAssign;
     return Stmt::CompoundAssignOperatorClass;
-    
+
   case OO_PipeEqual:
     BinaryOp = BO_OrAssign;
     return Stmt::CompoundAssignOperatorClass;
-      
+
   case OO_LessLess:
     BinaryOp = BO_Shl;
     return Stmt::BinaryOperatorClass;
-    
+
   case OO_GreaterGreater:
     BinaryOp = BO_Shr;
     return Stmt::BinaryOperatorClass;
@@ -951,7 +951,7 @@ static Stmt::StmtClass DecodeOperatorCall(const CXXOperatorCallExpr *S,
   case OO_LessLessEqual:
     BinaryOp = BO_ShlAssign;
     return Stmt::CompoundAssignOperatorClass;
-    
+
   case OO_GreaterGreaterEqual:
     BinaryOp = BO_ShrAssign;
     return Stmt::CompoundAssignOperatorClass;
@@ -959,29 +959,29 @@ static Stmt::StmtClass DecodeOperatorCall(const CXXOperatorCallExpr *S,
   case OO_EqualEqual:
     BinaryOp = BO_EQ;
     return Stmt::BinaryOperatorClass;
-    
+
   case OO_ExclaimEqual:
     BinaryOp = BO_NE;
     return Stmt::BinaryOperatorClass;
-      
+
   case OO_LessEqual:
     BinaryOp = BO_LE;
     return Stmt::BinaryOperatorClass;
-    
+
   case OO_GreaterEqual:
     BinaryOp = BO_GE;
     return Stmt::BinaryOperatorClass;
-      
+
   case OO_AmpAmp:
     BinaryOp = BO_LAnd;
     return Stmt::BinaryOperatorClass;
-    
+
   case OO_PipePipe:
     BinaryOp = BO_LOr;
     return Stmt::BinaryOperatorClass;
 
   case OO_PlusPlus:
-    UnaryOp = S->getNumArgs() == 1? UO_PreInc 
+    UnaryOp = S->getNumArgs() == 1? UO_PreInc
                                   : UO_PostInc;
     return Stmt::UnaryOperatorClass;
 
@@ -998,11 +998,11 @@ static Stmt::StmtClass DecodeOperatorCall(const CXXOperatorCallExpr *S,
   case OO_ArrowStar:
     BinaryOp = BO_PtrMemI;
     return Stmt::BinaryOperatorClass;
-      
+
   case OO_Subscript:
     return Stmt::ArraySubscriptExprClass;
   }
-  
+
   llvm_unreachable("Invalid overloaded operator expression");
 }
 
@@ -1020,7 +1020,7 @@ void StmtProfiler::VisitCXXOperatorCallExpr(const CXXOperatorCallExpr *S) {
       Visit(S->getArg(I));
     if (SC == Stmt::UnaryOperatorClass)
       ID.AddInteger(UnaryOp);
-    else if (SC == Stmt::BinaryOperatorClass || 
+    else if (SC == Stmt::BinaryOperatorClass ||
              SC == Stmt::CompoundAssignOperatorClass)
       ID.AddInteger(BinaryOp);
     else
@@ -1333,7 +1333,7 @@ void StmtProfiler::VisitCXXFoldExpr(const CXXFoldExpr *S) {
 }
 
 void StmtProfiler::VisitOpaqueValueExpr(const OpaqueValueExpr *E) {
-  VisitExpr(E);  
+  VisitExpr(E);
 }
 
 void StmtProfiler::VisitTypoExpr(const TypoExpr *E) {
@@ -1518,7 +1518,7 @@ void StmtProfiler::VisitTemplateArgument(const TemplateArgument &Arg) {
   case TemplateArgument::TemplateExpansion:
     VisitTemplateName(Arg.getAsTemplateOrTemplatePattern());
     break;
-      
+
   case TemplateArgument::Declaration:
     VisitDecl(Arg.getAsDecl());
     break;

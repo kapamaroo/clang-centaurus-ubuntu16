@@ -944,25 +944,25 @@ def err_pragma_comment_malformed : Error<
   "pragma comment requires parenthesized identifier and optional string">;
 def err_pragma_comment_unknown_kind : Error<"unknown kind of pragma comment">;
 
-// OpenACC
+// Centaurus
 def warn_pragma_acc_ignored : Warning<
-  "Ignore acc pragma's; Maybe missing '-fopenacc' flag?">,
-  InGroup<OpenACCPragmas>;
+  "Ignore acc pragma's; Maybe missing '-fcentaurus' flag?">,
+  InGroup<CentaurusPragmas>;
 
 def err_pragma_acc_unexpected : Error<
   "directive does not apply to any statement or declaration">;
 
 def warn_pragma_acc_has_pending : Warning<
   "ignore shadowed directive">,
-  InGroup<OpenACCPragmas>;
+  InGroup<CentaurusPragmas>;
 
 def warn_pragma_acc_pending_comma : Warning<
   "pending comma at end of list">,
-  InGroup<OpenACCPragmas>;
+  InGroup<CentaurusPragmas>;
 
 def warn_pragma_acc_expected_eod : Warning<
   "expected eod">,
-  InGroup<OpenACCPragmas>;
+  InGroup<CentaurusPragmas>;
 
 def err_pragma_acc_unknown_clause : Error<
   "unknown clause">;
@@ -984,7 +984,7 @@ def err_pragma_acc_incomplete : Error<
 
 def warn_pragma_acc_unique_clause : Warning<
   "second appearance of unique clause in the same directive">,
-  InGroup<OpenACCPragmas>;
+  InGroup<CentaurusPragmas>;
 
 def err_pragma_acc_invalid_loop : Error<
   "loop directive cannot apply in this for statement">;

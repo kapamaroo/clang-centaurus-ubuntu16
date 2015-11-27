@@ -1,5 +1,5 @@
-#include "clang/Basic/OpenACC.h"
-#include "clang/Sema/SemaOpenACC.h"
+#include "clang/Basic/Centaurus.h"
+#include "clang/Sema/SemaCentaurus.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaDiagnostic.h"
 #include "clang/AST/ASTContext.h"
@@ -8,10 +8,10 @@
 #include <clang/Lex/Preprocessor.h>
 
 using namespace clang;
-using namespace openacc;
+using namespace centaurus;
 
 namespace {
-    bool HelperMatchExpressions(Expr *E1, Expr *E2, OpenACC *ACC) {
+    bool HelperMatchExpressions(Expr *E1, Expr *E2, Centaurus *ACC) {
         DirectiveInfo TmpDI(DK_TASK,E1->getLocStart());  //the directive type here is not important
         ClauseInfo TmpCI(CK_IN,&TmpDI);  //the clause type here is not important
         Arg *A1 = ACC->CreateArg(E1,&TmpCI);
@@ -25,7 +25,7 @@ namespace {
 }
 
 bool
-Arg::Matches(Expr *E, OpenACC *ACC) {
+Arg::Matches(Expr *E, Centaurus *ACC) {
     DirectiveInfo TmpDI(DK_TASK,E->getLocStart());  //the directive type here is not important
     ClauseInfo TmpCI(CK_IN,&TmpDI);  //the clause type here is not important
     Arg *Target = ACC->CreateArg(E,&TmpCI);
@@ -272,38 +272,38 @@ Arg::Contains(Arg *Target) {
     return false;
 }
 
-OpenACC::OpenACC(Sema &s) : S(s), PendingDirective(0), Valid(false),
+Centaurus::Centaurus(Sema &s) : S(s), PendingDirective(0), Valid(false),
                             ICEPool(0), ValidArg(false), LengthTmp(0) {
-    isValidClause[CK_LABEL] = &OpenACC::isValidClauseLabel;
-    isValidClause[CK_TASKID] = &OpenACC::isValidClauseTaskid;
-    isValidClause[CK_SIGNIFICANT] = &OpenACC::isValidClauseSignificant;
-    isValidClause[CK_APPROXFUN] = &OpenACC::isValidClauseApproxfun;
-    isValidClause[CK_EVALFUN] = &OpenACC::isValidClauseEvalfun;
-    isValidClause[CK_ESTIMATION] = &OpenACC::isValidClauseEstimation;
-    isValidClause[CK_BUFFER] = &OpenACC::isValidClauseBuffer;
-    isValidClause[CK_LOCAL_BUFFER] = &OpenACC::isValidClauseLocal_buffer;
-    isValidClause[CK_IN] = &OpenACC::isValidClauseIn;
-    isValidClause[CK_OUT] = &OpenACC::isValidClauseOut;
-    isValidClause[CK_INOUT] = &OpenACC::isValidClauseInout;
-    isValidClause[CK_DEVICE_IN] = &OpenACC::isValidClauseIn;
-    isValidClause[CK_DEVICE_OUT] = &OpenACC::isValidClauseOut;
-    isValidClause[CK_DEVICE_INOUT] = &OpenACC::isValidClauseInout;
-    isValidClause[CK_ON] = &OpenACC::isValidClauseOn;
-    isValidClause[CK_WORKERS] = &OpenACC::isValidClauseWorkers;
-    isValidClause[CK_GROUPS] = &OpenACC::isValidClauseGroups;
-    isValidClause[CK_BIND] = &OpenACC::isValidClauseBind;
-    isValidClause[CK_BIND_APPROXIMATE] = &OpenACC::isValidClauseBind_approximate;
-    isValidClause[CK_SUGGEST] = &OpenACC::isValidClauseSuggest;
-    isValidClause[CK_ENERGY_JOULE] = &OpenACC::isValidClauseEnergy_joule;
-    isValidClause[CK_RATIO] = &OpenACC::isValidClauseRatio;
+    isValidClause[CK_LABEL] = &Centaurus::isValidClauseLabel;
+    isValidClause[CK_TASKID] = &Centaurus::isValidClauseTaskid;
+    isValidClause[CK_SIGNIFICANT] = &Centaurus::isValidClauseSignificant;
+    isValidClause[CK_APPROXFUN] = &Centaurus::isValidClauseApproxfun;
+    isValidClause[CK_EVALFUN] = &Centaurus::isValidClauseEvalfun;
+    isValidClause[CK_ESTIMATION] = &Centaurus::isValidClauseEstimation;
+    isValidClause[CK_BUFFER] = &Centaurus::isValidClauseBuffer;
+    isValidClause[CK_LOCAL_BUFFER] = &Centaurus::isValidClauseLocal_buffer;
+    isValidClause[CK_IN] = &Centaurus::isValidClauseIn;
+    isValidClause[CK_OUT] = &Centaurus::isValidClauseOut;
+    isValidClause[CK_INOUT] = &Centaurus::isValidClauseInout;
+    isValidClause[CK_DEVICE_IN] = &Centaurus::isValidClauseIn;
+    isValidClause[CK_DEVICE_OUT] = &Centaurus::isValidClauseOut;
+    isValidClause[CK_DEVICE_INOUT] = &Centaurus::isValidClauseInout;
+    isValidClause[CK_ON] = &Centaurus::isValidClauseOn;
+    isValidClause[CK_WORKERS] = &Centaurus::isValidClauseWorkers;
+    isValidClause[CK_GROUPS] = &Centaurus::isValidClauseGroups;
+    isValidClause[CK_BIND] = &Centaurus::isValidClauseBind;
+    isValidClause[CK_BIND_APPROXIMATE] = &Centaurus::isValidClauseBind_approximate;
+    isValidClause[CK_SUGGEST] = &Centaurus::isValidClauseSuggest;
+    isValidClause[CK_ENERGY_JOULE] = &Centaurus::isValidClauseEnergy_joule;
+    isValidClause[CK_RATIO] = &Centaurus::isValidClauseRatio;
 
-    isValidDirective[DK_TASK] = &OpenACC::isValidDirectiveTask;
-    isValidDirective[DK_TASKGROUP] = &OpenACC::isValidDirectiveTaskgroup;
-    isValidDirective[DK_TASKWAIT] = &OpenACC::isValidDirectiveTaskwait;
-    isValidDirective[DK_SUBTASK] = &OpenACC::isValidDirectiveSubtask;
+    isValidDirective[DK_TASK] = &Centaurus::isValidDirectiveTask;
+    isValidDirective[DK_TASKGROUP] = &Centaurus::isValidDirectiveTaskgroup;
+    isValidDirective[DK_TASKWAIT] = &Centaurus::isValidDirectiveTaskwait;
+    isValidDirective[DK_SUBTASK] = &Centaurus::isValidDirectiveSubtask;
 }
 
-void OpenACC::SetOpenCL(bool value) { S.getPreprocessor().SetOpenCL(value); }
+void Centaurus::SetOpenCL(bool value) { S.getPreprocessor().SetOpenCL(value); }
 
 Arg::Arg(ArgKind K, CommonInfo *p, Expr *expr, clang::ASTContext *Context) :
     Kind(K), Parent(p), ICE(/*Bitwidth=*/64), ValidICE(false), E(expr), Context(Context) {
@@ -412,7 +412,7 @@ LabelArg::getQuotedLabel() const {
     return getPrettyArg();
 }
 
-static bool isStaticVarExpr(Expr *E, OpenACC *ACC) {
+static bool isStaticVarExpr(Expr *E, Centaurus *ACC) {
     E = E->IgnoreParenImpCasts();
 
     if (UnaryOperator *UO = dyn_cast<UnaryOperator>(E)) {
@@ -435,7 +435,7 @@ static bool isStaticVarExpr(Expr *E, OpenACC *ACC) {
 }
 
 bool
-OpenACC::isVarExpr(Expr *E) {
+Centaurus::isVarExpr(Expr *E) {
     E = E->IgnoreParenImpCasts();
 
     //ignore arrays, they must be recognized as ArrayArg only
@@ -448,7 +448,7 @@ OpenACC::isVarExpr(Expr *E) {
         if (DeclRef->getType()->isPointerType())
             return true;
     }
-#warning FIXME: add a new kind of Arg
+    // CENTAURUS FIXME: add a new kind of Arg
     else if (isStaticVarExpr(E,this))
         return true;
     else if (E->getType()->isPointerType())
@@ -458,7 +458,7 @@ OpenACC::isVarExpr(Expr *E) {
 }
 
 bool
-OpenACC::isArrayExpr(Expr *E) {
+Centaurus::isArrayExpr(Expr *E) {
     //this finds all the array variables (not elements)
     //if (const ArrayType *ATy = S.getASTContext().getAsArrayType(E->getType()))
     //S.Diag(E->getExprLoc(),diag::note_pragma_acc_test) << ATy->getTypeClassName();
@@ -475,17 +475,17 @@ OpenACC::isArrayExpr(Expr *E) {
 }
 
 bool
-OpenACC::isArrayElementExpr(Expr *E) {
+Centaurus::isArrayElementExpr(Expr *E) {
     return dyn_cast<ArraySubscriptExpr>(E);
 }
 
 bool
-OpenACC::isSubArrayExpr(Expr *E, Expr *Length) {
+Centaurus::isSubArrayExpr(Expr *E, Expr *Length) {
     return Length && dyn_cast<ArraySubscriptExpr>(E);
 }
 
 Arg*
-OpenACC::CreateArg(Expr *E, CommonInfo *Common) {
+Centaurus::CreateArg(Expr *E, CommonInfo *Common) {
     //S.Diag(E->getExprLoc(),diag::note_pragma_acc_test)
     //    << E->getType()->getTypeClassName();
 
@@ -509,7 +509,7 @@ OpenACC::CreateArg(Expr *E, CommonInfo *Common) {
 }
 
 void
-OpenACC::FindAndKeepSubArrayLength(SourceLocation ColonLoc, Expr *ase, Expr *Length) {
+Centaurus::FindAndKeepSubArrayLength(SourceLocation ColonLoc, Expr *ase, Expr *Length) {
     assert(LengthTmp == 0);
     assert(ase);
 
@@ -567,7 +567,7 @@ static void MaybeSetImplementationDefaultClauses(DirectiveInfo *DI) {
 }
 
 bool
-OpenACC::isValidDirectiveWrapper(DirectiveInfo *DI) {
+Centaurus::isValidDirectiveWrapper(DirectiveInfo *DI) {
 //http://www.parashift.com/c++-faq-lite/pointers-to-members.html
 #define ACC_CALL(method) ((*this).*(method))
 #if 0
@@ -590,7 +590,7 @@ OpenACC::isValidDirectiveWrapper(DirectiveInfo *DI) {
 }
 
 bool
-OpenACC::isValidClauseWrapper(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseWrapper(DirectiveKind DK, ClauseInfo *CI) {
 //http://www.parashift.com/c++-faq-lite/pointers-to-members.html
 #define ACC_CALL(method) ((*this).*(method))
 
@@ -627,22 +627,22 @@ OpenACC::isValidClauseWrapper(DirectiveKind DK, ClauseInfo *CI) {
 }
 
 bool
-OpenACC::isValidClauseLabel(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseLabel(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseTaskid(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseTaskid(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseSignificant(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseSignificant(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseApproxfun(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseApproxfun(DirectiveKind DK, ClauseInfo *CI) {
     Arg *A = CI->getArg();
     FunctionArg *FA = dyn_cast<FunctionArg>(A);
     FunctionDecl *FD = FA->getFunctionDecl();
@@ -664,7 +664,7 @@ OpenACC::isValidClauseApproxfun(DirectiveKind DK, ClauseInfo *CI) {
 }
 
 bool
-OpenACC::isValidClauseEvalfun(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseEvalfun(DirectiveKind DK, ClauseInfo *CI) {
     if (DK == DK_TASK) {
         Arg *A = CI->getArg();
         FunctionArg *FA = dyn_cast<FunctionArg>(A);
@@ -773,7 +773,7 @@ OpenACC::isValidClauseEvalfun(DirectiveKind DK, ClauseInfo *CI) {
 }
 
 bool
-OpenACC::isValidClauseEstimation(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseEstimation(DirectiveKind DK, ClauseInfo *CI) {
     if (DK == DK_TASK)
         // let the clause wrapper handle this as common data clause
         return true;
@@ -801,52 +801,52 @@ OpenACC::isValidClauseEstimation(DirectiveKind DK, ClauseInfo *CI) {
 }
 
 bool
-OpenACC::isValidClauseBuffer(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseBuffer(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseLocal_buffer(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseLocal_buffer(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseIn(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseIn(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseOut(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseOut(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseInout(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseInout(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseDevice_in(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseDevice_in(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseDevice_out(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseDevice_out(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseDevice_inout(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseDevice_inout(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseOn(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseOn(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseWorkers(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseWorkers(DirectiveKind DK, ClauseInfo *CI) {
     if (CI->getArgs().size() > 3) {
         S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
             << "support up to 3 dimensions";
@@ -868,7 +868,7 @@ OpenACC::isValidClauseWorkers(DirectiveKind DK, ClauseInfo *CI) {
 }
 
 bool
-OpenACC::isValidClauseGroups(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseGroups(DirectiveKind DK, ClauseInfo *CI) {
     if (CI->getArgs().size() > 3) {
         S.Diag(CI->getLocStart(),diag::err_pragma_acc_test)
             << "support up to 3 dimensions";
@@ -890,32 +890,32 @@ OpenACC::isValidClauseGroups(DirectiveKind DK, ClauseInfo *CI) {
 }
 
 bool
-OpenACC::isValidClauseBind(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseBind(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseBind_approximate(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseBind_approximate(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseSuggest(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseSuggest(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseEnergy_joule(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseEnergy_joule(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidClauseRatio(DirectiveKind DK, ClauseInfo *CI) {
+Centaurus::isValidClauseRatio(DirectiveKind DK, ClauseInfo *CI) {
     return true;
 }
 
 bool
-OpenACC::isValidDirectiveTask(DirectiveInfo *DI) {
+Centaurus::isValidDirectiveTask(DirectiveInfo *DI) {
     //check for missing clauses and apply implementation defaults
     MaybeSetImplementationDefaultClauses(DI);
 
@@ -969,7 +969,7 @@ OpenACC::isValidDirectiveTask(DirectiveInfo *DI) {
 }
 
 bool
-OpenACC::isValidDirectiveTaskgroup(DirectiveInfo *DI) {
+Centaurus::isValidDirectiveTaskgroup(DirectiveInfo *DI) {
     if (DI->getClauseList().empty())
         return true;
 
@@ -1005,7 +1005,7 @@ OpenACC::isValidDirectiveTaskgroup(DirectiveInfo *DI) {
 }
 
 bool
-OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
+Centaurus::isValidDirectiveTaskwait(DirectiveInfo *DI) {
     assert(DI->getKind() == DK_TASKWAIT);
 
     if (DI->getClauseList().empty())
@@ -1124,25 +1124,25 @@ OpenACC::isValidDirectiveTaskwait(DirectiveInfo *DI) {
 }
 
 bool
-OpenACC::isValidDirectiveSubtask(DirectiveInfo *DI) {
+Centaurus::isValidDirectiveSubtask(DirectiveInfo *DI) {
     return true;
 }
 
 void
-OpenACC::WarnOnDirective(DirectiveInfo *DI) {
+Centaurus::WarnOnDirective(DirectiveInfo *DI) {
     if (DI)
         S.Diag(DI->getLocStart(),diag::err_pragma_acc_illegal_directive_location)
             << DI->getAsString();
 }
 
 void
-OpenACC::DiscardAndWarn() {
+Centaurus::DiscardAndWarn() {
     WarnOnDirective(PendingDirective);
     PendingDirective = 0;
 }
 
 DirectiveInfo *
-OpenACC::getPendingDirectiveOrNull(enum DirectiveKind DK) {
+Centaurus::getPendingDirectiveOrNull(enum DirectiveKind DK) {
     if (!PendingDirective)
         return 0;
     if (PendingDirective->getKind() != DK)
@@ -1154,7 +1154,7 @@ OpenACC::getPendingDirectiveOrNull(enum DirectiveKind DK) {
 }
 
 StmtResult
-OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
+Centaurus::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
     assert(DI && "Bad Call");
     //S.Diag(SubStmt->getLocStart(),diag::note_pragma_acc_test) << "this statement";
     //S.Diag(DI->getLocStart(),diag::note_pragma_acc_test) << "has this directive";
@@ -1175,7 +1175,7 @@ OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
     if (WarnOnInvalidLists(DI))
         return StmtEmpty();
 
-    AccStmt *ACC = DI->getAccStmt();
+    AclStmt *ACC = DI->getAclStmt();
 
     switch (DI->getKind()) {
     case DK_TASK: {
@@ -1261,7 +1261,7 @@ OpenACC::CreateRegion(DirectiveInfo *DI, Stmt *SubStmt) {
 }
 
 bool
-OpenACC::FindValidICE(Arg *A) {
+Centaurus::FindValidICE(Arg *A) {
     if (A->isICE() && A->getICE().isNonNegative())
         return true;
 
@@ -1270,7 +1270,7 @@ OpenACC::FindValidICE(Arg *A) {
 }
 
 void
-OpenACC::SetDefaultICE(Arg *A, unsigned Default) {
+Centaurus::SetDefaultICE(Arg *A, unsigned Default) {
     A->getICE() = Default;
 }
 
@@ -1285,7 +1285,7 @@ static bool FindVarDecl(ArgVector &Pool, Arg *Target) {
 }
 
 bool
-OpenACC::WarnOnDuplicatesInList(ArgVector &Tmp, ArgVector &Args) {
+Centaurus::WarnOnDuplicatesInList(ArgVector &Tmp, ArgVector &Args) {
     //return true on error
 
     bool status(false);
@@ -1335,7 +1335,7 @@ RegionStack::FindVisibleCopyInRegionStack(Arg *Target) {
         if (Arg *A = FindVisibleCopyInDirective(*II,Target))
             return A;
 
-    ArgVector &Args = Target->getVarDecl()->getOpenAccArgs();
+    ArgVector &Args = Target->getVarDecl()->getCentaurusArgs();
     for (ArgVector::iterator II = Args.begin(), EE = Args.end(); II != EE; ++II) {
         Arg *A = *II;
         if (A->Matches(Target))
@@ -1379,7 +1379,7 @@ RegionStack::FindDataOnDevice(Arg *Target) {
         if (Arg *A = FindDataOnDeviceFromDirective(*II,Target))
             return A;
 
-    ArgVector &Args = Target->getVarDecl()->getOpenAccArgs();
+    ArgVector &Args = Target->getVarDecl()->getCentaurusArgs();
     for (ArgVector::iterator II = Args.begin(), EE = Args.end(); II != EE; ++II) {
         Arg *A = *II;
         if (A->Contains(Target))
@@ -1391,14 +1391,14 @@ RegionStack::FindDataOnDevice(Arg *Target) {
 /////////////////////////////////////////////////////////////////////////////
 
 bool
-OpenACC::WarnOnVisibleCopyFromDeclareDirective(ArgVector &Args) {
+Centaurus::WarnOnVisibleCopyFromDeclareDirective(ArgVector &Args) {
     //return true on error
 
     bool status(false);
     for (ArgVector::iterator II = Args.begin(), EE = Args.end(); II != EE; ++II) {
         Arg *A = *II;
         if (isa<VarArg>(A) || isa<ArrayArg>(A)) {
-            ArgVector &Args = A->getVarDecl()->getOpenAccArgs();
+            ArgVector &Args = A->getVarDecl()->getCentaurusArgs();
             for (ArgVector::iterator RR = Args.begin(), SS = Args.end(); RR != SS; ++RR) {
                 Arg *PrevArg = *RR;
                 if (A->Matches(PrevArg)) {
@@ -1413,7 +1413,7 @@ OpenACC::WarnOnVisibleCopyFromDeclareDirective(ArgVector &Args) {
 }
 
 bool
-OpenACC::WarnOnMissingVisibleCopy(ArgVector &Args, DirectiveInfo *ExtraDI) {
+Centaurus::WarnOnMissingVisibleCopy(ArgVector &Args, DirectiveInfo *ExtraDI) {
     //return true on error
 
     bool status(false);
@@ -1435,7 +1435,7 @@ OpenACC::WarnOnMissingVisibleCopy(ArgVector &Args, DirectiveInfo *ExtraDI) {
 }
 
 bool
-OpenACC::WarnOnInvalidLists(DirectiveInfo *DI) {
+Centaurus::WarnOnInvalidLists(DirectiveInfo *DI) {
     //return true on error
 
     ArgVector ArgDataIn;
@@ -1468,7 +1468,7 @@ OpenACC::WarnOnInvalidLists(DirectiveInfo *DI) {
 }
 
 bool
-OpenACC::WarnOnArgKind(ArgVector &Args, ArgKind AK) {
+Centaurus::WarnOnArgKind(ArgVector &Args, ArgKind AK) {
     //return true on error
 
     bool status(false);
@@ -1485,7 +1485,7 @@ OpenACC::WarnOnArgKind(ArgVector &Args, ArgKind AK) {
 }
 
 bool
-OpenACC::SetVisibleCopy(ArgVector &Args, ClauseInfo *CI) {
+Centaurus::SetVisibleCopy(ArgVector &Args, ClauseInfo *CI) {
     //return true on error
 
     if (!CI->hasArgList())
@@ -1504,7 +1504,7 @@ OpenACC::SetVisibleCopy(ArgVector &Args, ClauseInfo *CI) {
                 status = true;
             }
             else
-                A->getVarDecl()->addOpenAccArg(A);
+                A->getVarDecl()->addCentaurusArg(A);
         }
         else {
             S.Diag(Loc,diag::err_pragma_acc_illegal_arg_kind)
@@ -1517,7 +1517,7 @@ OpenACC::SetVisibleCopy(ArgVector &Args, ClauseInfo *CI) {
 }
 
 bool
-OpenACC::MarkArgsWithVisibleCopy(ClauseList &CList) {
+Centaurus::MarkArgsWithVisibleCopy(ClauseList &CList) {
     //return true on error
 
     bool status(false);
@@ -1544,7 +1544,7 @@ RegionStack::EnterRegion(DirectiveInfo *EnterDI) {
     //ignore non region directives
     if (EnterDI->getKind() == DK_TASKWAIT) {
 #if 0
-        openacc::ClauseInfo *Estimation = NULL;
+        centaurus::ClauseInfo *Estimation = NULL;
         ClauseList &CList = EnterDI->getClauseList();
         for (ClauseList::iterator II = CList.begin(), EE = CList.end(); II != EE; ++II)
             if ((*II)->getKind() == CK_ESTIMATION) {
@@ -1568,7 +1568,7 @@ RegionStack::ExitRegion(DirectiveInfo *ExpectedDI) {
     //ignore non region directives
     if (ExpectedDI->getKind() == DK_TASKWAIT) {
 #if 0
-        openacc::ClauseInfo *Estimation = NULL;
+        centaurus::ClauseInfo *Estimation = NULL;
         ClauseList &CList = ExpectedDI->getClauseList();
         for (ClauseList::iterator II = CList.begin(), EE = CList.end(); II != EE; ++II)
             if ((*II)->getKind() == CK_ESTIMATION) {
@@ -1643,7 +1643,7 @@ RegionStack::FindBufferObjectInRegionStack(Arg *Target) {
         if (Arg *A = FindBufferObjectInDirective(*II,Target))
             return A;
 
-    ArgVector &Args = Target->getVarDecl()->getOpenAccArgs();
+    ArgVector &Args = Target->getVarDecl()->getCentaurusArgs();
     for (ArgVector::iterator II = Args.begin(), EE = Args.end(); II != EE; ++II) {
         Arg *A = *II;
         assert(A->getParent()->getAsClause());

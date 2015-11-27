@@ -29,7 +29,7 @@
 #include "clang/Sema/ParsedTemplate.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/TypoCorrection.h"
-#include "clang/Sema/SemaOpenACC.h"
+#include "clang/Sema/SemaCentaurus.h"
 #include "llvm/ADT/SmallVector.h"
 using namespace clang;
 

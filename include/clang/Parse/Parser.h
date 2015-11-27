@@ -14,7 +14,7 @@
 #ifndef LLVM_CLANG_PARSE_PARSER_H
 #define LLVM_CLANG_PARSE_PARSER_H
 
-#include "clang/Basic/OpenACC.h"
+#include "clang/Basic/Centaurus.h"
 #include "clang/Basic/OpenMPKinds.h"
 #include "clang/Basic/OperatorPrecedence.h"
 #include "clang/Basic/Specifiers.h"
@@ -169,7 +169,7 @@ class Parser : public CodeCompletionHandler {
   std::unique_ptr<PragmaHandler> LoopHintHandler;
   std::unique_ptr<PragmaHandler> UnrollHintHandler;
   std::unique_ptr<PragmaHandler> NoUnrollHintHandler;
-  std::unique_ptr<PragmaExtensionHandler> OpenACCHandler;
+  std::unique_ptr<PragmaExtensionHandler> CentaurusHandler;
 
   std::unique_ptr<CommentHandler> CommentSemaHandler;
 
@@ -528,29 +528,29 @@ private:
   StmtResult HandlePragmaCaptured();
 
   /// #pragma acc...
-  void HandlePragmaOpenACC();
+  void HandlePragmaCentaurus();
 
     bool ProhibitExtensionPragmas();
     void AllowExtensionPragmas(bool OldValue);
 
-    bool ParseClauseWrapper(openacc::DirectiveInfo *DI);
-    bool ParseClauses(openacc::DirectiveInfo *DI);
+    bool ParseClauseWrapper(centaurus::DirectiveInfo *DI);
+    bool ParseClauses(centaurus::DirectiveInfo *DI);
 
-    bool ParseArgScalarIntExpr(openacc::DirectiveKind DK, openacc::CommonInfo *Common);
-    bool ParseArgDoubleExpr(openacc::DirectiveKind DK, openacc::CommonInfo *Common);
-    bool ParseArgList(openacc::DirectiveKind DK, openacc::CommonInfo *Common, bool AllowSubArrays = true);
+    bool ParseArgScalarIntExpr(centaurus::DirectiveKind DK, centaurus::CommonInfo *Common);
+    bool ParseArgDoubleExpr(centaurus::DirectiveKind DK, centaurus::CommonInfo *Common);
+    bool ParseArgList(centaurus::DirectiveKind DK, centaurus::CommonInfo *Common, bool AllowSubArrays = true);
 
-    typedef bool (ParseClauseFn) (openacc::DirectiveKind DK, openacc::ClauseInfo *CI);
+    typedef bool (ParseClauseFn) (centaurus::DirectiveKind DK, centaurus::ClauseInfo *CI);
     //pointer to member function
-    typedef bool (Parser::*ParseClauseFnPtr) (openacc::DirectiveKind DK, openacc::ClauseInfo *CI);
+    typedef bool (Parser::*ParseClauseFnPtr) (centaurus::DirectiveKind DK, centaurus::ClauseInfo *CI);
 
-    typedef bool (ParseDirectiveFn) (openacc::DirectiveInfo *DI);
+    typedef bool (ParseDirectiveFn) (centaurus::DirectiveInfo *DI);
     //pointer to member function
-    typedef bool (Parser::*ParseDirectiveFnPtr) (openacc::DirectiveInfo *DI);
+    typedef bool (Parser::*ParseDirectiveFnPtr) (centaurus::DirectiveInfo *DI);
 
     //array of clause handlers
-    ParseClauseFnPtr ParseClause[openacc::CK_END];
-    ParseDirectiveFnPtr ParseDirective[openacc::DK_END];
+    ParseClauseFnPtr ParseClause[centaurus::CK_END];
+    ParseDirectiveFnPtr ParseDirective[centaurus::DK_END];
 
     ParseClauseFn ParseClauseLabel;
     ParseClauseFn ParseClauseTaskid;

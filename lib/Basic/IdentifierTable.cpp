@@ -148,7 +148,7 @@ static KeywordStatus getKeywordStatus(const LangOptions &LangOpts,
   if (LangOpts.ConceptsTS && (Flags & KEYCONCEPTS)) return KS_Enabled;
   if (LangOpts.ObjC2 && (Flags & KEYOBJC2)) return KS_Enabled;
   if (LangOpts.CPlusPlus && (Flags & KEYCXX11)) return KS_Future;
-  if (LangOpts.OpenACC && (Flags & KEYOPENCL)) return KS_Enabled;
+  if (LangOpts.Centaurus && (Flags & KEYOPENCL)) return KS_Enabled;
   return KS_Disabled;
 }
 

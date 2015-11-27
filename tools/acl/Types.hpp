@@ -1,10 +1,10 @@
-#ifndef __ACCLL_TYPES_H__
-#define __ACCLL_TYPES_H__
+#ifndef __ACL_TYPES_H__
+#define __ACL_TYPES_H__
 
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/SetVector.h"
 
-#include "clang/Basic/OpenACC.h"
+#include "clang/Basic/Centaurus.h"
 
 #include "Common.hpp"
 #include "CentaurusConfig.hpp"
@@ -14,14 +14,14 @@ namespace clang {
     class ASTContext;
     class CallGraph;
 
-    namespace openacc {
+    namespace centaurus {
         class Arg;
         class DirectiveInfo;
         class RegionStack;
     }
 }
 
-namespace accll {
+namespace acl {
 typedef llvm::StringMap<size_t> UIDKernelMap;
 typedef std::pair<std::string, std::string> ArgNames;
 
@@ -46,15 +46,15 @@ struct DataIOSrc {
     std::string Definition;
     std::string NumArgs;
 
-    DataIOSrc(clang::ASTContext *Context,clang::openacc::DirectiveInfo *DI,
-              clang::openacc::RegionStack &RStack)
+    DataIOSrc(clang::ASTContext *Context,clang::centaurus::DirectiveInfo *DI,
+              clang::centaurus::RegionStack &RStack)
     {
         init(Context,DI,RStack);
     }
 
 private:
-    void init(clang::ASTContext *Context,clang::openacc::DirectiveInfo *DI,
-              clang::openacc::RegionStack &RStack);
+    void init(clang::ASTContext *Context,clang::centaurus::DirectiveInfo *DI,
+              clang::centaurus::RegionStack &RStack);
 };
 
 struct PTXASInfo {
@@ -134,13 +134,13 @@ struct KernelRefDef {
 
     KernelRefDef(const CentaurusConfig &ACLConfig,
                  clang::ASTContext *Context,clang::FunctionDecl *FD, clang::CallGraph *CG,
-                 const clang::openacc::DirectiveInfo *DI,
+                 const clang::centaurus::DirectiveInfo *DI,
                  std::string &Extensions, std::string &UserTypes,
-                 const enum clang::openacc::PrintSubtaskType = clang::openacc::K_PRINT_ALL);
+                 const enum clang::centaurus::PrintSubtaskType = clang::centaurus::K_PRINT_ALL);
 
     size_t getKernelUID(std::string Name);
 
-    std::string setDeviceType(const clang::openacc::DirectiveInfo *DI, const clang::openacc::ClauseKind CK);
+    std::string setDeviceType(const clang::centaurus::DirectiveInfo *DI, const clang::centaurus::ClauseKind CK);
 
 };
 

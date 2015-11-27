@@ -49,7 +49,7 @@ class TypeLoc;
 class UnresolvedSetImpl;
 class VarTemplateDecl;
 
-namespace openacc {
+namespace centaurus {
 class Arg;
 typedef SmallVector<Arg*, 12> ArgVector;
 }
@@ -764,7 +764,7 @@ private:
   friend class StmtIteratorBase;
   friend class ASTNodeImporter;
 
-  openacc::ArgVector Args;
+  centaurus::ArgVector Args;
 
 protected:
   enum { NumParameterIndexBits = 8 };
@@ -1291,8 +1291,8 @@ public:
   void setTemplateSpecializationKind(TemplateSpecializationKind TSK,
                         SourceLocation PointOfInstantiation = SourceLocation());
 
-  void addOpenAccArg(openacc::Arg *A) { Args.push_back(A); }
-  openacc::ArgVector &getOpenAccArgs() { return Args; }
+  void addCentaurusArg(centaurus::Arg *A) { Args.push_back(A); }
+  centaurus::ArgVector &getCentaurusArgs() { return Args; }
 
   /// \brief Specify that this variable is an instantiation of the
   /// static data member VD.

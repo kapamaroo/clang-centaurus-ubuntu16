@@ -1,25 +1,25 @@
-/// Parse OpenACC Directives
+/// Parse Centaurus Directives
 
 #include "clang/AST/ASTContext.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Parse/ParseDiagnostic.h"
-#include "clang/Sema/SemaOpenACC.h"
+#include "clang/Sema/SemaCentaurus.h"
 #include "clang/Sema/Lookup.h"
 
 using namespace clang;
-using namespace openacc;
+using namespace centaurus;
 
 static DirectiveInfo*
-ActOnNewOpenAccDirective(DirectiveKind DK, SourceLocation StartLoc,
+ActOnNewCentaurusDirective(DirectiveKind DK, SourceLocation StartLoc,
                          ASTContext &Context) {
     DirectiveInfo *DI = new (Context) DirectiveInfo(DK,StartLoc);
-    AccStmt *ACC = new (Context) AccStmt(DI);
-    DI->setAccStmt(ACC);
+    AclStmt *ACC = new (Context) AclStmt(DI);
+    DI->setAclStmt(ACC);
     return ACC->getDirective();
 }
 
 static ClauseInfo*
-ActOnNewOpenAccClause(ClauseKind CK, SourceLocation StartLoc,
+ActOnNewCentaurusClause(ClauseKind CK, SourceLocation StartLoc,
                       SourceLocation EndLoc, DirectiveInfo *DI,
                       ASTContext &Context) {
     ClauseInfo *CI = new (Context) ClauseInfo(CK,StartLoc,EndLoc,DI);
@@ -579,13 +579,13 @@ Parser::ParseDirectiveSubtask(DirectiveInfo *DI) {
     return ParseClauses(DI);
 }
 
-void Parser::HandlePragmaOpenACC() {
+void Parser::HandlePragmaCentaurus() {
     //FIXME: better use a helper function to clean up the eod
 
     //http://www.parashift.com/c++-faq-lite/pointers-to-members.html
 #define PARSER_CALL(method) ((*this).*(method))
 
-    using namespace openacc;
+    using namespace centaurus;
 
     assert(Tok.is(tok::annot_pragma_acc));
 
@@ -626,7 +626,7 @@ void Parser::HandlePragmaOpenACC() {
 
     assert(DirectiveStartLoc.isValid());
     DirectiveInfo *DI =
-        ActOnNewOpenAccDirective(DK,DirectiveStartLoc,Actions.getASTContext());
+        ActOnNewCentaurusDirective(DK,DirectiveStartLoc,Actions.getASTContext());
 
     SourceLocation DirectiveEndLoc;
     if (DI->hasOptionalClauses() && Tok.is(tok::eod))
@@ -700,7 +700,7 @@ Parser::ParseClauseWrapper(DirectiveInfo *DI) {
     SourceLocation ClauseEndLoc = ClauseStartLoc.getLocWithOffset(Offset);
 
     ClauseInfo *CI =
-        ActOnNewOpenAccClause(CK,ClauseStartLoc,ClauseEndLoc,DI,
+        ActOnNewCentaurusClause(CK,ClauseStartLoc,ClauseEndLoc,DI,
                               Actions.getASTContext());
     CList.push_back(CI);
 

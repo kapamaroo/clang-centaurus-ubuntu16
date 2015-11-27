@@ -11,15 +11,15 @@ set(CMAKE_MODULE_PATH
 
 find_package(OpenCL REQUIRED)
 
-add_clang_executable(accll
-accll.cpp
+add_clang_executable(acl
+acl.cpp
 Common.cpp
 Stages.cpp
 ClangFormat.cpp
 ocl_utils.cpp
 ocl_compiler.cpp
 )
-target_link_libraries(accll
+target_link_libraries(acl
 clangAnalysis
 clangAST
 clangASTMatchers

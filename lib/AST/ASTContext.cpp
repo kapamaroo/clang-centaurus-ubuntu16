@@ -1055,7 +1055,7 @@ void ASTContext::InitBuiltinTypes(const TargetInfo &Target) {
   InitBuiltinType(ObjCBuiltinClassTy, BuiltinType::ObjCClass);
   InitBuiltinType(ObjCBuiltinSelTy, BuiltinType::ObjCSel);
 
-  if (LangOpts.OpenCL || LangOpts.OpenACC) {
+  if (LangOpts.OpenCL || LangOpts.Centaurus) {
     InitBuiltinType(OCLImage1dTy, BuiltinType::OCLImage1d);
     InitBuiltinType(OCLImage1dArrayTy, BuiltinType::OCLImage1dArray);
     InitBuiltinType(OCLImage1dBufferTy, BuiltinType::OCLImage1dBuffer);

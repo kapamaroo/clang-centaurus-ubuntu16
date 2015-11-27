@@ -230,7 +230,7 @@ LANGOPT(SanitizeAddressFieldPadding, 2, 0, "controls how aggressive is ASan "
                                            "field padding (0: none, 1:least "
                                            "aggressive, 2: more aggressive)")
 
-LANGOPT(OpenACC, 1, 0, "Enables OpenACC parsing.")
+LANGOPT(Centaurus, 1, 0, "Enables Centaurus parsing.")
 
 #undef LANGOPT
 #undef COMPATIBLE_LANGOPT
@@ -239,4 +239,3 @@ LANGOPT(OpenACC, 1, 0, "Enables OpenACC parsing.")
 #undef COMPATIBLE_ENUM_LANGOPT
 #undef BENIGN_ENUM_LANGOPT
 #undef VALUE_LANGOPT
-

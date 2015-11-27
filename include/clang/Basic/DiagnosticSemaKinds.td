@@ -7367,7 +7367,7 @@ def err_unknown_any_function : Error<
 def err_filter_expression_integral : Error<
   "filter expression type should be an integral value not %0">;
 
-//OpenACC
+//Centaurus
 def warn_pragma_acc_implicit_region : Warning<
   "introduce implicit region">;
 

@@ -28,8 +28,8 @@ def SwitchCase : Stmt<1>;
 def CaseStmt : DStmt<SwitchCase>;
 def DefaultStmt : DStmt<SwitchCase>;
 def CapturedStmt : Stmt;
-// OpenACC Extensions.
-def AccStmt : Stmt;
+// Centaurus Extensions.
+def AclStmt : Stmt;
 
 // Asm statements
 def AsmStmt : Stmt<1>;
@@ -172,7 +172,7 @@ def TypoExpr : DStmt<Expr>;
 
 // Microsoft Extensions.
 def MSPropertyRefExpr : DStmt<Expr>;
-def CXXUuidofExpr : DStmt<Expr>; 
+def CXXUuidofExpr : DStmt<Expr>;
 def SEHTryStmt : Stmt;
 def SEHExceptStmt : Stmt;
 def SEHFinallyStmt : Stmt;

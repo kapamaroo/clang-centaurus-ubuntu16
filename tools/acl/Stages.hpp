@@ -1,7 +1,7 @@
-#ifndef ACCLL_STAGES_HPP_
-#define ACCLL_STAGES_HPP_
+#ifndef ACL_STAGES_HPP_
+#define ACL_STAGES_HPP_
 
-#include "clang/Basic/OpenACC.h"
+#include "clang/Basic/Centaurus.h"
 #include "clang/Tooling/Refactoring.h"
 
 #include "clang/AST/ASTContext.h"
@@ -23,19 +23,19 @@
 //http://www.parashift.com/c++-faq-lite/pointers-to-members.html
 #define VISITOR_CALL(method) ((*this).*(method))
 
-namespace accll {
+namespace acl {
 
 extern std::string KernelHeader;
 extern std::string OpenCLExtensions;
 extern std::string NewFileHeader;
 
 std::pair<std::string,std::string>
-getGeometry(clang::openacc::DirectiveInfo *DI);
+getGeometry(clang::centaurus::DirectiveInfo *DI);
 
 std::string getNewNameFromOrigName(std::string OrigName);
 
-clang::openacc::Arg*
-CreateNewArgFrom(clang::Expr *E, clang::openacc::ClauseInfo *ImplicitCI,
+clang::centaurus::Arg*
+CreateNewArgFrom(clang::Expr *E, clang::centaurus::ClauseInfo *ImplicitCI,
                  clang::ASTContext *Context);
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -65,7 +65,7 @@ public:
         Context(0),
         hasDirectives(false), hasDeviceCode(false), hasRuntimeCalls(false), hasMain(false) {}
 
-    bool VisitAccStmt(clang::AccStmt *ACC);
+    bool VisitAclStmt(clang::AclStmt *ACC);
     bool VisitCallExpr(clang::CallExpr *CE);
     bool VisitFunctionDecl(clang::FunctionDecl *FD);
 
@@ -156,11 +156,11 @@ private:
     clang::ASTContext *Context;
     clang::CallGraph *CG;
 
-    typedef std::pair<clang::openacc::ClauseInfo*, std::string> AsyncEvent;
+    typedef std::pair<clang::centaurus::ClauseInfo*, std::string> AsyncEvent;
     typedef llvm::SmallVector<AsyncEvent,8> AsyncEventVector;
     AsyncEventVector AsyncEvents;
 
-    clang::openacc::RegionStack RStack;
+    clang::centaurus::RegionStack RStack;
     clang::FunctionDecl *CurrentFunction;
 
     //VarDeclVector *IgnoreVars;
@@ -194,11 +194,11 @@ public:
 
     //////
 
-    bool TraverseAccStmt(clang::AccStmt *S);
+    bool TraverseAclStmt(clang::AclStmt *S);
     bool TraverseForStmt(clang::ForStmt *F);
     bool TraverseFunctionDecl(clang::FunctionDecl *FD);
 
-    bool VisitAccStmt(clang::AccStmt *ACC);
+    bool VisitAclStmt(clang::AclStmt *ACC);
     bool VisitBinaryOperator(clang::BinaryOperator *BO);
 
 #if 0
@@ -259,6 +259,6 @@ public:
     }
 };
 
-}  //namespace accll
+}  //namespace acl
 
 #endif

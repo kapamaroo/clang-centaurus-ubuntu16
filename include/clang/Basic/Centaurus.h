@@ -1,5 +1,5 @@
-#ifndef LLVM_CLANG_SEMA_SEMA_OPENACC
-#define LLVM_CLANG_SEMA_SEMA_OPENACC
+#ifndef LLVM_CLANG_SEMA_SEMA_CENTAURUS
+#define LLVM_CLANG_SEMA_SEMA_CENTAURUS
 
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Sema/Ownership.h"
@@ -12,13 +12,13 @@ class Token;
 class VarDecl;
 class FieldDecl;
 class FunctionDecl;
-class AccStmt;
+class AclStmt;
 class PrintingPolicy;
 class ASTContext;
 
-namespace openacc {
+namespace centaurus {
 
-class OpenACC;
+class Centaurus;
 
 enum PrintSubtaskType {
     K_PRINT_ALL,
@@ -121,7 +121,7 @@ public:
     }
 
     bool Matches(Arg *Target);
-    bool Matches(Expr *E, OpenACC *ACC);
+    bool Matches(Expr *E, Centaurus *ACC);
     bool Contains(Arg *Target);
 
     const char *getKindAsString() const {
@@ -374,7 +374,7 @@ class DirectiveInfo : public CommonInfo {
 private:
     const DirectiveKind DK;
     ClauseList CList;
-    AccStmt *ACC;
+    AclStmt *ACC;
 
 public:
     static const std::string Name[DK_END];
@@ -382,8 +382,8 @@ public:
     DirectiveKind getKind() const { return DK; }
     ClauseList &getClauseList() { return CList; }
     const ClauseList &getClauseList() const { return CList; }
-    void setAccStmt(AccStmt *Acc) { ACC = Acc; }
-    AccStmt *getAccStmt() const { assert(ACC); return ACC; }
+    void setAclStmt(AclStmt *Acc) { ACC = Acc; }
+    AclStmt *getAclStmt() const { assert(ACC); return ACC; }
 
     DirectiveInfo(DirectiveKind dk, SourceLocation startloc) :
         CommonInfo(startloc,startloc), DK(dk), ACC(0) {}
@@ -438,7 +438,7 @@ public:
 
 };
 
-}  // end namespace openacc
+}  // end namespace centaurus
 }  // end namespace clang
 
 #endif

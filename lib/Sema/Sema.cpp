@@ -36,7 +36,7 @@
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/SemaConsumer.h"
-#include "clang/Sema/SemaOpenACC.h"
+#include "clang/Sema/SemaCentaurus.h"
 #include "clang/Sema/TemplateDeduction.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/DenseMap.h"
@@ -246,8 +246,8 @@ void Sema::Initialize() {
   if (IdResolver.begin(BuiltinVaList) == IdResolver.end())
     PushOnScopeChains(Context.getBuiltinVaListDecl(), TUScope);
 
-  //if (LangOpts.OpenACC)
-      ACCInfo = new openacc::OpenACC(*this);
+  //if (LangOpts.Centaurus)
+      ACCInfo = new centaurus::Centaurus(*this);
 }
 
 Sema::~Sema() {
@@ -273,7 +273,7 @@ Sema::~Sema() {
   if (isMultiplexExternalSource)
     delete ExternalSource;
 
-  //if (LangOpts.OpenACC)
+  //if (LangOpts.Centaurus)
       delete ACCInfo;
 
   threadSafety::threadSafetyCleanup(ThreadSafetyDeclCache);

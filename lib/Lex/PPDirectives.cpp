@@ -1778,7 +1778,7 @@ void Preprocessor::HandleIncludeDirective(SourceLocation HashLoc,
   FileID FID = SourceMgr.createFileID(File, IncludePos, FileCharacter);
   assert(!FID.isInvalid() && "Expected valid file ID");
 
-  if (getLangOpts().OpenACC && Filename.endswith(".cl")) {
+  if (getLangOpts().Centaurus && Filename.endswith(".cl")) {
       if (SourceMgr.isInMainFile(HashLoc))
           SourceMgr.OpenCLIncludeDirectives.push_back(HashLoc);
       SourceMgr.OpenCLIncludeFiles++;

@@ -21,7 +21,7 @@
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/AST/StmtVisitor.h"
-#include "clang/Basic/OpenACC.h"
+#include "clang/Basic/Centaurus.h"
 #include "clang/Basic/CharInfo.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/Format.h"
@@ -44,10 +44,10 @@ namespace  {
                 unsigned Indentation = 0)
       : OS(os), IndentLevel(Indentation), Helper(helper), Policy(Policy)
       {
-          SubtaskPrintMode = openacc::K_PRINT_ALL;
+          SubtaskPrintMode = centaurus::K_PRINT_ALL;
       }
 
-    enum openacc::PrintSubtaskType SubtaskPrintMode;
+    enum centaurus::PrintSubtaskType SubtaskPrintMode;
     std::string AlternativeName;
 
     void PrintStmt(Stmt *S) {
@@ -971,29 +971,29 @@ void StmtPrinter::VisitOMPCancelDirective(OMPCancelDirective *Node) {
   PrintOMPExecutableDirective(Node);
 }
 //===----------------------------------------------------------------------===//
-//  OpenACC printing methods.
+//  Centaurus printing methods.
 //===----------------------------------------------------------------------===//
 
-inline static std::string getApproxFunctionName(openacc::DirectiveInfo *DI) {
-    openacc::ClauseList &CList = DI->getClauseList();
-    for (openacc::ClauseList::iterator
+inline static std::string getApproxFunctionName(centaurus::DirectiveInfo *DI) {
+    centaurus::ClauseList &CList = DI->getClauseList();
+    for (centaurus::ClauseList::iterator
              II = CList.begin(), EE = CList.end(); II != EE; ++II)
-        if ((*II)->getKind() == openacc::CK_APPROXFUN) {
-            openacc::FunctionArg *FA = dyn_cast<openacc::FunctionArg>((*II)->getArg());
+        if ((*II)->getKind() == centaurus::CK_APPROXFUN) {
+            centaurus::FunctionArg *FA = dyn_cast<centaurus::FunctionArg>((*II)->getArg());
             return FA->getFunctionDecl()->getNameAsString();
         }
     return std::string();
 }
 
-void StmtPrinter::VisitAccStmt(AccStmt *Node) {
-    openacc::DirectiveInfo *DI = Node->getDirective();
+void StmtPrinter::VisitAclStmt(AclStmt *Node) {
+    centaurus::DirectiveInfo *DI = Node->getDirective();
 
-    if (SubtaskPrintMode == openacc::K_PRINT_ALL) {
+    if (SubtaskPrintMode == centaurus::K_PRINT_ALL) {
         OS << DI->getPrettyDirective(Policy);
         PrintStmt(Node->getSubStmt());
     }
-    else if (SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK) {
-        assert(DI->getKind() == openacc::DK_SUBTASK);
+    else if (SubtaskPrintMode == centaurus::K_PRINT_APPROXIMATE_SUBTASK) {
+        assert(DI->getKind() == centaurus::DK_SUBTASK);
         AlternativeName = getApproxFunctionName(DI);
         if (!AlternativeName.size())
             return;
@@ -1011,8 +1011,8 @@ void StmtPrinter::VisitAccStmt(AccStmt *Node) {
         PrintStmt(Node->getSubStmt());
         AlternativeName = std::string();
     }
-    else if (SubtaskPrintMode == openacc::K_PRINT_ACCURATE_SUBTASK) {
-        assert(DI->getKind() == openacc::DK_SUBTASK);
+    else if (SubtaskPrintMode == centaurus::K_PRINT_ACCURATE_SUBTASK) {
+        assert(DI->getKind() == centaurus::DK_SUBTASK);
         if (CallExpr *CE = dyn_cast<CallExpr>(Node->getSubStmt())) {
             if (CE->getDirectCallee()->getASTContext().isFunctionWithSubtasks(CE->getDirectCallee()))
                 AlternativeName = CE->getDirectCallee()->getNameAsString() + "__accurate__";
@@ -1353,9 +1353,9 @@ void StmtPrinter::VisitCallExpr(CallExpr *Call) {
     else {
         PrintExpr(Call->getCallee());
         if (Call->getDirectCallee()->getASTContext().isFunctionWithSubtasks(Call->getDirectCallee())) {
-            if (SubtaskPrintMode == openacc::K_PRINT_ACCURATE_SUBTASK)
+            if (SubtaskPrintMode == centaurus::K_PRINT_ACCURATE_SUBTASK)
                 OS << "__accurate__";
-            else if (SubtaskPrintMode == openacc::K_PRINT_APPROXIMATE_SUBTASK)
+            else if (SubtaskPrintMode == centaurus::K_PRINT_APPROXIMATE_SUBTASK)
                 OS << "__approx__";
         }
     }
@@ -2377,7 +2377,7 @@ void Stmt::printPrettyAccurateVersion(raw_ostream &OS,
   }
 
   StmtPrinter P(OS, Helper, Policy, Indentation);
-  P.SubtaskPrintMode = openacc::K_PRINT_ACCURATE_SUBTASK;
+  P.SubtaskPrintMode = centaurus::K_PRINT_ACCURATE_SUBTASK;
   assert(isa<CompoundStmt>(this) && "Not a function body");
   P.Visit(const_cast<Stmt*>(this));
 }
@@ -2392,7 +2392,7 @@ void Stmt::printPrettyApproximateVersion(raw_ostream &OS,
   }
 
   StmtPrinter P(OS, Helper, Policy, Indentation);
-  P.SubtaskPrintMode = openacc::K_PRINT_APPROXIMATE_SUBTASK;
+  P.SubtaskPrintMode = centaurus::K_PRINT_APPROXIMATE_SUBTASK;
   assert(isa<CompoundStmt>(this) && "Not a function body");
   P.Visit(const_cast<Stmt*>(this));
 }

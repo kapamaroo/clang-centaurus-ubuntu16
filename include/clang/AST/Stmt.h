@@ -49,7 +49,7 @@ namespace clang {
   class Token;
   class VarDecl;
 
-namespace openacc {
+namespace centaurus {
 class DirectiveInfo;
 class ClauseInfo;
 }
@@ -2208,19 +2208,19 @@ public:
   friend class ASTStmtReader;
 };
 
-class AccStmt : public Stmt {
-    openacc::DirectiveInfo *DI;
+class AclStmt : public Stmt {
+    centaurus::DirectiveInfo *DI;
     Stmt *SubStmt;
 
 public:
-  AccStmt(openacc::DirectiveInfo *DI);
+  AclStmt(centaurus::DirectiveInfo *DI);
 
   /// \brief Build an empty Acc statement.
-  explicit AccStmt(EmptyShell Empty) :
-  Stmt(AccStmtClass, Empty), DI(0), SubStmt(0) {}
+  explicit AclStmt(EmptyShell Empty) :
+  Stmt(AclStmtClass, Empty), DI(0), SubStmt(0) {}
 
-  openacc::DirectiveInfo *getDirective() const {
-      return const_cast<openacc::DirectiveInfo*>(DI);
+  centaurus::DirectiveInfo *getDirective() const {
+      return const_cast<centaurus::DirectiveInfo*>(DI);
   }
 
   Stmt *getSubStmt() const { return SubStmt; }
@@ -2230,7 +2230,7 @@ public:
   SourceLocation getLocEnd() const LLVM_READONLY;
 
   static bool classof(const Stmt *T) {
-      return T->getStmtClass() == AccStmtClass;
+      return T->getStmtClass() == AclStmtClass;
   }
 
   // Iterators

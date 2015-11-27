@@ -4982,7 +4982,7 @@ void InitializationSequence::InitializeFrom(Sema &S,
 
   // use C behavior when address spaces are different
   // http://lists.llvm.org/pipermail/cfe-commits/Week-of-Mon-20140512/105644.html
-  if (S.getLangOpts().OpenACC) {
+  if (S.getLangOpts().Centaurus) {
       // && Kind.getKind() == InitializationKind::IK_Copy
       QualType Dest = DestType;
       if (const PointerType *PT = DestType->getAs<PointerType>())

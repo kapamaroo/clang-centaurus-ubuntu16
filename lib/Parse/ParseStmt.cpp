@@ -22,7 +22,7 @@
 #include "clang/Sema/LoopHint.h"
 #include "clang/Sema/PrettyDeclStackTrace.h"
 #include "clang/Sema/Scope.h"
-#include "clang/Sema/SemaOpenACC.h"
+#include "clang/Sema/SemaCentaurus.h"
 #include "clang/Sema/TypoCorrection.h"
 #include "llvm/ADT/SmallString.h"
 using namespace clang;
@@ -313,7 +313,7 @@ Retry:
 
   case tok::annot_pragma_acc:
     ProhibitAttributes(Attrs);
-    HandlePragmaOpenACC();
+    HandlePragmaCentaurus();
     return StmtEmpty();
 
   case tok::annot_pragma_weak:
@@ -867,7 +867,7 @@ void Parser::ParseCompoundStatementLeadingPragmas() {
       HandlePragmaAlign();
       break;
     case tok::annot_pragma_acc:
-      HandlePragmaOpenACC();
+      HandlePragmaCentaurus();
       return;
       //break;
     case tok::annot_pragma_weak:
@@ -925,13 +925,13 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
       // Parse any pragmas at the beginning of the compound statement.
       ParseCompoundStatementLeadingPragmas();
 
-#warning FIXME: first directive inside compound statement
+      // CENTAURUS FIXME: first directive inside compound statement
       StmtResult LeadingWaitDI = StmtEmpty();
       //get any pending wait directive
-      //if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASK))
+      //if (centaurus::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(centaurus::DK_TASK))
       //    Actions.getACCInfo()->WarnOnDirective(DI);
       //else
-      if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASKWAIT))
+      if (centaurus::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(centaurus::DK_TASKWAIT))
           LeadingWaitDI = Actions.getACCInfo()->CreateRegion(DI);
       if (!LeadingWaitDI.isUsable())
           break;
@@ -978,24 +978,24 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
 
     StmtResult R;
     if (Tok.isNot(tok::kw___extension__)) {
-        if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASK)) {
+        if (centaurus::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(centaurus::DK_TASK)) {
             Actions.getACCInfo()->getRegionStack().EnterRegion(DI);
             R = ParseStatementOrDeclaration(Stmts, false);
             Actions.getACCInfo()->getRegionStack().ExitRegion(DI);
             R = Actions.getACCInfo()->CreateRegion(DI,R.get());
         }
-        else if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_SUBTASK)) {
+        else if (centaurus::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(centaurus::DK_SUBTASK)) {
             Actions.getACCInfo()->getRegionStack().EnterRegion(DI);
             R = ParseStatementOrDeclaration(Stmts, false);
             Actions.getACCInfo()->getRegionStack().ExitRegion(DI);
             R = Actions.getACCInfo()->CreateRegion(DI,R.get());
         }
-        else if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASKWAIT)) {
+        else if (centaurus::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(centaurus::DK_TASKWAIT)) {
 #if 0
-            openacc::ClauseInfo *Estimation = NULL;
-            openacc::ClauseList &CList = DI->getClauseList();
-            for (openacc::ClauseList::iterator II = CList.begin(), EE = CList.end(); II != EE; ++II)
-                if ((*II)->getKind() == openacc::CK_ESTIMATION) {
+            centaurus::ClauseInfo *Estimation = NULL;
+            centaurus::ClauseList &CList = DI->getClauseList();
+            for (centaurus::ClauseList::iterator II = CList.begin(), EE = CList.end(); II != EE; ++II)
+                if ((*II)->getKind() == centaurus::CK_ESTIMATION) {
                     Estimation = *II;
                     break;
                 }
@@ -1014,7 +1014,7 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
             R = Actions.getACCInfo()->CreateRegion(DI);
 #endif
         }
-        else if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASKGROUP)) {
+        else if (centaurus::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(centaurus::DK_TASKGROUP)) {
             R = Actions.getACCInfo()->CreateRegion(DI);
         }
         else
@@ -1070,7 +1070,7 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
   // last taskwait on compound statement
   if (Tok.is(tok::r_brace)) {
       StmtResult R;
-      if (openacc::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(openacc::DK_TASKWAIT))
+      if (centaurus::DirectiveInfo *DI = Actions.getACCInfo()->getPendingDirectiveOrNull(centaurus::DK_TASKWAIT))
           R = Actions.getACCInfo()->CreateRegion(DI);
       if (R.isUsable())
           Stmts.push_back(R.get());
@@ -1361,7 +1361,7 @@ StmtResult Parser::ParseSwitchStatement(SourceLocation *TrailingElseLoc) {
   if (C99orCXX)
     getCurScope()->decrementMSManglingNumber();
 
-  //Discard any pending OpenACC Directive
+  //Discard any pending Centaurus Directive
   Actions.getACCInfo()->DiscardAndWarn();
 
   // Read the body statement.
@@ -1432,7 +1432,7 @@ StmtResult Parser::ParseWhileStatement(SourceLocation *TrailingElseLoc) {
   //
   ParseScope InnerScope(this, Scope::DeclScope, C99orCXX, Tok.is(tok::l_brace));
 
-  //Discard any pending OpenACC Directive
+  //Discard any pending Centaurus Directive
   Actions.getACCInfo()->DiscardAndWarn();
 
   // Read the body statement.
@@ -1477,7 +1477,7 @@ StmtResult Parser::ParseDoStatement() {
   bool C99orCXX = getLangOpts().C99 || getLangOpts().CPlusPlus;
   ParseScope InnerScope(this, Scope::DeclScope, C99orCXX, Tok.is(tok::l_brace));
 
-  //Discard any pending OpenACC Directive
+  //Discard any pending Centaurus Directive
   Actions.getACCInfo()->DiscardAndWarn();
 
   // Read the body statement.
@@ -1819,7 +1819,7 @@ StmtResult Parser::ParseForStatement(SourceLocation *TrailingElseLoc) {
   if (C99orCXXorObjC)
     getCurScope()->decrementMSManglingNumber();
 
-  //Discard any pending OpenACC Directive
+  //Discard any pending Centaurus Directive
   Actions.getACCInfo()->DiscardAndWarn();
 
   // Read the body statement.

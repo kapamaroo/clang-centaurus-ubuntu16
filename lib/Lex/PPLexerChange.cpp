@@ -402,7 +402,7 @@ bool Preprocessor::HandleEndOfFile(Token &Result, bool isEndOfMacro) {
     if (Callbacks && !isEndOfMacro && CurPPLexer)
       ExitedFID = CurPPLexer->getFileID();
 
-    if (getLangOpts().OpenACC && CurPPLexer) {
+    if (getLangOpts().Centaurus && CurPPLexer) {
         StringRef ExitedName =
             SourceMgr.getFilename(SourceMgr.getLocForStartOfFile(CurPPLexer->getFileID()));
         if (ExitedName.endswith(".cl")) {

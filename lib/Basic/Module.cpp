@@ -66,7 +66,7 @@ static bool hasFeature(StringRef Feature, const LangOptions &LangOpts,
                         .Case("objc", LangOpts.ObjC1)
                         .Case("objc_arc", LangOpts.ObjCAutoRefCount)
                         .Case("opencl", LangOpts.OpenCL)
-#warning consider OpenACC here?
+      // CENTAURUS FIXME: consider Centaurus.here?
                         .Case("tls", Target.isTLSSupported())
                         .Case("zvector", LangOpts.ZVector)
                         .Default(Target.hasFeature(Feature));
