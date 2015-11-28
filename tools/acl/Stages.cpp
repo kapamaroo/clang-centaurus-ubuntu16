@@ -834,12 +834,12 @@ Stage0_ASTVisitor::VisitCallExpr(CallExpr *CE) {
 
     if (isRuntimeCall(Name)) {
         hasRuntimeCalls = true;
-        llvm::outs() << "Runtime call to '" << Name << "'\n";
+        // llvm::outs() << DEBUG << "Runtime call to '" << Name << "'\n";
     }
 
     if (shouldOverrideCall(Name)) {
         hasRuntimeCalls = true;
-        llvm::outs() << "Override call to '" << Name << "'\n";
+        // llvm::outs() << DEBUG << "Override call to '" << Name << "'\n";
     }
 
     return true;
