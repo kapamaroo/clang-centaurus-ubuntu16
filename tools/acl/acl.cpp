@@ -662,7 +662,7 @@ acl::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
     else
         InstallPath = "/opt/Centaurus";
     IncludePath = InstallPath + "/include/centaurus";
-    CustomSystemHeaders = InstallPath + "/system_include";
+    CustomSystemHeaders = InstallPath + "/include/system";
     LibPath = InstallPath + "/lib";
     LinkerPath = "/usr/bin/ld";
     ClangPath = InstallPath + "/bin/clang";
