@@ -430,6 +430,23 @@ install(DIRECTORY include/clang-c
   PATTERN ".svn" EXCLUDE
   )
 
+install(DIRECTORY include/centaurus
+  DESTINATION include
+  FILES_MATCHING
+  PATTERN "*.h"
+  PATTERN "*.inc"
+  PATTERN ".svn" EXCLUDE
+  )
+
+install(DIRECTORY include/system
+  DESTINATION include
+  FILES_MATCHING
+  PATTERN "*.h"
+  # c++ headers
+  PATTERN "c*"
+  PATTERN ".svn" EXCLUDE
+  )
+
 add_definitions( -D_GNU_SOURCE )
 
 option(CLANG_ENABLE_ARCMT "Build ARCMT." ON)
