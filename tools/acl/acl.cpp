@@ -208,7 +208,7 @@ int main(int argc, const char *argv[]) {
         std::string LibPathFlag("-L" + Config.LibPath);
         cli.push_back(LibPathFlag.c_str());
         cli.push_back("-lcentaurus");
-        cli.push_back("-lcentaurusapi");
+        // cli.push_back("-lcentaurusapi");
 
         // -lpthread -lOpenCL -ldl -lrt -lm -lnvidia-ml -Lpapi-5.4.1/src/ -lpapi
 
@@ -580,9 +580,9 @@ int main(int argc, const char *argv[]) {
                 ldcli.push_back("-lm");
 
                 ldcli.push_back("-lcentaurus");
-                ldcli.push_back("-lcentaurusapi");
+                // ldcli.push_back("-lcentaurusapi");
 
-                //std::string LibStaticRuntime(LibPath + "/libcentaurus.a");
+                //std::string LibStaticRuntime(LibPath + "/libcentaurus.a")
                 //ldcli.push_back(LibStaticRuntime.c_str());
                 if (Config.UserDefinedOutputFile.size()) {
                     ldcli.push_back("-o");
