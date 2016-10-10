@@ -503,7 +503,7 @@ KernelRefDef::compile(std::string src, std::string SymbolName, std::string Prefi
     }
     if(num_platforms == 0)
     {
-        std::cerr << "No OpenCL platform found!" << std::cout;
+        std::cerr << "No OpenCL platform found!";
         return -2;
     }
     else
