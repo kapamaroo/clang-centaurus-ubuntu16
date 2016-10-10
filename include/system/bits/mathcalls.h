@@ -46,6 +46,16 @@
 # error "Never include <bits/mathcalls.h> directly; include <math.h> instead."
 #endif
 
+#ifdef __CENTAURUS__
+#undef trunc
+#undef fma
+#undef rint
+#undef round
+#undef pow
+#undef floor
+#undef fabs
+#undef ceil
+#endif
 
 /* Trigonometric functions.  */
 
@@ -150,19 +160,7 @@ __END_NAMESPACE_C99
 
 _Mdouble_BEGIN_NAMESPACE
 /* Return X to the Y power.  */
-#ifdef __CENTAURUS__
-#ifdef pow
-#define __centaurus_pow__ pow
-#undef pow
-#endif
 __MATHCALL_VEC (pow,, (_Mdouble_ __x, _Mdouble_ __y));
-#ifdef __centaurus_pow__
-#define pow __centaurus_pow__
-#undef __centaurus_pow__
-#endif
-#else
-__MATHCALL_VEC (pow,, (_Mdouble_ __x, _Mdouble_ __y));
-#endif
 
 /* Return the square root of X.  */
 __MATHCALL (sqrt,, (_Mdouble_ __x));
@@ -393,4 +391,15 @@ __MATHDECL_1 (int, __issignaling,, (_Mdouble_ __value))
 			   && !defined __USE_XOPEN2K8)
 /* Return X times (2 to the Nth power).  */
 __MATHCALL (scalb,, (_Mdouble_ __x, _Mdouble_ __n));
+#endif
+
+#ifdef __CENTAURUS__
+#define trunc __clc_trunc
+#define fma __clc_fma
+#define rint __clc_rint
+#define round __clc_round
+#define pow __clc_pow
+#define floor __clc_floor
+#define fabs __clc_fabs
+#define ceil __clc_ceil
 #endif
