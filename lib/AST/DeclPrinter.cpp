@@ -233,7 +233,7 @@ static std::string prettyPrintAttributesBeforeFunction(Decl *D, const PrintingPo
     for (AttrVec::const_iterator i=Attrs.begin(), e=Attrs.end(); i!=e; ++i) {
       Attr *A = *i;
       //see AttrImpl.inc
-      if (!A->getKind() == attr::OpenCLKernel)
+      if (!(A->getKind() == attr::OpenCLKernel))
           continue;
       A->printPretty(Out, Policy);
     }
