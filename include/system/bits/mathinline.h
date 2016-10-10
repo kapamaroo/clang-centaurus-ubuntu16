@@ -156,7 +156,7 @@ __NTH (__signbit (double __x))
 __MATH_INLINE int
 __NTH (__signbitl (long double __x))
 {
-  __extension__ union { long double __l; int __i[3]; } __u = { __l: __x };
+  __extension__ union { long double __l; int __i[3]; } __u = { .__l = __x };
   return (__u.__i[2] & 0x8000) != 0;
 }
 
