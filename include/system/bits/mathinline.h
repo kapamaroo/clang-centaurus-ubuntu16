@@ -1,5 +1,5 @@
 /* Inline math functions for i387 and SSE.
-   Copyright (C) 1995-2014 Free Software Foundation, Inc.
+   Copyright (C) 1995-2016 Free Software Foundation, Inc.
    This file is part of the GNU C Library.
 
    The GNU C Library is free software; you can redistribute it and/or
@@ -137,7 +137,7 @@ __NTH (__signbitf (float __x))
   __asm ("pmovmskb %1, %0" : "=r" (__m) : "x" (__x));
   return (__m & 0x8) != 0;
 #  else
-  __extension__ union { float __f; int __i; } __u = { .__f = __x };
+  __extension__ union { float __f; int __i; } __u = { __f: __x };
   return __u.__i < 0;
 #  endif
 }
@@ -149,14 +149,14 @@ __NTH (__signbit (double __x))
   __asm ("pmovmskb %1, %0" : "=r" (__m) : "x" (__x));
   return (__m & 0x80) != 0;
 #  else
-  __extension__ union { double __d; int __i[2]; } __u = { .__d = __x };
+  __extension__ union { double __d; int __i[2]; } __u = { __d: __x };
   return __u.__i[1] < 0;
 #  endif
 }
 __MATH_INLINE int
 __NTH (__signbitl (long double __x))
 {
-  __extension__ union { long double __l; int __i[3]; } __u = { .__l = __x };
+  __extension__ union { long double __l; int __i[3]; } __u = { __l: __x };
   return (__u.__i[2] & 0x8000) != 0;
 }
 
@@ -289,7 +289,7 @@ __END_NAMESPACE_C99
 #  endif
 
 #  if defined __SSE4_1__ && defined __SSE2_MATH__
-#   if defined __USE_MISC || defined __USE_XOPEN_EXTENDED || defined __USE_ISOC99
+#   if defined __USE_XOPEN_EXTENDED || defined __USE_ISOC99
 __BEGIN_NAMESPACE_C99
 
 /* Round to nearest integer.  */
@@ -390,7 +390,10 @@ __END_NAMESPACE_C99
 # endif
 #endif
 
-#ifndef __SSE2_MATH__
+/* Disable x87 inlines when -fpmath=sse is passed and also when we're building
+   on x86_64.  Older gcc (gcc-3.2 for example) does not define __SSE2_MATH__
+   for x86_64.  */
+#if !defined __SSE2_MATH__ && !defined __x86_64__
 # if ((!defined __NO_MATH_INLINES || defined __LIBC_INTERNAL_MATH_INLINES) \
      && defined __OPTIMIZE__)
 
@@ -405,7 +408,7 @@ __END_NAMESPACE_C99
    We define two sets of macros.  The set with the additional NP
    doesn't add a prototype declaration.  */
 
-#  if defined __USE_MISC || defined __USE_ISOC99
+#  ifdef __USE_ISOC99
 #   define __inline_mathop(func, op) \
   __inline_mathop_ (double, func, op)					      \
   __inline_mathop_ (float, __CONCAT(func,f), op)			      \
@@ -427,7 +430,7 @@ __END_NAMESPACE_C99
   __inline_mathop_declNP_ (float_type, func, op, "0" (__x))
 
 
-#  if defined __USE_MISC || defined __USE_ISOC99
+#  ifdef __USE_ISOC99
 #   define __inline_mathop_decl(func, op, params...) \
   __inline_mathop_decl_ (double, func, op, params)			      \
   __inline_mathop_decl_ (float, __CONCAT(func,f), op, params)		      \
@@ -456,7 +459,7 @@ __END_NAMESPACE_C99
   }
 
 
-#  if defined __USE_MISC || defined __USE_ISOC99
+#  ifdef __USE_ISOC99
 #   define __inline_mathcode(func, arg, code) \
   __inline_mathcode_ (double, func, arg, code)				      \
   __inline_mathcode_ (float, __CONCAT(func,f), arg, code)		      \
@@ -690,7 +693,7 @@ __inline_mathopNP_ (long double, __sqrtl, "fsqrt")
 
 #  if __GNUC_PREREQ (2, 8)
 __inline_mathcodeNP_ (double, fabs, __x, return __builtin_fabs (__x))
-#   if defined __USE_MISC || defined __USE_ISOC99
+#   ifdef __USE_ISOC99
 __inline_mathcodeNP_ (float, fabsf, __x, return __builtin_fabsf (__x))
 __inline_mathcodeNP_ (long double, fabsl, __x, return __builtin_fabsl (__x))
 #   endif
@@ -724,7 +727,7 @@ __inline_mathop_declNP (atan, "fld1; fpatan", "0" (__x) : "st(1)")
 
 __inline_mathcode_ (long double, __sgn1l, __x, \
   __extension__ union { long double __xld; unsigned int __xi[3]; } __n =      \
-    { .__xld = __x };							      \
+    { __xld: __x };							      \
   __n.__xi[2] = (__n.__xi[2] & 0x8000) | 0x3fff;			      \
   __n.__xi[1] = 0x80000000;						      \
   __n.__xi[0] = 0;							      \
@@ -799,7 +802,7 @@ __NTH (ldexp (double __x, int __y))
 
 
 /* Optimized versions for some non-standardized functions.  */
-#  if defined __USE_ISOC99 || defined __USE_MISC
+#  ifdef __USE_ISOC99
 
 #   ifdef __FAST_MATH__
 __inline_mathcodeNP (expm1, __x, __expm1_code)
@@ -948,7 +951,7 @@ __MATH_INLINE int
 __NTH (__finite (double __x))
 {
   return (__extension__
-	  (((((union { double __d; int __i[2]; }) {.__d = __x}).__i[1]
+	  (((((union { double __d; int __i[2]; }) {__d: __x}).__i[1]
 	     | 0x800fffffu) + 1) >> 31));
 }
 
@@ -968,16 +971,12 @@ __NTH (__finite (double __x))
 /* This code is used internally in the GNU libc.  */
 # ifdef __LIBC_INTERNAL_MATH_INLINES
 __inline_mathop (__ieee754_sqrt, "fsqrt")
-__inline_mathcode2 (__ieee754_atan2, __y, __x,
-		    register long double __value;
-		    __asm __volatile__ ("fpatan\n\t"
-					: "=t" (__value)
-					: "0" (__x), "u" (__y) : "st(1)");
-		    return __value;)
+__inline_mathcode2_ (long double, __ieee754_atan2l, __y, __x,
+		     register long double __value;
+		     __asm __volatile__ ("fpatan\n\t"
+					 : "=t" (__value)
+					 : "0" (__x), "u" (__y) : "st(1)");
+		     return __value;)
 # endif
 
-#ifdef __CENTAURUS__
-#undef __CENTAURUS_OVERLOAD__
-#endif
-
-#endif /* !__SSE2_MATH__ */
+#endif /* !__SSE2_MATH__ && !__x86_64__ */
