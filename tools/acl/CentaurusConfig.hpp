@@ -12,6 +12,8 @@ struct CentaurusConfig {
     bool isCXX;
     bool NoArgs;
 
+    int NvidiaDriverVersion;
+
     std::string InstallPath;
     std::string IncludePath;
     std::string CustomSystemHeaders;

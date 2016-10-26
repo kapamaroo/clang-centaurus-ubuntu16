@@ -29,6 +29,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#define MIN_NVIDIA_DRIVER_VERSION 340
+
 using namespace llvm;
 using namespace clang;
 using namespace clang::tooling;
@@ -206,16 +208,14 @@ int main(int argc, const char *argv[]) {
             cli.push_back(II->c_str());
 
         std::string LibPathFlag("-L" + Config.LibPath);
+        std::string NvidiaLinkPath("-L/usr/lib/nvidia-" + toString(Config.NvidiaDriverVersion));
         cli.push_back(LibPathFlag.c_str());
         cli.push_back("-lcentaurus");
         // cli.push_back("-lcentaurusapi");
 
         // -lpthread -lOpenCL -ldl -lrt -lm -lnvidia-ml -Lpapi-5.4.1/src/ -lpapi
 
-        cli.push_back("-L/usr/lib/nvidia-340");
-        cli.push_back("-L/usr/lib/nvidia-346");
-        cli.push_back("-L/usr/lib/nvidia-352");
-        cli.push_back("-L/usr/lib/nvidia-361");
+        cli.push_back(NvidiaLinkPath.c_str());
 
         cli.push_back("-lnvidia-ml");
         cli.push_back("-lpthread");
@@ -568,12 +568,10 @@ int main(int argc, const char *argv[]) {
                 ldcli.push_back(ObjFile.c_str());
 
                 std::string LibPathFlag("-L" + Config.LibPath);
+                std::string NvidiaLinkPath("-L/usr/lib/nvidia-" + toString(Config.NvidiaDriverVersion));
                 ldcli.push_back(LibPathFlag.c_str());
 
-                ldcli.push_back("-L/usr/lib/nvidia-340");
-                ldcli.push_back("-L/usr/lib/nvidia-346");
-                ldcli.push_back("-L/usr/lib/nvidia-352");
-                ldcli.push_back("-L/usr/lib/nvidia-361");
+                ldcli.push_back(NvidiaLinkPath.c_str());
 
                 ldcli.push_back("-lnvidia-ml");
                 ldcli.push_back("-lpthread");
@@ -658,6 +656,7 @@ int main(int argc, const char *argv[]) {
 
 acl::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
     ProfileMode(false), CompileOnly(false), isCXX(false), NoArgs(false)
+    , NvidiaDriverVersion(MIN_NVIDIA_DRIVER_VERSION)
 {
     if (const char *path = std::getenv("CENTAURUS_INSTALL_PATH"))
         InstallPath = path;
@@ -668,6 +667,23 @@ acl::CentaurusConfig::CentaurusConfig(int argc, const char *argv[]) :
     LibPath = InstallPath + "/lib";
     LinkerPath = "/usr/bin/ld";
     ClangPath = InstallPath + "/bin/clang";
+
+    std::string ConfFile = InstallPath + "/share/compiler.conf";
+    std::ifstream conf(ConfFile);
+    for (std::string line; std::getline(conf, line);) {
+        size_t pos = 0;
+        std::string token;
+        if ((pos = line.find("=")) != std::string::npos) {
+            token = line.substr(0, pos);
+            if (token.compare("NVIDIA_DRIVER_VERSION") == 0) {
+                std::string value = line.substr(pos + 1);
+                NvidiaDriverVersion = atoi(value.c_str());
+            }
+        }
+    }
+
+    if (NvidiaDriverVersion < MIN_NVIDIA_DRIVER_VERSION)
+        NvidiaDriverVersion = MIN_NVIDIA_DRIVER_VERSION;
 
     // clang -emit-llvm -target spir -include ~/centaurus/acl/opencl_spir.h -S -o clang.ll ~/centaurus/acl/input.cl
     // ioc64 -cmd=compile -input=./input.cl -llvm-spir32=intel.ll
